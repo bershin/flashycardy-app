@@ -84,17 +84,19 @@ export default async function StudyPage({
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-8">
-      <Link
-        href={`/deck/${deck_id}`}
-        className="text-sm text-muted-foreground hover:text-foreground"
-      >
-        &larr; Back to deck
-      </Link>
-      <h1 className="mt-4 text-2xl font-bold tracking-tight">{deck.title}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {dueCards.length} card{dueCards.length === 1 ? "" : "s"} due for review
-      </p>
+    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col overflow-hidden px-4 py-4">
+      <div className="flex items-center justify-between">
+        <Link
+          href={`/deck/${deck_id}`}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          &larr; Back to deck
+        </Link>
+        <p className="text-sm text-muted-foreground">
+          {dueCards.length} card{dueCards.length === 1 ? "" : "s"} due
+        </p>
+      </div>
+      <h1 className="mt-2 text-xl font-bold tracking-tight">{deck.title}</h1>
       <StudySession cards={dueCards} deckId={deckId} />
     </div>
   );

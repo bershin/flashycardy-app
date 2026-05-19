@@ -253,7 +253,7 @@ export function StudySession({ cards, deckId }: StudySessionProps) {
   }
 
   return (
-    <div className="mt-6 flex flex-col items-center gap-6">
+    <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
       {/* Progress header */}
       <div className="flex w-full items-center justify-between">
         <p className="text-sm text-muted-foreground">
@@ -294,7 +294,7 @@ export function StudySession({ cards, deckId }: StudySessionProps) {
 
       {/* Flashcard */}
       <div
-        className={`grid w-full gap-4 ${flipped ? "md:grid-cols-2" : ""}`}
+        className={`grid min-h-0 w-full flex-1 gap-3 ${flipped ? "md:grid-cols-2" : ""}`}
       >
         {/* Question */}
         <Card
@@ -308,18 +308,18 @@ export function StudySession({ cards, deckId }: StudySessionProps) {
                   if (e.key === "Enter") flip();
                 }
           }
-          className={`min-h-[280px] ${flipped ? "" : "cursor-pointer"}`}
+          className={`min-h-0 ${flipped ? "" : "cursor-pointer"}`}
         >
-          <CardContent className="flex min-h-[280px] flex-col items-center justify-center p-8">
-            <p className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Question
             </p>
             <div
-              className="rich-content w-full text-left text-3xl leading-relaxed"
+              className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
               dangerouslySetInnerHTML={{ __html: current.front }}
             />
             {!flipped && (
-              <p className="mt-6 text-xs text-muted-foreground">
+              <p className="mt-4 text-xs text-muted-foreground">
                 Click or press{" "}
                 <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
                   Space
@@ -332,13 +332,13 @@ export function StudySession({ cards, deckId }: StudySessionProps) {
 
         {/* Answer */}
         {flipped && (
-          <Card className="min-h-[280px] border-primary/30 bg-primary/5">
-            <CardContent className="flex min-h-[280px] flex-col items-center justify-center p-8">
-              <p className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <Card className="min-h-0 border-primary/30 bg-primary/5">
+            <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Answer
               </p>
               <div
-                className="rich-content w-full text-left text-3xl leading-relaxed"
+                className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
                 dangerouslySetInnerHTML={{ __html: current.back }}
               />
             </CardContent>
@@ -348,7 +348,7 @@ export function StudySession({ cards, deckId }: StudySessionProps) {
 
       {/* Rating / Navigation */}
       {flipped ? (
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex shrink-0 flex-col items-center gap-2">
           <p className="text-sm text-muted-foreground">How did you do?</p>
           <div className="flex gap-3">
             <Button
@@ -383,7 +383,7 @@ export function StudySession({ cards, deckId }: StudySessionProps) {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex shrink-0 flex-col items-center gap-2">
           <Button
             variant="outline"
             size="sm"
