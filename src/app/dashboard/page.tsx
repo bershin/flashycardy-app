@@ -54,11 +54,15 @@ export default function DashboardPage() {
           const endOfToday = new Date(startOfToday);
           endOfToday.setDate(endOfToday.getDate() + 1);
           const totalCards = deck.cards.length;
-          const dueCount = deck.cards.filter(
-            (c) => c.nextReviewAt <= endOfToday,
-          ).length;
+          // Archived cards are retired: they stay browsable and can be studied
+          // deliberately, but they must never nag from the dashboard.
+          const dueCount = deck.isArchive
+            ? 0
+            : deck.cards.filter((c) => c.nextReviewAt <= endOfToday).length;
           const studiedToday =
-            deck.lastStudiedAt !== null && deck.lastStudiedAt >= startOfToday;
+            !deck.isArchive &&
+            deck.lastStudiedAt !== null &&
+            deck.lastStudiedAt >= startOfToday;
 
           return {
             ...deck,

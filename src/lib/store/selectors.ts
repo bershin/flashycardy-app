@@ -16,7 +16,43 @@ import type { CardRow, DbDoc, DeckRow } from "./types";
 export type DeckWithCards = DeckRow & {
   cards: CardRow[];
   childCount: number;
+  isArchive: boolean;
 };
+
+/**
+ * Cards that have been answered correctly five times in a row are moved here
+ * rather than deleted.
+ *
+ * The archive is an ordinary top-level deck holding one sub-deck per source
+ * deck, which is the only shape that fits the one-level-deep rule: the root
+ * carries no cards of its own, and each child keeps the archived cards from the
+ * deck of the same name. Being ordinary decks means they can be opened, edited
+ * and studied deliberately, and they survive deletion of the deck the cards
+ * came from.
+ *
+ * It is identified by title rather than a flag on the row, so that no migration
+ * is needed for existing data.
+ */
+export const ARCHIVE_DECK_TITLE = "Archive";
+
+export function selectArchiveRoot(
+  db: DbDoc,
+  userId: string,
+): DeckRow | undefined {
+  return db.decks.find(
+    (d) =>
+      d.userId === userId &&
+      d.parentId === null &&
+      d.title === ARCHIVE_DECK_TITLE,
+  );
+}
+
+/** True for the archive root and for any of its sub-decks. */
+export function isArchiveDeck(db: DbDoc, deck: DeckRow): boolean {
+  const root = selectArchiveRoot(db, deck.userId);
+  if (!root) return false;
+  return deck.id === root.id || deck.parentId === root.id;
+}
 
 /** `WHERE deckId IN (SELECT id FROM decks WHERE userId = ?)` */
 function ownedDeckIds(db: DbDoc, userId: string): Set<number> {
@@ -79,6 +115,8 @@ export function selectDecksWithCardsByUser(
     cardsByDeck.set(card.deckId, list);
   }
 
+  const archiveRoot = selectArchiveRoot(db, userId);
+
   const topLevel = userDecks
     .filter((d) => d.parentId === null)
     .sort((a, b) => a.position - b.position);
@@ -120,6 +158,7 @@ export function selectDecksWithCardsByUser(
       lastStudiedAt,
       cards: deckCards,
       childCount: deckChildren.length,
+      isArchive: archiveRoot !== undefined && deck.id === archiveRoot.id,
     };
   });
 }

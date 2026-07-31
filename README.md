@@ -61,6 +61,28 @@ publishes `out/` to GitHub Pages. Enable it once under
 If you rename the repo or move to a custom domain, update
 `NEXT_PUBLIC_BASE_PATH` in that workflow.
 
+## How reviews are scheduled
+
+Each card tracks one number: how many times in a row you've answered it
+correctly.
+
+| Correct in a row | Next review |
+| --- | --- |
+| 1 | tomorrow |
+| 2, 3, 4 | in 7 days |
+| 5 | archived |
+
+Answering **Missed** resets the streak to zero and schedules the card for
+tomorrow. Intervals are measured from today rather than from the date a card was
+due, so a long gap between sessions never builds up a compounding backlog.
+
+Cards answered correctly five times running are **archived, not deleted**. An
+`Archive` deck is created automatically, with one sub-deck per source deck, so
+you can always find what you learned and where it came from. Archived cards
+never appear as due and won't nag from the dashboard — open the Archive and hit
+Study if you want to run through them. They also survive deleting the deck they
+came from.
+
 ## Architecture notes
 
 - `src/lib/store/` — the document, IndexedDB persistence, selectors, GitHub sync.

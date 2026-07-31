@@ -38,6 +38,7 @@ interface DeckWithCards {
   dueCount: number;
   studiedToday: boolean;
   childCount: number;
+  isArchive: boolean;
 }
 
 interface DashboardSearchProps {
@@ -186,6 +187,7 @@ export function DashboardSearch({ decks }: DashboardSearchProps) {
                   dueCount: deck.dueCount,
                   studiedToday: deck.studiedToday,
                   childCount: deck.childCount,
+                  isArchive: deck.isArchive,
                 }}
               />
               {matchingCards.length > 0 && (
@@ -222,6 +224,7 @@ export function DashboardSearch({ decks }: DashboardSearchProps) {
                       dueCount: deck.dueCount,
                       studiedToday: deck.studiedToday,
                       childCount: deck.childCount,
+                      isArchive: deck.isArchive,
                     }}
                   />
                 </SortableDeckItem>

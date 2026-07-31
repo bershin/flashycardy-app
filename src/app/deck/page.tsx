@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import {
+  isArchiveDeck,
   selectCardsByDeckForUser,
   selectChildDecksWithCards,
   selectDeckByIdForUser,
@@ -40,7 +41,7 @@ function DeckPageContent() {
           childDecks.length > 0
             ? []
             : selectCardsByDeckForUser(db, deckId, LOCAL_USER_ID);
-        return { deck, childDecks, cards };
+        return { deck, childDecks, cards, isArchive: isArchiveDeck(db, deck) };
       },
       [deckId, validId],
     ),
@@ -72,7 +73,7 @@ function DeckPageContent() {
     );
   }
 
-  const { deck, childDecks, cards } = data;
+  const { deck, childDecks, cards, isArchive } = data;
   const hasChildren = childDecks.length > 0;
   const isTopLevel = deck.parentId === null;
 
@@ -104,10 +105,12 @@ function DeckPageContent() {
             const endOfToday = new Date(startOfToday);
             endOfToday.setDate(endOfToday.getDate() + 1);
             const totalCards = child.cards.length;
-            const dueCount = child.cards.filter(
-              (c) => c.nextReviewAt <= endOfToday,
-            ).length;
+            // Archived cards are retired — no due prompts here either.
+            const dueCount = isArchive
+              ? 0
+              : child.cards.filter((c) => c.nextReviewAt <= endOfToday).length;
             const studiedToday =
+              !isArchive &&
               child.lastStudiedAt !== null &&
               child.lastStudiedAt >= startOfToday;
 
@@ -119,6 +122,7 @@ function DeckPageContent() {
               totalCards,
               dueCount,
               studiedToday,
+              isArchive,
             };
           })}
         />

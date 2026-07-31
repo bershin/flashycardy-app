@@ -28,6 +28,7 @@ interface ChildDeck {
   totalCards: number;
   dueCount: number;
   studiedToday: boolean;
+  isArchive?: boolean;
 }
 
 function SortableItem({

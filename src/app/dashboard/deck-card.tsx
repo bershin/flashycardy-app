@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, CheckCircle, CircleCheckBig, Layers, Pencil, Trash2 } from "lucide-react";
+import { Archive, BookOpen, CheckCircle, CircleCheckBig, Layers, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,6 +35,7 @@ interface DeckCardProps {
     dueCount: number;
     studiedToday: boolean;
     childCount: number;
+    isArchive: boolean;
   };
 }
 
@@ -84,7 +85,15 @@ export function DeckCard({ deck }: DeckCardProps) {
                 Studied today
               </span>
             )}
-            {deck.totalCards > 0 && (
+            {deck.isArchive ? (
+              deck.totalCards > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+                  <Archive className="size-3" />
+                  {deck.totalCards} learned
+                </span>
+              )
+            ) : (
+              deck.totalCards > 0 && (
               deck.dueCount > 0 ? (
                 <button
                   type="button"
@@ -103,6 +112,7 @@ export function DeckCard({ deck }: DeckCardProps) {
                   <CheckCircle className="size-3" />
                   All caught up
                 </span>
+              )
               )
             )}
           </div>

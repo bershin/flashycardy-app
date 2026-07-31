@@ -30,6 +30,9 @@ one JSON document held in the browser and synced to a private GitHub repo.
   `deserializeDoc`, or it will arrive back as a string and silently misbehave.
 - Relationships have no database to enforce them. Deleting a deck must explicitly
   remove its sub-decks and all their cards — see `collectDeckIdsToDelete`.
+- A mutation that touches several records must do it in **one** `mutate` call.
+  `archiveCard` creates two decks and moves a card; splitting that would let a
+  half-built archive be persisted and synced.
 - Ids come from the `nextDeckId` / `nextCardId` counters. Never reuse an id, even
   for a deleted record, or sync merges become ambiguous.
 

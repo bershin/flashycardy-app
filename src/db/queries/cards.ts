@@ -6,9 +6,17 @@
  * `recordStudyResult` is tri-state (see below).
  */
 
-import { allocateCardId, getSnapshot, mutate } from "@/lib/store/local-store";
 import {
+  allocateCardId,
+  allocateDeckId,
+  getSnapshot,
+  mutate,
+} from "@/lib/store/local-store";
+import {
+  ARCHIVE_DECK_TITLE,
   addDays,
+  isArchiveDeck,
+  selectArchiveRoot,
   selectCardByIdForUser,
   selectCardsByDeckForUser,
   selectDueCardsByDeckForUser,
@@ -105,17 +113,102 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
   return selectDueCardsByDeckForUser(getSnapshot(), deckId, userId);
 }
 
+/** Correct answers in a row before a card is considered learned. */
+const GRADUATION_STREAK = 5;
+
+/**
+ * Move a learned card into the archive.
+ *
+ * Creates the archive root and the per-source sub-deck on demand, then moves the
+ * card across and resets its streak. Everything happens inside a single
+ * `mutate` so a half-built archive can never be persisted or synced.
+ *
+ * A card already in the archive stays where it is — re-studying archived
+ * material should not shuffle it around.
+ */
+function archiveCard(cardId: number, userId: string): CardRow | undefined {
+  return mutate((draft) => {
+    const index = draft.cards.findIndex((c) => c.id === cardId);
+    if (index === -1) return undefined;
+
+    const card = draft.cards[index];
+    const sourceDeck = draft.decks.find((d) => d.id === card.deckId);
+    if (!sourceDeck || sourceDeck.userId !== userId) return undefined;
+
+    const now = new Date();
+    const reset: CardRow = {
+      ...card,
+      consecutiveCorrect: 0,
+      updatedAt: now,
+    };
+
+    if (isArchiveDeck(draft, sourceDeck)) {
+      draft.cards[index] = reset;
+      return reset;
+    }
+
+    let root = selectArchiveRoot(draft, userId);
+    if (!root) {
+      const maxPosition = draft.decks.reduce(
+        (max, d) => (d.userId === userId && d.parentId === null ? Math.max(max, d.position) : max),
+        -1,
+      );
+      root = {
+        id: allocateDeckId(draft),
+        userId,
+        title: ARCHIVE_DECK_TITLE,
+        description: "Cards you have learned. Kept for reference.",
+        parentId: null,
+        position: maxPosition + 1,
+        lastStudiedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      draft.decks.push(root);
+    }
+
+    // Matched by title, so cards from the same deck keep landing together even
+    // after the source deck is renamed or deleted and recreated.
+    let target = draft.decks.find(
+      (d) => d.parentId === root.id && d.title === sourceDeck.title,
+    );
+    if (!target) {
+      const maxPosition = draft.decks.reduce(
+        (max, d) => (d.parentId === root!.id ? Math.max(max, d.position) : max),
+        -1,
+      );
+      target = {
+        id: allocateDeckId(draft),
+        userId,
+        title: sourceDeck.title,
+        description: null,
+        parentId: root.id,
+        position: maxPosition + 1,
+        lastStudiedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      draft.decks.push(target);
+    }
+
+    const archived: CardRow = { ...reset, deckId: target.id };
+    draft.cards[index] = archived;
+    return archived;
+  });
+}
+
 /**
  * Record a study rating and reschedule the card.
  *
  *  - `missed`  → streak resets, review again tomorrow
  *  - `got_it`  → streak + 1; from the second correct answer the interval jumps
  *                to a week
- *  - five correct in a row → the card has been learned and is **deleted**
+ *  - five correct in a row → the card is **archived** (see `archiveCard`)
  *
- * Returns `null` when the card graduated and was removed, `undefined` when the
+ * Returns `null` when the card graduated into the archive, `undefined` when the
  * card isn't the user's, and the updated card otherwise. `study-session.tsx`
- * relies on all three.
+ * relies on all three — `null` is what removes the card from the running
+ * session.
  */
 export async function recordStudyResult(
   cardId: number,
@@ -136,8 +229,8 @@ export async function recordStudyResult(
   } else {
     consecutiveCorrect = existing.consecutiveCorrect + 1;
 
-    if (consecutiveCorrect >= 5) {
-      await deleteCard(cardId, userId);
+    if (consecutiveCorrect >= GRADUATION_STREAK) {
+      archiveCard(cardId, userId);
       return null;
     }
 
