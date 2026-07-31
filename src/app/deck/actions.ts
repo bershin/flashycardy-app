@@ -14,6 +14,7 @@ import {
   getCardByIdForUser,
   updateCard,
   deleteCard,
+  moveCard,
   bulkInsertCards,
 } from "@/db/queries/cards";
 
@@ -102,6 +103,27 @@ export async function cloneCardAction(data: CloneCardInput) {
     front: existingCard.front,
     back: existingCard.back,
   });
+}
+
+const moveCardSchema = z.object({
+  cardId: z.number(),
+  targetDeckId: z.number(),
+});
+
+type MoveCardInput = z.infer<typeof moveCardSchema>;
+
+export async function moveCardAction(data: MoveCardInput) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = moveCardSchema.parse(data);
+
+  const existingCard = await getCardByIdForUser(parsed.cardId, userId);
+  if (!existingCard) throw new Error("Card not found");
+
+  const moved = await moveCard(parsed.cardId, userId, parsed.targetDeckId);
+  if (!moved) throw new Error("That deck can't hold cards.");
+  return moved;
 }
 
 const AI_CARD_COUNT = 20;

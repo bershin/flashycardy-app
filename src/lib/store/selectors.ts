@@ -186,6 +186,58 @@ export function selectChildDecksWithCards(
   }));
 }
 
+export type MoveTarget = {
+  id: number;
+  title: string;
+  /** Parent title when the deck is a sub-deck, for disambiguation in lists. */
+  parentTitle: string | null;
+  isArchive: boolean;
+  cardCount: number;
+};
+
+/**
+ * Decks a card can be moved into.
+ *
+ * Excludes the deck the card is already in, and any deck that has sub-decks —
+ * a parent's card list is the union of its children's, so it has nowhere of its
+ * own to put a card. Archive decks are included: pulling something back out of
+ * the archive to relearn it is a reasonable thing to want.
+ */
+export function selectMoveTargets(
+  db: DbDoc,
+  userId: string,
+  excludeDeckId: number,
+): MoveTarget[] {
+  const parentIds = new Set(
+    db.decks.map((d) => d.parentId).filter((id): id is number => id !== null),
+  );
+  const byId = new Map(db.decks.map((d) => [d.id, d]));
+  const cardCounts = new Map<number, number>();
+  for (const card of db.cards) {
+    cardCounts.set(card.deckId, (cardCounts.get(card.deckId) ?? 0) + 1);
+  }
+
+  return db.decks
+    .filter(
+      (d) =>
+        d.userId === userId && d.id !== excludeDeckId && !parentIds.has(d.id),
+    )
+    .map((d) => ({
+      id: d.id,
+      title: d.title,
+      parentTitle: d.parentId ? (byId.get(d.parentId)?.title ?? null) : null,
+      isArchive: isArchiveDeck(db, d),
+      cardCount: cardCounts.get(d.id) ?? 0,
+    }))
+    .sort((a, b) => {
+      // Archive last — it is rarely the intended destination.
+      if (a.isArchive !== b.isArchive) return a.isArchive ? 1 : -1;
+      const aPath = `${a.parentTitle ?? ""}${a.title}`;
+      const bPath = `${b.parentTitle ?? ""}${b.title}`;
+      return aPath.localeCompare(bPath);
+    });
+}
+
 /** Newest-updated first, matching the old `orderBy(desc(cards.updatedAt))`. */
 export function selectCardsByDeckForUser(
   db: DbDoc,

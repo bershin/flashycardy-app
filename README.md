@@ -61,6 +61,18 @@ publishes `out/` to GitHub Pages. Enable it once under
 If you rename the repo or move to a custom domain, update
 `NEXT_PUBLIC_BASE_PATH` in that workflow.
 
+## Moving cards
+
+A card's `⋯` menu has **Move to deck…**, which lists every deck that can accept
+it. Sub-decks are shown with their parent (`Spanish › Past Tense`) so
+same-named decks stay distinguishable, and the archive is listed last.
+
+Decks that contain sub-decks are not offered: a parent deck's card list is the
+union of its children's, so it has nowhere of its own to put a card. Moving a
+card keeps its streak and next review date — it is the same card, just filed
+somewhere else. Pulling one back out of the archive therefore puts it straight
+back into rotation.
+
 ## How reviews are scheduled
 
 Each card tracks one number: how many times in a row you've answered it

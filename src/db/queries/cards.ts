@@ -270,6 +270,43 @@ export async function recordStudyResult(
   });
 }
 
+/**
+ * File a card under a different deck.
+ *
+ * Scheduling is deliberately untouched — it is the same card, so its streak and
+ * next review date carry across. A card pulled back out of the archive keeps
+ * the streak reset it got on the way in, and its review date is already in the
+ * past, so it lands back in rotation immediately.
+ *
+ * Returns `undefined` if the card or target isn't the user's, or if the target
+ * has sub-decks and therefore cannot hold cards of its own.
+ */
+export async function moveCard(
+  cardId: number,
+  userId: string,
+  targetDeckId: number,
+) {
+  return mutate((draft) => {
+    const index = draft.cards.findIndex((c) => c.id === cardId);
+    if (index === -1) return undefined;
+    if (!ownsCard(draft, draft.cards[index], userId)) return undefined;
+
+    const target = draft.decks.find(
+      (d) => d.id === targetDeckId && d.userId === userId,
+    );
+    if (!target) return undefined;
+    if (draft.decks.some((d) => d.parentId === targetDeckId)) return undefined;
+
+    const moved: CardRow = {
+      ...draft.cards[index],
+      deckId: targetDeckId,
+      updatedAt: new Date(),
+    };
+    draft.cards[index] = moved;
+    return moved;
+  });
+}
+
 export async function deleteCard(cardId: number, userId: string) {
   return mutate((draft) => {
     const card = draft.cards.find((c) => c.id === cardId);

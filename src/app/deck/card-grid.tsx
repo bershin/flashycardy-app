@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { FlashCard } from "./flash-card";
 
 interface CardGridProps {
-  cards: { id: number; front: string; back: string }[];
+  cards: { id: number; front: string; back: string; deckId: number }[];
 }
 
 function shuffleArray<T>(arr: T[]): T[] {

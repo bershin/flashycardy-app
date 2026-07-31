@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Copy, Ellipsis, Pencil, Trash2 } from "lucide-react";
+import { Copy, Ellipsis, FolderInput, Pencil, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EditCardDialog } from "@/components/edit-card-dialog";
+import { MoveCardDialog } from "@/components/move-card-dialog";
 import { cloneCardAction, deleteCardAction } from "./actions";
 
 interface FlashCardProps {
@@ -31,6 +32,7 @@ interface FlashCardProps {
     id: number;
     front: string;
     back: string;
+    deckId: number;
   };
 }
 
@@ -38,6 +40,7 @@ export function FlashCard({ card }: FlashCardProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [editCardId, setEditCardId] = useState(card.id);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function handleClone() {
@@ -98,6 +101,10 @@ export function FlashCard({ card }: FlashCardProps) {
                   <Copy />
                   Clone
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setMoveOpen(true)}>
+                  <FolderInput />
+                  Move to deck…
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={() => setDeleteOpen(true)}
@@ -126,6 +133,13 @@ export function FlashCard({ card }: FlashCardProps) {
           setEditOpen(nextOpen);
           if (!nextOpen) setEditCardId(card.id);
         }}
+      />
+
+      <MoveCardDialog
+        cardId={card.id}
+        currentDeckId={card.deckId}
+        open={moveOpen}
+        onOpenChange={setMoveOpen}
       />
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
