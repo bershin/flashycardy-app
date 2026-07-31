@@ -1,0 +1,34 @@
+---
+description: Single-user auth shim and per-user data access control
+alwaysApply: true
+---
+
+# Auth
+
+This app is single-user and has no accounts. `src/lib/auth.ts` provides a shim
+with the same shape Clerk's `auth()` had:
+
+```ts
+const { userId } = auth();   // always LOCAL_USER_ID
+```
+
+Do not add an auth provider, a login screen, or a session. There is no server to
+protect, and the data never leaves the device except to the user's own private
+GitHub repo.
+
+## The ownership doctrine still applies
+
+The `userId` plumbing is deliberately intact, and new code must maintain it:
+
+- Call `auth()` at the start of every action and reject a missing `userId`.
+- Pass `userId` into every query helper; helpers filter on it.
+- On insert, take `userId` from `auth()` — **never** from client input.
+- For child records, verify the parent belongs to the user.
+
+This costs nothing, keeps the data model honest, and means reintroducing real
+accounts is a change to `src/lib/auth.ts` rather than to every query.
+
+## Secrets
+
+The GitHub token and OpenAI key live in `localStorage`, per device. They must
+never be written into `DbDoc`, because that document is committed to a git repo.

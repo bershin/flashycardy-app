@@ -1,119 +1,50 @@
-import { db } from "@/db";
-import { decks, cards } from "@/db/schema";
-import { eq, and, count, inArray, isNull, asc, sql } from "drizzle-orm";
+/**
+ * Deck data access.
+ *
+ * Signatures are unchanged from the Drizzle/Postgres version so that pages and
+ * actions did not have to be rewritten around them. Reads delegate to the pure
+ * selectors in `src/lib/store/selectors.ts`; writes go through `mutate()`, which
+ * persists to IndexedDB and schedules a sync push.
+ *
+ * These stay `async` even though nothing awaits I/O — every call site already
+ * awaits them, so keeping the shape means this layer could become remote again
+ * without touching callers.
+ */
+
+import { allocateDeckId, getSnapshot, mutate } from "@/lib/store/local-store";
+import {
+  collectDeckIdsToDelete,
+  selectChildDecks,
+  selectChildDecksWithCards,
+  selectDeckByIdForUser,
+  selectDeckCountByUser,
+  selectDecksByUser,
+  selectDecksWithCardsByUser,
+} from "@/lib/store/selectors";
+import type { DeckRow } from "@/lib/store/types";
 
 export async function getDecksByUser(userId: string) {
-  return db.select().from(decks).where(eq(decks.userId, userId));
+  return selectDecksByUser(getSnapshot(), userId);
 }
 
 export async function getDeckCountByUser(userId: string) {
-  const [result] = await db
-    .select({ count: count() })
-    .from(decks)
-    .where(and(eq(decks.userId, userId), isNull(decks.parentId)));
-  return result.count;
+  return selectDeckCountByUser(getSnapshot(), userId);
 }
 
 export async function getDeckByIdForUser(deckId: number, userId: string) {
-  const [deck] = await db
-    .select()
-    .from(decks)
-    .where(and(eq(decks.id, deckId), eq(decks.userId, userId)));
-  return deck;
+  return selectDeckByIdForUser(getSnapshot(), deckId, userId);
 }
 
 export async function getChildDecks(parentId: number, userId: string) {
-  return db
-    .select()
-    .from(decks)
-    .where(and(eq(decks.parentId, parentId), eq(decks.userId, userId)))
-    .orderBy(asc(decks.position));
+  return selectChildDecks(getSnapshot(), parentId, userId);
 }
 
 export async function getDecksWithCardsByUser(userId: string) {
-  const userDecks = await db
-    .select()
-    .from(decks)
-    .where(eq(decks.userId, userId));
-
-  if (userDecks.length === 0) return [];
-
-  const deckIds = userDecks.map((d) => d.id);
-  const allCards = await db
-    .select()
-    .from(cards)
-    .where(inArray(cards.deckId, deckIds));
-
-  const cardsByDeck = new Map<number, (typeof allCards)[number][]>();
-  for (const card of allCards) {
-    const list = cardsByDeck.get(card.deckId) ?? [];
-    list.push(card);
-    cardsByDeck.set(card.deckId, list);
-  }
-
-  const topLevel = userDecks
-    .filter((d) => d.parentId === null)
-    .sort((a, b) => a.position - b.position);
-  const children = userDecks.filter((d) => d.parentId !== null);
-
-  const childrenByParent = new Map<number, typeof userDecks>();
-  for (const child of children) {
-    const list = childrenByParent.get(child.parentId!) ?? [];
-    list.push(child);
-    childrenByParent.set(child.parentId!, list);
-  }
-
-  return topLevel.map((deck) => {
-    const deckChildren = childrenByParent.get(deck.id) ?? [];
-    const isParent = deckChildren.length > 0;
-
-    let deckCards: (typeof allCards)[number][] = [];
-    let lastStudiedAt = deck.lastStudiedAt;
-
-    if (isParent) {
-      for (const child of deckChildren) {
-        deckCards = deckCards.concat(cardsByDeck.get(child.id) ?? []);
-        if (
-          child.lastStudiedAt &&
-          (!lastStudiedAt || child.lastStudiedAt > lastStudiedAt)
-        ) {
-          lastStudiedAt = child.lastStudiedAt;
-        }
-      }
-    } else {
-      deckCards = cardsByDeck.get(deck.id) ?? [];
-    }
-
-    return {
-      ...deck,
-      lastStudiedAt,
-      cards: deckCards,
-      childCount: deckChildren.length,
-    };
-  });
+  return selectDecksWithCardsByUser(getSnapshot(), userId);
 }
 
 export async function getChildDecksWithCards(parentId: number, userId: string) {
-  const childDecks = await getChildDecks(parentId, userId);
-  if (childDecks.length === 0) return [];
-
-  const childIds = childDecks.map((d) => d.id);
-  const childCards = await db
-    .select()
-    .from(cards)
-    .where(inArray(cards.deckId, childIds));
-
-  const cardsByDeck = new Map<number, (typeof childCards)[number][]>();
-  for (const card of childCards) {
-    const list = cardsByDeck.get(card.deckId) ?? [];
-    list.push(card);
-    cardsByDeck.set(card.deckId, list);
-  }
-
-  return childDecks.map((deck) => ({
-    ...deck,
-    cards: cardsByDeck.get(deck.id) ?? [],
-  }));
+  return selectChildDecksWithCards(getSnapshot(), parentId, userId);
 }
 
 export async function insertDeck(data: {
@@ -122,33 +53,45 @@ export async function insertDeck(data: {
   userId: string;
   parentId?: number;
 }) {
-  const [maxPos] = await db
-    .select({ max: sql<number>`coalesce(max(${decks.position}), -1)` })
-    .from(decks)
-    .where(
-      data.parentId
-        ? and(eq(decks.userId, data.userId), eq(decks.parentId, data.parentId))
-        : and(eq(decks.userId, data.userId), isNull(decks.parentId)),
+  return mutate((draft) => {
+    // Append after the last sibling, scoped to the same parent (or to the root
+    // set). Replaces `coalesce(max(position), -1) + 1`.
+    const siblings = draft.decks.filter(
+      (d) =>
+        d.userId === data.userId &&
+        (data.parentId ? d.parentId === data.parentId : d.parentId === null),
+    );
+    const maxPosition = siblings.reduce(
+      (max, d) => Math.max(max, d.position),
+      -1,
     );
 
-  const [deck] = await db
-    .insert(decks)
-    .values({ ...data, position: maxPos.max + 1 })
-    .returning();
-  return deck;
+    const now = new Date();
+    const deck: DeckRow = {
+      id: allocateDeckId(draft),
+      userId: data.userId,
+      title: data.title,
+      description: data.description ?? null,
+      parentId: data.parentId ?? null,
+      position: maxPosition + 1,
+      lastStudiedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    draft.decks.push(deck);
+    return deck;
+  });
 }
 
-export async function reorderDecks(
-  userId: string,
-  orderedIds: number[],
-) {
-  const updates = orderedIds.map((id, index) =>
-    db
-      .update(decks)
-      .set({ position: index })
-      .where(and(eq(decks.id, id), eq(decks.userId, userId))),
-  );
-  await Promise.all(updates);
+export async function reorderDecks(userId: string, orderedIds: number[]) {
+  mutate((draft) => {
+    const rank = new Map(orderedIds.map((id, index) => [id, index]));
+    draft.decks = draft.decks.map((deck) =>
+      deck.userId === userId && rank.has(deck.id)
+        ? { ...deck, position: rank.get(deck.id)! }
+        : deck,
+    );
+  });
 }
 
 export async function updateDeck(
@@ -156,31 +99,56 @@ export async function updateDeck(
   userId: string,
   data: { title: string; description?: string | null },
 ) {
-  const [deck] = await db
-    .update(decks)
-    .set({
+  return mutate((draft) => {
+    const index = draft.decks.findIndex(
+      (d) => d.id === deckId && d.userId === userId,
+    );
+    if (index === -1) return undefined;
+
+    const updated: DeckRow = {
+      ...draft.decks[index],
       title: data.title,
       description: data.description ?? null,
       updatedAt: new Date(),
-    })
-    .where(and(eq(decks.id, deckId), eq(decks.userId, userId)))
-    .returning();
-  return deck;
+    };
+    draft.decks[index] = updated;
+    return updated;
+  });
 }
 
 export async function markDeckStudied(deckId: number, userId: string) {
-  const [deck] = await db
-    .update(decks)
-    .set({ lastStudiedAt: new Date() })
-    .where(and(eq(decks.id, deckId), eq(decks.userId, userId)))
-    .returning();
-  return deck;
+  return mutate((draft) => {
+    const index = draft.decks.findIndex(
+      (d) => d.id === deckId && d.userId === userId,
+    );
+    if (index === -1) return undefined;
+
+    // Deliberately does not touch `updatedAt`, matching the original query.
+    const updated: DeckRow = {
+      ...draft.decks[index],
+      lastStudiedAt: new Date(),
+    };
+    draft.decks[index] = updated;
+    return updated;
+  });
 }
 
+/**
+ * Delete a deck along with its sub-decks and every card belonging to any of
+ * them.
+ *
+ * Postgres used to cascade this automatically via a constraint that only ever
+ * existed in a hand-written migration. It has to be explicit here — see
+ * `collectDeckIdsToDelete`.
+ */
 export async function deleteDeck(deckId: number, userId: string) {
-  const [deck] = await db
-    .delete(decks)
-    .where(and(eq(decks.id, deckId), eq(decks.userId, userId)))
-    .returning();
-  return deck;
+  return mutate((draft) => {
+    const deck = draft.decks.find((d) => d.id === deckId && d.userId === userId);
+    if (!deck) return undefined;
+
+    const doomed = new Set(collectDeckIdsToDelete(draft, deckId, userId));
+    draft.decks = draft.decks.filter((d) => !doomed.has(d.id));
+    draft.cards = draft.cards.filter((c) => !doomed.has(c.deckId));
+    return deck;
+  });
 }

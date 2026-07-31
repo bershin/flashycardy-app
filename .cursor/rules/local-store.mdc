@@ -1,0 +1,41 @@
+---
+description: Data is a local JSON document, not a database
+alwaysApply: true
+---
+
+# Storage: a local JSON document
+
+There is no database and no server. The app is a static export; all data lives in
+one JSON document held in the browser and synced to a private GitHub repo.
+
+## Layers
+
+- `src/lib/store/types.ts` — the `DbDoc` shape and its JSON (de)serialization.
+- `src/lib/store/local-store.ts` — the in-memory document, IndexedDB persistence,
+  `subscribe`/`mutate`, and id allocation.
+- `src/lib/store/selectors.ts` — **pure** read functions of `(db, ...args)`.
+- `src/lib/store/github-sync.ts` — pull/push against the GitHub Contents API.
+- `src/db/queries/` — the async data-access API the rest of the app calls.
+
+## Rules
+
+- Never import `local-store` directly from a component or an action. Go through
+  `src/db/queries/*` for writes, and `useStore(selector)` for reads.
+- All read logic belongs in `selectors.ts` as a pure function so that pages and
+  actions share one implementation.
+- Mutations go through `mutate()`, which persists and schedules a sync push.
+  Never assign to the document outside it.
+- Timestamps are `Date` instances in memory and ISO strings in JSON. Anything
+  added to `DbDoc` with a date must be handled in both `serializeDoc` and
+  `deserializeDoc`, or it will arrive back as a string and silently misbehave.
+- Relationships have no database to enforce them. Deleting a deck must explicitly
+  remove its sub-decks and all their cards — see `collectDeckIdsToDelete`.
+- Ids come from the `nextDeckId` / `nextCardId` counters. Never reuse an id, even
+  for a deleted record, or sync merges become ambiguous.
+
+## Keeping it small
+
+Card HTML embeds images as base64, so the document is also the image store. It is
+uploaded whole on every sync and GitHub refuses files over 100 MB. Downscale
+images on the way in (`downscaleImage` in `rich-text-editor.tsx`) and be wary of
+anything else that grows without bound.

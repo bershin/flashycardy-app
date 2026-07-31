@@ -1,16 +1,7 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
-import {
-  ClerkProvider,
-  SignInButton,
-  SignUpButton,
-  Show,
-  UserButton,
-} from "@clerk/nextjs";
-import { dark } from "@clerk/ui/themes";
-import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { PLANS } from "@/lib/plans";
+import { AppChrome } from "@/components/app-chrome";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -21,7 +12,7 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: "FlashyCardy",
-  description: "AI-powered flashcard study app",
+  description: "Personal flashcard study app",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -44,31 +35,11 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <ClerkProvider appearance={{ theme: dark }}>
-          <TooltipProvider>
-            <header className="flex items-center justify-end gap-4 p-4">
-              <Show when="signed-out">
-                <SignInButton mode="modal" forceRedirectUrl="/dashboard">
-                  <Button variant="outline" size="lg">
-                    Sign In
-                  </Button>
-                </SignInButton>
-                <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
-                  <Button size="lg">Sign Up</Button>
-                </SignUpButton>
-              </Show>
-              <Show when="signed-in">
-                <Show when={{ plan: PLANS.PRO }}>
-                  <span className="rounded-full bg-violet-600 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
-                    Pro
-                  </span>
-                </Show>
-                <UserButton />
-              </Show>
-            </header>
-            {children}
-          </TooltipProvider>
-        </ClerkProvider>
+        <TooltipProvider>
+          {/* Boots the local database and the sync loop, and renders the header. */}
+          <AppChrome />
+          {children}
+        </TooltipProvider>
       </body>
     </html>
   );

@@ -1,0 +1,395 @@
+/**
+ * Sync the local document to a `data.json` in a private GitHub repository.
+ *
+ * The repo is the durable source of truth and its git history doubles as
+ * versioned backup; IndexedDB is the fast working copy. Writes go through the
+ * Contents API with the last-known blob SHA, which gives optimistic concurrency
+ * for free — GitHub rejects the write if the file moved underneath us.
+ *
+ * Reads deliberately use the Git Blobs API rather than the inline `content`
+ * field of the Contents response: that field is only populated for files up to
+ * 1 MB, and cards embed base64 images, so `data.json` passes that quickly.
+ * The blobs route serves up to 100 MB.
+ */
+
+import { getSnapshot, onChange, replaceDoc } from "./local-store";
+import {
+  deserializeDoc,
+  serializeDoc,
+  type DbDoc,
+  type SerializedDbDoc,
+} from "./types";
+
+const CONFIG_KEY = "flashycardy.sync";
+const SHA_KEY = "flashycardy.sync.sha";
+const LAST_SYNCED_KEY = "flashycardy.sync.lastSyncedAt";
+const PUSH_DEBOUNCE_MS = 3000;
+const API = "https://api.github.com";
+
+export type SyncConfig = {
+  owner: string;
+  repo: string;
+  path: string;
+  branch: string;
+  token: string;
+};
+
+export type SyncState =
+  | "disabled"
+  | "idle"
+  | "pulling"
+  | "pushing"
+  | "conflict"
+  | "offline"
+  | "error";
+
+let state: SyncState = "disabled";
+let lastError: string | null = null;
+let pushTimer: ReturnType<typeof setTimeout> | null = null;
+let inFlight = false;
+/** Set when a change lands mid-push, so we push again once the current one lands. */
+let dirty = false;
+
+const listeners = new Set<() => void>();
+
+export function subscribeSync(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function setState(next: SyncState, error: string | null = null) {
+  state = next;
+  lastError = error;
+  for (const listener of listeners) listener();
+}
+
+export function getSyncState(): SyncState {
+  return state;
+}
+
+export function getSyncError(): string | null {
+  return lastError;
+}
+
+export function getLastSyncedAt(): Date | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(LAST_SYNCED_KEY);
+  return raw ? new Date(raw) : null;
+}
+
+export function getSyncConfig(): SyncConfig | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(CONFIG_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<SyncConfig>;
+    if (!parsed.owner || !parsed.repo || !parsed.token) return null;
+    return {
+      owner: parsed.owner,
+      repo: parsed.repo,
+      path: parsed.path || "data.json",
+      branch: parsed.branch || "main",
+      token: parsed.token,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function setSyncConfig(config: SyncConfig | null) {
+  if (typeof window === "undefined") return;
+  if (config === null) {
+    window.localStorage.removeItem(CONFIG_KEY);
+    window.localStorage.removeItem(SHA_KEY);
+    setState("disabled");
+    return;
+  }
+  window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  // A different file means the cached SHA no longer refers to anything.
+  window.localStorage.removeItem(SHA_KEY);
+  setState("idle");
+}
+
+function getSha(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(SHA_KEY);
+}
+
+function setSha(sha: string | null) {
+  if (typeof window === "undefined") return;
+  if (sha === null) window.localStorage.removeItem(SHA_KEY);
+  else window.localStorage.setItem(SHA_KEY, sha);
+}
+
+function markSynced() {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(LAST_SYNCED_KEY, new Date().toISOString());
+}
+
+function headers(config: SyncConfig, accept = "application/vnd.github+json") {
+  return {
+    Accept: accept,
+    Authorization: `Bearer ${config.token}`,
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+}
+
+/** UTF-8 safe base64, since card HTML routinely contains non-ASCII. */
+function toBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+type ContentsMeta = { sha: string; size: number };
+
+/** Fetch the blob SHA for `path`, or null if the file does not exist yet. */
+async function fetchMeta(config: SyncConfig): Promise<ContentsMeta | null> {
+  const url = `${API}/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(
+    config.path,
+  )}?ref=${encodeURIComponent(config.branch)}`;
+  const response = await fetch(url, { headers: headers(config) });
+
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await describe(response));
+
+  const body = (await response.json()) as { sha: string; size: number };
+  return { sha: body.sha, size: body.size };
+}
+
+async function fetchBlob(config: SyncConfig, sha: string): Promise<string> {
+  const url = `${API}/repos/${config.owner}/${config.repo}/git/blobs/${sha}`;
+  const response = await fetch(url, {
+    headers: headers(config, "application/vnd.github.raw"),
+  });
+  if (!response.ok) throw new Error(await describe(response));
+  return response.text();
+}
+
+async function describe(response: Response): Promise<string> {
+  let detail = "";
+  try {
+    const body = (await response.json()) as { message?: string };
+    detail = body.message ? `: ${body.message}` : "";
+  } catch {
+    /* non-JSON error body */
+  }
+  if (response.status === 401) return `GitHub rejected the token (401)${detail}`;
+  if (response.status === 403) return `Access forbidden (403)${detail}`;
+  if (response.status === 404) return `Repo or path not found (404)${detail}`;
+  return `GitHub returned ${response.status}${detail}`;
+}
+
+/** Verify the configured repo and token work, without changing anything. */
+export async function testConnection(config: SyncConfig): Promise<
+  { ok: true; exists: boolean; size: number } | { ok: false; error: string }
+> {
+  try {
+    const meta = await fetchMeta(config);
+    return { ok: true, exists: meta !== null, size: meta?.size ?? 0 };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export type PullResult =
+  | { kind: "no-remote" }
+  | { kind: "pulled"; doc: DbDoc }
+  | { kind: "unchanged" };
+
+/**
+ * Fetch the remote document. Does not apply it — the caller decides, because a
+ * pull that would discard newer local edits needs the user's consent.
+ */
+export async function pull(config: SyncConfig): Promise<PullResult> {
+  const meta = await fetchMeta(config);
+  if (!meta) return { kind: "no-remote" };
+  if (meta.sha === getSha()) return { kind: "unchanged" };
+
+  const text = await fetchBlob(config, meta.sha);
+  const parsed = JSON.parse(text) as SerializedDbDoc;
+  const remote = deserializeDoc(parsed);
+  setSha(meta.sha);
+  return { kind: "pulled", doc: remote };
+}
+
+/**
+ * Write the current document. Returns `"conflict"` when the remote file changed
+ * since our last read, rather than overwriting it.
+ */
+export async function push(
+  config: SyncConfig,
+  options: { force?: boolean } = {},
+): Promise<"ok" | "conflict"> {
+  const doc = getSnapshot();
+  const json = JSON.stringify(serializeDoc(doc), null, 2);
+
+  let sha = getSha();
+  if (options.force) {
+    // Re-read so we overwrite whatever is actually there now.
+    sha = (await fetchMeta(config))?.sha ?? null;
+  }
+
+  const url = `${API}/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(
+    config.path,
+  )}`;
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: { ...headers(config), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: `flashycardy: ${doc.decks.length} decks, ${doc.cards.length} cards`,
+      content: toBase64(json),
+      branch: config.branch,
+      ...(sha ? { sha } : {}),
+    }),
+  });
+
+  // 409 is the documented conflict; 422 is what you get when the supplied SHA
+  // is stale or when a SHA was required but omitted.
+  if (response.status === 409 || response.status === 422) return "conflict";
+  if (!response.ok) throw new Error(await describe(response));
+
+  const body = (await response.json()) as { content: { sha: string } };
+  setSha(body.content.sha);
+  markSynced();
+  return "ok";
+}
+
+/** Fetch the remote document during conflict resolution. */
+export async function fetchRemote(config: SyncConfig): Promise<DbDoc | null> {
+  const meta = await fetchMeta(config);
+  if (!meta) return null;
+  const text = await fetchBlob(config, meta.sha);
+  const remote = deserializeDoc(JSON.parse(text) as SerializedDbDoc);
+  setSha(meta.sha);
+  return remote;
+}
+
+/** Discard local state in favour of the remote document. */
+export async function resolveWithRemote(config: SyncConfig): Promise<void> {
+  const remote = await fetchRemote(config);
+  if (remote) await replaceDoc(remote);
+  setState("idle");
+}
+
+/** Keep local state and overwrite the remote document. */
+export async function resolveWithLocal(config: SyncConfig): Promise<void> {
+  await push(config, { force: true });
+  setState("idle");
+}
+
+async function runPush() {
+  const config = getSyncConfig();
+  if (!config) return;
+  if (inFlight) {
+    dirty = true;
+    return;
+  }
+  if (state === "conflict") return;
+
+  inFlight = true;
+  setState("pushing");
+  try {
+    const result = await push(config);
+    if (result === "conflict") {
+      setState(
+        "conflict",
+        "This file changed on GitHub since this device last synced.",
+      );
+    } else {
+      setState("idle");
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setState(navigator.onLine ? "error" : "offline", message);
+  } finally {
+    inFlight = false;
+    if (dirty && state !== "conflict") {
+      dirty = false;
+      schedulePush();
+    }
+  }
+}
+
+function schedulePush() {
+  if (!getSyncConfig()) return;
+  if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    pushTimer = null;
+    void runPush();
+  }, PUSH_DEBOUNCE_MS);
+}
+
+/** Push immediately if a debounced push is pending. */
+export function flushPush() {
+  if (pushTimer) {
+    clearTimeout(pushTimer);
+    pushTimer = null;
+    void runPush();
+  }
+}
+
+/**
+ * Pull on boot, then keep the remote in step with local edits.
+ *
+ * On boot the remote wins when the local document has never been synced or is
+ * older, which is the common case of opening the app on a second device. If
+ * local is newer, we leave it alone and let the next push carry it up.
+ */
+export function startSync(): () => void {
+  const config = getSyncConfig();
+  if (!config) {
+    setState("disabled");
+    return () => {};
+  }
+
+  setState("idle");
+
+  const doPull = async () => {
+    if (state === "conflict" || inFlight) return;
+    setState("pulling");
+    try {
+      const result = await pull(config);
+      if (result.kind === "pulled") {
+        const local = getSnapshot();
+        const localIsNewer =
+          local.mutatedAt.getTime() > result.doc.mutatedAt.getTime();
+        const localIsEmpty =
+          local.decks.length === 0 && local.cards.length === 0;
+
+        if (localIsEmpty || !localIsNewer) {
+          await replaceDoc(result.doc);
+          markSynced();
+        }
+      }
+      setState("idle");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setState(navigator.onLine ? "error" : "offline", message);
+    }
+  };
+
+  void doPull();
+
+  const unsubscribe = onChange(() => schedulePush());
+
+  const onFocus = () => void doPull();
+  const onVisibility = () => {
+    if (document.visibilityState === "hidden") flushPush();
+    else void doPull();
+  };
+  const onOnline = () => void doPull();
+
+  window.addEventListener("focus", onFocus);
+  document.addEventListener("visibilitychange", onVisibility);
+  window.addEventListener("online", onOnline);
+
+  return () => {
+    unsubscribe();
+    window.removeEventListener("focus", onFocus);
+    document.removeEventListener("visibilitychange", onVisibility);
+    window.removeEventListener("online", onOnline);
+    if (pushTimer) clearTimeout(pushTimer);
+  };
+}

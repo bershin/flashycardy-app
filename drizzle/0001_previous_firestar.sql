@@ -1,1 +1,0 @@
-ALTER TABLE "decks" ADD COLUMN "parentId" integer REFERENCES "decks"("id") ON DELETE CASCADE;

@@ -5,135 +5,74 @@ alwaysApply: false
 
 ## Data Access Layer — `src/db/queries/`
 
-All database reads and writes must be encapsulated in helper functions inside `src/db/queries/`. Never import `db` or call Drizzle query builders directly in Server Components, Server Actions, or API routes.
+All reads and writes must be encapsulated in helper functions inside
+`src/db/queries/`, one file per entity (`decks.ts`, `cards.ts`). Never import the
+store or touch the document directly from a component or an action.
 
-Organize one file per domain entity (e.g., `src/db/queries/decks.ts`, `src/db/queries/cards.ts`).
+Helpers stay pure data access: no auth checks, no validation. They take `userId`
+as a parameter and filter on it.
 
-```tsx
+```ts
 // src/db/queries/decks.ts
-import { db } from "@/db";
-import { decks } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
-
-export async function getDecksByUser(userId: string) {
-  return db.select().from(decks).where(eq(decks.userId, userId));
-}
-
 export async function getDeckByIdForUser(deckId: number, userId: string) {
-  const [deck] = await db
-    .select()
-    .from(decks)
-    .where(and(eq(decks.id, deckId), eq(decks.userId, userId)));
+  return selectDeckByIdForUser(getSnapshot(), deckId, userId);
+}
+```
+
+Read logic lives in `src/lib/store/selectors.ts` as pure functions, so pages and
+actions share one implementation. The query helper is a thin async wrapper.
+
+## Retrieval
+
+Components read through `useStore(selector)`, which subscribes to the store and
+re-renders on change. The selector must be stable — `useCallback` it, or define
+it at module scope.
+
+```tsx
+const decks = useStore(
+  useCallback((db: DbDoc) => selectDecksWithCardsByUser(db, LOCAL_USER_ID), []),
+);
+```
+
+Check `useStoreReady()` before rendering an empty state. The document loads from
+IndexedDB after mount, so "no decks" and "not loaded yet" are different things
+and must look different.
+
+Take a one-off snapshot with `getSnapshot()` only when reactivity would be wrong
+— the study session does this so that rating a card doesn't remove it from the
+list mid-session.
+
+## Mutations
+
+Mutations live in `actions.ts` files. They are plain client functions now, not
+Server Actions — there is no server. They keep the same shape as before:
+
+1. `auth()` for the `userId`
+2. parse the input with a Zod schema
+3. call the query helpers
+
+```ts
+export async function updateDeckAction(data: UpdateDeckInput) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+  const parsed = updateDeckSchema.parse(data);
+  const deck = await updateDeck(parsed.deckId, userId, { ... });
+  if (!deck) throw new Error("Deck not found");
   return deck;
 }
-
-export async function insertDeck(data: { title: string; description?: string; userId: string }) {
-  const [deck] = await db.insert(decks).values(data).returning();
-  return deck;
-}
 ```
 
-```tsx
-// src/db/queries/cards.ts
-import { db } from "@/db";
-import { cards, decks } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+Never take `FormData` as a parameter type — pass typed objects.
 
-// Read helpers join on `decks` to enforce ownership
-export async function getCardsByDeckForUser(deckId: number, userId: string) {
-  return db
-    .select({ card: cards })
-    .from(cards)
-    .innerJoin(decks, eq(cards.deckId, decks.id))
-    .where(and(eq(cards.deckId, deckId), eq(decks.userId, userId)))
-    .then((rows) => rows.map((r) => r.card));
-}
+There is no `revalidatePath` or `router.refresh()`: the store notifies its
+subscribers, so mounted pages re-render on their own. Adding them back would be a
+no-op at best.
 
-export async function insertCard(data: { deckId: number; front: string; back: string }) {
-  const [card] = await db.insert(cards).values(data).returning();
-  return card;
-}
-```
+## Ownership
 
-## Retrieval — Server Components Only
+Every helper filters by `userId`, and card-level helpers verify the card's deck
+belongs to the user. `userId` is a constant now, but the filters stay: they cost
+nothing, they document intent, and they are what a future multi-user version
+would need.
 
-All data fetching must happen in React Server Components. Never fetch data in Client Components or via `useEffect`. Call query helpers from `@/db/queries/*` — never use `db` directly.
-
-```tsx
-// ❌ BAD — inline Drizzle call in a Server Component
-import { db } from "@/db";
-import { decks } from "@/db/schema";
-
-export default async function DecksPage() {
-  const allDecks = await db.select().from(decks);
-}
-
-// ✅ GOOD — delegates to a query helper
-import { getDecksByUser } from "@/db/queries/decks";
-
-export default async function DecksPage() {
-  const { userId } = await auth();
-  const allDecks = await getDecksByUser(userId!);
-  return <DeckList decks={allDecks} />;
-}
-```
-
-## Mutations — Server Actions Only
-
-All inserts, updates, and deletes must use Server Actions (`"use server"`). Never use API route handlers for mutations. Server Actions call mutation helpers from `@/db/queries/*` — never use `db` directly.
-
-```tsx
-// ❌ BAD — inline Drizzle call in a Server Action
-"use server";
-import { db } from "@/db";
-import { decks } from "@/db/schema";
-
-export async function createDeck(data: CreateDeckInput) {
-  await db.insert(decks).values({ ...data, userId });
-}
-
-// ✅ GOOD — delegates to a query helper
-"use server";
-import { insertDeck } from "@/db/queries/decks";
-
-export async function createDeck(data: CreateDeckInput) {
-  const parsed = createDeckSchema.parse(data);
-  const { userId } = await auth();
-  return insertDeck({ ...parsed, userId: userId! });
-}
-```
-
-## Validation — Zod with TypeScript Types
-
-Every Server Action must validate input with a Zod schema. Derive the TypeScript type from the schema using `z.infer`. Never use `FormData` as a parameter type.
-
-```tsx
-// ❌ BAD — FormData parameter, no validation
-async function createDeck(formData: FormData) {
-  const title = formData.get("title") as string;
-}
-
-// ✅ GOOD — Zod schema with inferred type
-import { z } from "zod";
-
-const createDeckSchema = z.object({
-  title: z.string().min(1).max(255),
-  description: z.string().optional(),
-});
-
-type CreateDeckInput = z.infer<typeof createDeckSchema>;
-
-async function createDeck(data: CreateDeckInput) {
-  const parsed = createDeckSchema.parse(data);
-  // use parsed.title, parsed.description
-}
-```
-
-## Rules Summary
-
-- `db` and Drizzle table imports belong **only** in `src/db/queries/*.ts` files.
-- Server Components and Server Actions import from `@/db/queries/*`, never from `@/db` directly.
-- One query file per domain entity: `decks.ts`, `cards.ts`, etc.
-- Query helpers handle all ownership-scoped filtering (accept `userId` as a parameter).
-- For child entities (e.g., `cards` → `decks`), read helpers must `innerJoin` the parent table and filter on `userId` to enforce ownership.
-- Keep query helpers pure data access — no auth checks or validation inside them. Auth and validation stay in the calling Server Component or Server Action.
+Ownership failures return `undefined` rather than throwing. Callers must check.

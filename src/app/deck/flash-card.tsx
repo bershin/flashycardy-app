@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Copy, Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -36,7 +35,6 @@ interface FlashCardProps {
 }
 
 export function FlashCard({ card }: FlashCardProps) {
-  const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [editCardId, setEditCardId] = useState(card.id);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -46,7 +44,6 @@ export function FlashCard({ card }: FlashCardProps) {
     startTransition(async () => {
       try {
         const cloned = await cloneCardAction({ cardId: card.id });
-        router.refresh();
         if (cloned) {
           setEditCardId(cloned.id);
           setEditOpen(true);
@@ -62,7 +59,6 @@ export function FlashCard({ card }: FlashCardProps) {
       try {
         await deleteCardAction({ cardId: card.id });
         setDeleteOpen(false);
-        router.refresh();
       } catch {
         // keep dialog open so the user can retry
       }

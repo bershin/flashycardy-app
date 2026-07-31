@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BookOpen, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { hasOpenAIKey } from "@/lib/settings";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -15,11 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
 import { AddCardDialog } from "@/components/add-card-dialog";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
@@ -33,7 +29,6 @@ interface DeckHeaderProps {
     description: string | null;
   };
   cardCount: number;
-  hasAIFeature: boolean;
   hasChildren?: boolean;
   canAddSubDeck?: boolean;
 }
@@ -41,7 +36,6 @@ interface DeckHeaderProps {
 export function DeckHeader({
   deck,
   cardCount,
-  hasAIFeature,
   hasChildren = false,
   canAddSubDeck = false,
 }: DeckHeaderProps) {
@@ -52,6 +46,12 @@ export function DeckHeader({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isGenerating, startGenerating] = useTransition();
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  // Read after mount: localStorage isn't available during prerender, and
+  // reading it inline would desync the server and client markup.
+  const [canGenerate, setCanGenerate] = useState(false);
+  useEffect(() => setCanGenerate(hasOpenAIKey()), []);
 
   function handleDelete() {
     startTransition(async () => {
@@ -65,16 +65,14 @@ export function DeckHeader({
   }
 
   function handleGenerateAI() {
-    if (!hasAIFeature) {
-      router.push("/pricing");
-      return;
-    }
+    setGenerateError(null);
     startGenerating(async () => {
       try {
         await generateCardsWithAIAction(deck.id);
-        router.refresh();
-      } catch {
-        // TODO: surface error via toast
+      } catch (error) {
+        setGenerateError(
+          error instanceof Error ? error.message : "Generation failed.",
+        );
       }
     });
   }
@@ -116,7 +114,9 @@ export function DeckHeader({
               <Plus className="size-4" />
               Add Card
             </Button>
-            {hasAIFeature ? (
+            {/* Hidden entirely without a key — there is no plan to upsell now,
+                so an always-visible button would just be a dead end. */}
+            {canGenerate && (
               <Button
                 size="sm"
                 variant="secondary"
@@ -126,28 +126,10 @@ export function DeckHeader({
                 <Sparkles className="size-4" />
                 {isGenerating ? "Generating…" : "Generate with AI"}
               </Button>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={handleGenerateAI}
-                    />
-                  }
-                >
-                  <Sparkles className="size-4" />
-                  Generate with AI
-                </TooltipTrigger>
-                <TooltipContent>
-                  AI generation is a Pro feature. Click to view plans.
-                </TooltipContent>
-              </Tooltip>
             )}
             {cardCount > 0 && (
               <Link
-                href={`/deck/${deck.id}/study`}
+                href={`/deck/study?id=${deck.id}`}
                 className={buttonVariants({ size: "sm", variant: "secondary" })}
               >
                 <BookOpen className="size-3.5" />
@@ -163,6 +145,10 @@ export function DeckHeader({
           </Button>
         )}
       </div>
+
+      {generateError && (
+        <p className="mt-2 text-sm text-destructive">{generateError}</p>
+      )}
 
       <EditDeckDialog
         deckId={deck.id}

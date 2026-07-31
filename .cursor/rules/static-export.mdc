@@ -1,0 +1,45 @@
+---
+description: The app is a static export on GitHub Pages
+alwaysApply: true
+---
+
+# Static export
+
+`next.config.ts` sets `output: "export"`. `next build` emits a directory of HTML,
+CSS and JS with **no server behind it**. GitHub Actions publishes `out/` to
+GitHub Pages.
+
+## Not available
+
+- **Server Actions.** `"use server"` will fail the build. Mutations are plain
+  client functions.
+- **Middleware.** There is no `proxy.ts` / `middleware.ts`.
+- **Route handlers** (`route.ts`) and any server-only API.
+- **`revalidatePath`, `refresh`, `cookies()`, `headers()`.**
+- **Response headers** from `next.config.ts` — nothing serves them.
+- **Image optimization.** `images.unoptimized` is set; `next/image` will not
+  resize.
+
+## Routing
+
+Dynamic segments need `generateStaticParams`, and deck ids only exist in the
+user's browser — so there is nothing to enumerate. Use query parameters instead:
+
+- `/deck?id=123`
+- `/deck/study?id=123`
+
+Read them with `useSearchParams()`, which **must** sit inside a `<Suspense>`
+boundary or the build fails.
+
+## basePath
+
+Pages serves from `/<repo>/`, so `basePath` and `assetPrefix` are set from
+`NEXT_PUBLIC_BASE_PATH`. `<Link>` and imported assets get the prefix
+automatically; anything hand-built does not. Prefix it yourself in generated
+files — `src/app/manifest.ts` and `public/sw.js` both do.
+
+## Anything browser-only runs after mount
+
+Pages are prerendered in Node at build time, where `window`, `localStorage` and
+`indexedDB` don't exist. Read them in `useEffect`, never during render, or the
+build breaks and hydration mismatches.

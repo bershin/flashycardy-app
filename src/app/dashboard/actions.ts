@@ -1,14 +1,23 @@
-"use server";
+"use client";
 
-import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+/**
+ * Deck mutations.
+ *
+ * These were Server Actions. They are now ordinary async functions running in
+ * the browser — the app is a static export, so there is no server to run them
+ * on. Their names, arguments and validation are unchanged, which is why the
+ * components calling them did not need to be touched.
+ *
+ * There are no `revalidatePath` calls any more: the store notifies its
+ * subscribers on every mutation, so mounted pages re-render on their own.
+ */
+
 import { z } from "zod";
-import { FREE_DECK_LIMIT, FEATURES } from "@/lib/plans";
+import { auth } from "@/lib/auth";
 import {
   insertDeck,
   updateDeck,
   deleteDeck,
-  getDeckCountByUser,
   getDeckByIdForUser,
   reorderDecks,
 } from "@/db/queries/decks";
@@ -23,7 +32,7 @@ const createDeckSchema = z.object({
 type CreateDeckInput = z.infer<typeof createDeckSchema>;
 
 export async function createDeckAction(data: CreateDeckInput) {
-  const { userId, has } = await auth();
+  const { userId } = auth();
   if (!userId) throw new Error("Unauthorized");
 
   const parsed = createDeckSchema.parse(data);
@@ -36,33 +45,16 @@ export async function createDeckAction(data: CreateDeckInput) {
     }
     const parentCards = await getCardsByDeckForUser(parsed.parentId, userId);
     if (parentCards.length > 0) {
-      throw new Error(
-        "Cannot add sub-decks to a deck that already has cards.",
-      );
+      throw new Error("Cannot add sub-decks to a deck that already has cards.");
     }
   }
 
-  if (!parsed.parentId && !has({ feature: FEATURES.UNLIMITED_DECK })) {
-    const deckCount = await getDeckCountByUser(userId);
-    if (deckCount >= FREE_DECK_LIMIT) {
-      throw new Error(
-        "Free plan is limited to 3 decks. Upgrade to Pro for unlimited decks.",
-      );
-    }
-  }
-
-  const deck = await insertDeck({
+  return insertDeck({
     title: parsed.title,
     description: parsed.description ?? undefined,
     parentId: parsed.parentId ?? undefined,
     userId,
   });
-
-  revalidatePath("/dashboard");
-  if (parsed.parentId) {
-    revalidatePath(`/deck/${parsed.parentId}`);
-  }
-  return deck;
 }
 
 const updateDeckSchema = z.object({
@@ -74,7 +66,7 @@ const updateDeckSchema = z.object({
 type UpdateDeckInput = z.infer<typeof updateDeckSchema>;
 
 export async function updateDeckAction(data: UpdateDeckInput) {
-  const { userId } = await auth();
+  const { userId } = auth();
   if (!userId) throw new Error("Unauthorized");
 
   const parsed = updateDeckSchema.parse(data);
@@ -85,9 +77,6 @@ export async function updateDeckAction(data: UpdateDeckInput) {
   });
 
   if (!deck) throw new Error("Deck not found");
-
-  revalidatePath("/dashboard");
-  revalidatePath(`/deck/${parsed.deckId}`);
   return deck;
 }
 
@@ -98,7 +87,7 @@ const deleteDeckSchema = z.object({
 type DeleteDeckInput = z.infer<typeof deleteDeckSchema>;
 
 export async function deleteDeckAction(data: DeleteDeckInput) {
-  const { userId } = await auth();
+  const { userId } = auth();
   if (!userId) throw new Error("Unauthorized");
 
   const parsed = deleteDeckSchema.parse(data);
@@ -106,8 +95,6 @@ export async function deleteDeckAction(data: DeleteDeckInput) {
   const deck = await deleteDeck(parsed.deckId, userId);
 
   if (!deck) throw new Error("Deck not found");
-
-  revalidatePath("/dashboard");
   return deck;
 }
 
@@ -119,14 +106,9 @@ const reorderDecksSchema = z.object({
 type ReorderDecksInput = z.infer<typeof reorderDecksSchema>;
 
 export async function reorderDecksAction(data: ReorderDecksInput) {
-  const { userId } = await auth();
+  const { userId } = auth();
   if (!userId) throw new Error("Unauthorized");
 
   const parsed = reorderDecksSchema.parse(data);
   await reorderDecks(userId, parsed.orderedIds);
-
-  revalidatePath("/dashboard");
-  if (parsed.parentId) {
-    revalidatePath(`/deck/${parsed.parentId}`);
-  }
 }

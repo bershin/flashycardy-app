@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FlashyCardy
 
-## Getting Started
+A personal flashcard app with sub-decks, rich-text cards, and spaced repetition.
 
-First, run the development server:
+It runs entirely in your browser as a static site on GitHub Pages — no server, no
+database, no subscriptions. Your decks live in IndexedDB and sync to a private
+GitHub repository, whose commit history doubles as versioned backup.
+
+## How the data works
+
+| Where | What |
+| --- | --- |
+| IndexedDB (this browser) | The working copy. Everything reads and writes here first, so the app is instant and works offline. |
+| `data.json` in a private repo | The source of truth. Written via the GitHub API a few seconds after each change. |
+| Downloaded backup | A copy you hold yourself, from Settings. |
+
+Because the app is static, opening the site on a new device shows an empty
+database until you enter your sync settings. Nothing is stored on any server.
+
+## Setup
+
+1. **Create a private repo** for your data, e.g. `flashycardy-data`. It can be
+   empty. It must be a *separate* repo — GitHub Pages only publishes from public
+   repos on a free account, and you do not want your cards public.
+2. **Create a fine-grained access token** at
+   [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens),
+   scoped to only that repository, with **Contents: read and write**.
+3. Open the app → **Settings**, fill in the owner, repo and token, and hit
+   **Save & test connection**.
+4. Repeat step 3 on each device you want to sync.
+
+### Optional: AI card generation
+
+Add an OpenAI API key in Settings and decks gain a "Generate with AI" button.
+Requests go straight from your browser to OpenAI and are billed to your own
+account. Without a key the button is hidden and nothing costs anything.
+
+## Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Build the static site the same way CI does:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build      # emits ./out
+npm run serve      # serve it locally
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+For a local build, set `NEXT_PUBLIC_BASE_PATH=""` — otherwise everything is
+prefixed with `/flashycardy-app` for GitHub Pages.
 
-## Learn More
+## Deployment
 
-To learn more about Next.js, take a look at the following resources:
+Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds and
+publishes `out/` to GitHub Pages. Enable it once under
+**Settings → Pages → Source → GitHub Actions**.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+If you rename the repo or move to a custom domain, update
+`NEXT_PUBLIC_BASE_PATH` in that workflow.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Migrating from the old Postgres version
 
-## Deploy on Vercel
+Earlier versions used Neon Postgres, Clerk and Vercel. To bring that data across
+— **before** cancelling the database:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+DATABASE_URL='postgres://...' npm run export:neon
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This writes `data.json`. Check the reported deck and card counts, commit it to
+your private data repo, then point Settings at it.
+
+## Architecture notes
+
+- `src/lib/store/` — the document, IndexedDB persistence, selectors, GitHub sync.
+- `src/db/queries/` — the data-access API everything else calls.
+- `src/app/**/actions.ts` — mutations. Formerly Server Actions, now plain client
+  functions, since a static export has no server.
+
+Deck ids only exist in your browser, so pages use query parameters
+(`/deck?id=123`) rather than dynamic route segments, which a static export cannot
+enumerate at build time.
+
+Card images are stored inline as base64 in the card HTML, and so travel inside
+`data.json`. They are downscaled to 1600px on insert to keep the file well under
+GitHub's 100 MB limit; Settings shows the current size.

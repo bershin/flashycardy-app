@@ -57,7 +57,7 @@ export function DeckCard({ deck }: DeckCardProps) {
   return (
     <div className="group/deck relative">
       <Card size="sm" className="transition-colors hover:bg-muted/50">
-        <Link href={`/deck/${deck.id}`}>
+        <Link href={`/deck?id=${deck.id}`}>
           <CardHeader>
             <CardTitle>{deck.title}</CardTitle>
             {deck.description && (
@@ -90,8 +90,8 @@ export function DeckCard({ deck }: DeckCardProps) {
                   type="button"
                   onClick={() =>
                     deck.childCount > 0
-                      ? router.push(`/deck/${deck.id}`)
-                      : router.push(`/deck/${deck.id}/study`)
+                      ? router.push(`/deck?id=${deck.id}`)
+                      : router.push(`/deck/study?id=${deck.id}`)
                   }
                   className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
                 >

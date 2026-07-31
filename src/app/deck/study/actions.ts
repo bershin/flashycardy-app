@@ -1,8 +1,12 @@
-"use server";
+"use client";
 
-import { auth } from "@clerk/nextjs/server";
-import { revalidatePath, refresh } from "next/cache";
+/**
+ * Study-session mutations. Formerly Server Actions; see
+ * `src/app/dashboard/actions.ts` for why they now run in the browser.
+ */
+
 import { z } from "zod";
+import { auth } from "@/lib/auth";
 import { recordStudyResult } from "@/db/queries/cards";
 import { markDeckStudied } from "@/db/queries/decks";
 
@@ -15,23 +19,16 @@ const rateCardSchema = z.object({
 type RateCardInput = z.infer<typeof rateCardSchema>;
 
 export async function rateCardAction(data: RateCardInput) {
-  const { userId } = await auth();
+  const { userId } = auth();
   if (!userId) throw new Error("Unauthorized");
 
   const parsed = rateCardSchema.parse(data);
-  const card = await recordStudyResult(parsed.cardId, userId, parsed.rating);
-
-  revalidatePath(`/deck/${parsed.deckId}`);
-  refresh();
-
-  return card;
+  return recordStudyResult(parsed.cardId, userId, parsed.rating);
 }
 
 export async function markDeckStudiedAction(deckId: number) {
-  const { userId } = await auth();
+  const { userId } = auth();
   if (!userId) throw new Error("Unauthorized");
 
   await markDeckStudied(deckId, userId);
-  revalidatePath("/dashboard");
-  revalidatePath(`/deck/${deckId}`);
 }

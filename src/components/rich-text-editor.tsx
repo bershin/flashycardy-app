@@ -58,13 +58,73 @@ function ToolbarButton({
   );
 }
 
+/**
+ * Images are stored inline as base64 in the card's HTML, which means every one
+ * of them is carried in the synced `data.json` — and base64 inflates by a
+ * further third when that file is uploaded. A photo straight off a phone can be
+ * several megabytes; a handful of them would push the file toward GitHub's
+ * 100 MB ceiling.
+ *
+ * Downscaling on the way in keeps that in check. 1600px is well beyond what the
+ * card view renders, so there is no visible loss.
+ */
+const MAX_IMAGE_EDGE = 1600;
+const IMAGE_QUALITY = 0.85;
+
+function downscaleImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+
+      // GIFs would lose their animation, and SVGs are vectors already.
+      if (file.type === "image/gif" || file.type === "image/svg+xml") {
+        resolve(dataUrl);
+        return;
+      }
+
+      const image = new window.Image();
+      // If decoding fails for any reason, fall back to the original rather
+      // than losing the user's paste.
+      image.onerror = () => resolve(dataUrl);
+      image.onload = () => {
+        const scale = Math.min(
+          1,
+          MAX_IMAGE_EDGE / Math.max(image.width, image.height),
+        );
+        if (scale === 1 && file.size < 512 * 1024) {
+          resolve(dataUrl);
+          return;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(image.width * scale);
+        canvas.height = Math.round(image.height * scale);
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+          resolve(dataUrl);
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+        // PNGs with transparency have to stay PNG; everything else compresses
+        // far better as JPEG.
+        const type = file.type === "image/png" ? "image/png" : "image/jpeg";
+        const resized = canvas.toDataURL(type, IMAGE_QUALITY);
+        resolve(resized.length < dataUrl.length ? resized : dataUrl);
+      };
+      image.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function insertImageFile(editor: Editor, file: File) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const src = reader.result as string;
+  void downscaleImage(file).then((src) => {
     editor.chain().focus().setImage({ src }).run();
-  };
-  reader.readAsDataURL(file);
+  });
 }
 
 function Toolbar({ editor }: { editor: Editor }) {
