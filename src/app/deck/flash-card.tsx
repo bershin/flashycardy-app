@@ -6,7 +6,6 @@ import {
   Copy,
   Ellipsis,
   FolderInput,
-  Languages,
   ListChecks,
   Pencil,
   Trash2,
@@ -200,19 +199,10 @@ export function FlashCard({
               dangerouslySetInnerHTML={{ __html: card.back }}
             />
           )}
-          {card.type !== "basic" && (
+          {card.type === "quiz" && (
             <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-              {card.type === "quiz" ? (
-                <>
-                  <ListChecks className="size-3" />
-                  Quiz
-                </>
-              ) : (
-                <>
-                  <Languages className="size-3" />
-                  Vocabulary
-                </>
-              )}
+              <ListChecks className="size-3" />
+              Quiz
             </span>
           )}
         </CardContent>

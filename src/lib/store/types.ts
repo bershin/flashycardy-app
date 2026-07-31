@@ -21,15 +21,15 @@ export type DeckRow = {
 };
 
 /**
- * What kind of card this is, and therefore how it is answered and graded.
+ * What kind of card this is, and therefore how it is answered.
  *
  *  - `basic` — front, back, you rate yourself. The original card.
  *  - `quiz`  — a question with options you wrote; picking one grades it
  *              immediately, with no AI and no network.
- *  - `vocab` — a word; you supply synonyms and a sentence and the AI judges
- *              them. The only type that needs a key and a connection.
  */
-export type CardType = "basic" | "quiz" | "vocab";
+export const CARD_TYPES = ["basic", "quiz"] as const;
+
+export type CardType = (typeof CARD_TYPES)[number];
 
 export type QuizPayload = {
   /** Plain text — rich formatting belongs in the question, not the options. */
@@ -37,21 +37,14 @@ export type QuizPayload = {
   correctIndex: number;
 };
 
-export type VocabPayload = {
-  /** Optional steer for the grader, e.g. "the musical sense, not the verb". */
-  senseHint?: string;
-};
-
 export type CardRow = {
   id: number;
   deckId: number;
   type: CardType;
-  /** The question for every type; the word itself for `vocab`. */
   front: string;
-  /** The answer for `basic`; an optional explanation for `quiz` and `vocab`. */
+  /** The answer for `basic`; an optional explanation for `quiz`. */
   back: string;
   quiz?: QuizPayload;
-  vocab?: VocabPayload;
   nextReviewAt: Date;
   consecutiveCorrect: number;
   createdAt: Date;
@@ -96,14 +89,29 @@ export type SerializedDbDoc = {
   }>;
   cards: Array<
     Omit<CardRow, "type" | "nextReviewAt" | "createdAt" | "updatedAt"> & {
-      /** Absent in version-1 documents; migrated to "basic" on read. */
-      type?: CardType;
+      /**
+       * Absent in version-1 documents, and may name a type this build no
+       * longer has (vocabulary was removed). Normalised on read.
+       */
+      type?: string;
       nextReviewAt: string;
       createdAt: string;
       updatedAt: string;
     }
   >;
 };
+
+/**
+ * Coerce a stored card type to one this build understands.
+ *
+ * Covers both directions of drift: version-1 documents have no type at all,
+ * and a document written by a build that had vocabulary cards still names it.
+ * Either way the card survives as a basic card rather than disappearing or
+ * rendering as nothing.
+ */
+function normaliseType(type: string | undefined): CardType {
+  return CARD_TYPES.includes(type as CardType) ? (type as CardType) : "basic";
+}
 
 export function emptyDoc(deviceId: string): DbDoc {
   return {
@@ -152,10 +160,9 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
     })),
     cards: raw.cards.map((c) => ({
       ...c,
-      // Version 1 predates card types: everything in it is a basic card. The
-      // fallback is per-card rather than keyed on the document version so a
-      // hand-edited or partially-written file can't produce a typeless card.
-      type: c.type ?? "basic",
+      // Per-card rather than keyed on the document version, so a hand-edited or
+      // partially-written file can't produce a card with no usable type.
+      type: normaliseType(c.type),
       nextReviewAt: toDate(c.nextReviewAt),
       createdAt: toDate(c.createdAt),
       updatedAt: toDate(c.updatedAt),

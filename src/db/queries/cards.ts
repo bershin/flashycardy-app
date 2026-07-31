@@ -27,7 +27,6 @@ import type {
   CardType,
   DbDoc,
   QuizPayload,
-  VocabPayload,
 } from "@/lib/store/types";
 
 /** `WHERE deckId IN (SELECT id FROM decks WHERE userId = ?)` */
@@ -53,7 +52,6 @@ export async function insertCard(data: {
   back: string;
   type?: CardType;
   quiz?: QuizPayload;
-  vocab?: VocabPayload;
 }) {
   return mutate((draft) => {
     const now = new Date();
@@ -64,7 +62,6 @@ export async function insertCard(data: {
       front: data.front,
       back: data.back,
       ...(data.quiz ? { quiz: data.quiz } : {}),
-      ...(data.vocab ? { vocab: data.vocab } : {}),
       nextReviewAt: now,
       consecutiveCorrect: 0,
       createdAt: now,
@@ -109,7 +106,6 @@ export async function updateCard(
     back?: string;
     type?: CardType;
     quiz?: QuizPayload;
-    vocab?: VocabPayload;
   },
 ) {
   return mutate((draft) => {
@@ -126,10 +122,9 @@ export async function updateCard(
       ...(data.front !== undefined ? { front: data.front } : {}),
       ...(data.back !== undefined ? { back: data.back } : {}),
       updatedAt: new Date(),
-      // Payloads follow the type, so switching a card away from quiz doesn't
-      // leave orphaned options behind to reappear if it is switched back.
+      // The payload follows the type, so switching a card away from quiz
+      // doesn't leave orphaned options behind to reappear if it switches back.
       quiz: type === "quiz" ? (data.quiz ?? current.quiz) : undefined,
-      vocab: type === "vocab" ? (data.vocab ?? current.vocab) : undefined,
     };
     draft.cards[index] = updated;
     return updated;

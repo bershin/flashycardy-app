@@ -23,7 +23,6 @@ export type CardDraft = {
   back: string;
   options: string[];
   correctIndex: number;
-  senseHint: string;
 };
 
 export function emptyDraft(): CardDraft {
@@ -33,7 +32,6 @@ export function emptyDraft(): CardDraft {
     back: "",
     options: ["", "", "", ""],
     correctIndex: 0,
-    senseHint: "",
   };
 }
 
@@ -44,7 +42,6 @@ export function draftFromCard(card: CardRow): CardDraft {
     back: card.back,
     options: card.quiz?.options ?? ["", "", "", ""],
     correctIndex: card.quiz?.correctIndex ?? 0,
-    senseHint: card.vocab?.senseHint ?? "",
   };
 }
 
@@ -55,9 +52,7 @@ export function isBlank(html: string): boolean {
 /** Returns an error message, or null when the draft can be saved. */
 export function validateDraft(draft: CardDraft): string | null {
   if (isBlank(draft.front)) {
-    return draft.type === "vocab"
-      ? "Enter the word this card is about."
-      : "The question is required.";
+    return "The question is required.";
   }
 
   if (draft.type === "basic" && isBlank(draft.back)) {
@@ -99,17 +94,12 @@ export function draftToInput(draft: CardDraft) {
             ),
           }
         : undefined,
-    vocab:
-      draft.type === "vocab"
-        ? { senseHint: draft.senseHint.trim() || undefined }
-        : undefined,
   };
 }
 
 const TYPES: Array<{ value: CardType; label: string; hint: string }> = [
   { value: "basic", label: "Basic", hint: "Question and answer, self-rated" },
   { value: "quiz", label: "Quiz", hint: "Multiple choice, graded instantly" },
-  { value: "vocab", label: "Vocabulary", hint: "Synonyms and a sentence, AI-graded" },
 ];
 
 interface CardFieldsProps {
@@ -143,7 +133,7 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
     <div className="grid gap-4">
       <div className="grid gap-2">
         <Label>Card type</Label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {TYPES.map((option) => (
             <button
               key={option.value}
@@ -166,13 +156,11 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
       </div>
 
       <div className="grid gap-2">
-        <Label>{draft.type === "vocab" ? "Word" : "Question"}</Label>
+        <Label>Question</Label>
         <RichTextEditor
           content={draft.front}
           onChange={(front) => set({ front })}
-          placeholder={
-            draft.type === "vocab" ? "The word to practise…" : "Question or term…"
-          }
+          placeholder="Question or term…"
           disabled={disabled}
         />
       </div>
@@ -235,22 +223,6 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
               </Button>
             </div>
           )}
-        </div>
-      )}
-
-      {draft.type === "vocab" && (
-        <div className="grid gap-2">
-          <Label htmlFor="sense-hint">Sense hint (optional)</Label>
-          <Input
-            id="sense-hint"
-            value={draft.senseHint}
-            disabled={disabled}
-            placeholder="e.g. the musical sense, not the verb"
-            onChange={(e) => set({ senseHint: e.target.value })}
-          />
-          <p className="text-xs text-muted-foreground">
-            Steers the grader when a word has more than one meaning.
-          </p>
         </div>
       )}
 

@@ -18,20 +18,16 @@ import {
   bulkInsertCards,
 } from "@/db/queries/cards";
 
-const cardTypeSchema = z.enum(["basic", "quiz", "vocab"]);
+const cardTypeSchema = z.enum(["basic", "quiz"]);
 
 const quizSchema = z.object({
   options: z.array(z.string().min(1).max(500)).min(2).max(6),
   correctIndex: z.number().int().min(0),
 });
 
-const vocabSchema = z.object({
-  senseHint: z.string().max(500).optional(),
-});
-
 /**
- * `back` is required for a basic card (it is the answer) but optional for the
- * other two, where it is just an explanation shown after answering.
+ * `back` is required for a basic card, where it is the answer, but optional for
+ * a quiz card, where it is just an explanation shown after answering.
  */
 const cardContentSchema = z
   .object({
@@ -39,7 +35,6 @@ const cardContentSchema = z
     back: z.string().max(500_000),
     type: cardTypeSchema.default("basic"),
     quiz: quizSchema.optional(),
-    vocab: vocabSchema.optional(),
   })
   .refine((v) => v.type !== "basic" || v.back.trim().length > 0, {
     message: "Back is required",
@@ -76,7 +71,6 @@ export async function addCardAction(data: AddCardInput) {
     front: parsed.front,
     back: parsed.back,
     quiz: parsed.quiz,
-    vocab: parsed.vocab,
   });
 }
 
@@ -101,7 +95,6 @@ export async function updateCardAction(data: UpdateCardInput) {
     front: parsed.front,
     back: parsed.back,
     quiz: parsed.quiz,
-    vocab: parsed.vocab,
   });
 }
 
@@ -138,10 +131,14 @@ export async function cloneCardAction(data: CloneCardInput) {
   const existingCard = await getCardByIdForUser(parsed.cardId, userId);
   if (!existingCard) throw new Error("Card not found");
 
+  // Carry the type and its payload across: a cloned quiz card that came back
+  // as a basic one with no options would look like the clone had failed.
   return insertCard({
     deckId: existingCard.deckId,
+    type: existingCard.type,
     front: existingCard.front,
     back: existingCard.back,
+    quiz: existingCard.quiz,
   });
 }
 
