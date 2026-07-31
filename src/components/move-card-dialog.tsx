@@ -14,20 +14,23 @@ import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import { selectMoveTargets } from "@/lib/store/selectors";
 import type { DbDoc } from "@/lib/store/types";
-import { moveCardAction } from "@/app/deck/actions";
+import { moveCardsAction } from "@/app/deck/actions";
 
 interface MoveCardDialogProps {
-  cardId: number;
+  /** One id from a card's own menu, or many from a multi-select. */
+  cardIds: number[];
   currentDeckId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onMoved?: () => void;
 }
 
 export function MoveCardDialog({
-  cardId,
+  cardIds,
   currentDeckId,
   open,
   onOpenChange,
+  onMoved,
 }: MoveCardDialogProps) {
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -60,10 +63,15 @@ export function MoveCardDialog({
     setError(null);
     startTransition(async () => {
       try {
-        await moveCardAction({ cardId, targetDeckId });
+        await moveCardsAction({ cardIds, targetDeckId });
         handleOpenChange(false);
+        onMoved?.();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not move the card.");
+        setError(
+          e instanceof Error
+            ? e.message
+            : `Could not move the card${cardIds.length === 1 ? "" : "s"}.`,
+        );
       }
     });
   }
@@ -72,17 +80,21 @@ export function MoveCardDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Move card</DialogTitle>
+          <DialogTitle>
+            {cardIds.length === 1 ? "Move card" : `Move ${cardIds.length} cards`}
+          </DialogTitle>
           <DialogDescription>
-            Pick a deck to move this card into. Its review schedule comes with
-            it.
+            {cardIds.length === 1
+              ? "Pick a deck to move this card into. Its review schedule comes with it."
+              : "Pick a deck to move them into. Their review schedules come with them."}
           </DialogDescription>
         </DialogHeader>
 
         {targets.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            There is nowhere to move this card. Create another deck first &mdash;
-            decks that contain sub-decks can&rsquo;t hold cards themselves.
+            There is nowhere to move {cardIds.length === 1 ? "this card" : "them"}
+            . Create another deck first &mdash; decks that contain sub-decks
+            can&rsquo;t hold cards themselves.
           </p>
         ) : (
           <>

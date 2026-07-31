@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Copy, Ellipsis, FolderInput, Pencil, Trash2 } from "lucide-react";
+import { Check, Copy, Ellipsis, FolderInput, Pencil, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -34,9 +34,17 @@ interface FlashCardProps {
     back: string;
     deckId: number;
   };
+  selecting?: boolean;
+  selected?: boolean;
+  onToggleSelected?: (id: number) => void;
 }
 
-export function FlashCard({ card }: FlashCardProps) {
+export function FlashCard({
+  card,
+  selecting = false,
+  selected = false,
+  onToggleSelected,
+}: FlashCardProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [editCardId, setEditCardId] = useState(card.id);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -66,6 +74,48 @@ export function FlashCard({ card }: FlashCardProps) {
         // keep dialog open so the user can retry
       }
     });
+  }
+
+  // In selection mode the whole card is one big checkbox — easier to hit than a
+  // small target, which matters most on a touch screen.
+  if (selecting) {
+    return (
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
+        onClick={() => onToggleSelected?.(card.id)}
+        className={`rounded-xl text-left transition-colors ${
+          selected ? "ring-2 ring-primary" : "ring-1 ring-transparent"
+        }`}
+      >
+        <Card className={selected ? "bg-primary/5" : undefined}>
+          <CardHeader>
+            <div
+              className="rich-content min-w-0 overflow-hidden text-base font-semibold"
+              dangerouslySetInnerHTML={{ __html: card.front }}
+            />
+            <CardAction>
+              <span
+                className={`flex size-5 items-center justify-center rounded border ${
+                  selected
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-input"
+                }`}
+              >
+                {selected && <Check className="size-3.5" />}
+              </span>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <div
+              className="rich-content min-w-0 overflow-hidden text-muted-foreground"
+              dangerouslySetInnerHTML={{ __html: card.back }}
+            />
+          </CardContent>
+        </Card>
+      </button>
+    );
   }
 
   return (
@@ -136,7 +186,7 @@ export function FlashCard({ card }: FlashCardProps) {
       />
 
       <MoveCardDialog
-        cardId={card.id}
+        cardIds={[card.id]}
         currentDeckId={card.deckId}
         open={moveOpen}
         onOpenChange={setMoveOpen}

@@ -281,30 +281,45 @@ export async function recordStudyResult(
  * Returns `undefined` if the card or target isn't the user's, or if the target
  * has sub-decks and therefore cannot hold cards of its own.
  */
+export async function moveCards(
+  cardIds: number[],
+  userId: string,
+  targetDeckId: number,
+) {
+  if (cardIds.length === 0) return [];
+
+  // One mutate for the whole batch: a bulk move is a single user action, and
+  // splitting it would persist and sync a half-moved state.
+  return mutate((draft) => {
+    const target = draft.decks.find(
+      (d) => d.id === targetDeckId && d.userId === userId,
+    );
+    if (!target) return [];
+    if (draft.decks.some((d) => d.parentId === targetDeckId)) return [];
+
+    const now = new Date();
+    const wanted = new Set(cardIds);
+    const moved: CardRow[] = [];
+
+    draft.cards = draft.cards.map((card) => {
+      if (!wanted.has(card.id)) return card;
+      if (!ownsCard(draft, card, userId)) return card;
+      const next: CardRow = { ...card, deckId: targetDeckId, updatedAt: now };
+      moved.push(next);
+      return next;
+    });
+
+    return moved;
+  });
+}
+
 export async function moveCard(
   cardId: number,
   userId: string,
   targetDeckId: number,
 ) {
-  return mutate((draft) => {
-    const index = draft.cards.findIndex((c) => c.id === cardId);
-    if (index === -1) return undefined;
-    if (!ownsCard(draft, draft.cards[index], userId)) return undefined;
-
-    const target = draft.decks.find(
-      (d) => d.id === targetDeckId && d.userId === userId,
-    );
-    if (!target) return undefined;
-    if (draft.decks.some((d) => d.parentId === targetDeckId)) return undefined;
-
-    const moved: CardRow = {
-      ...draft.cards[index],
-      deckId: targetDeckId,
-      updatedAt: new Date(),
-    };
-    draft.cards[index] = moved;
-    return moved;
-  });
+  const [moved] = await moveCards([cardId], userId, targetDeckId);
+  return moved;
 }
 
 export async function deleteCard(cardId: number, userId: string) {
