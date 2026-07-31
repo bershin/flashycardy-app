@@ -5,6 +5,11 @@ import type { MetadataRoute } from "next";
  * not JSX — so the prefix has to be applied by hand or the installed PWA will
  * launch into a 404 and show no icon.
  */
+// Metadata routes are treated as route handlers, which `output: export` refuses
+// to build unless they are explicitly static. The base path is inlined at build
+// time, so there is nothing dynamic here.
+export const dynamic = "force-static";
+
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export default function manifest(): MetadataRoute.Manifest {
