@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BookOpen, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
@@ -48,10 +48,14 @@ export function DeckHeader({
   const [isGenerating, startGenerating] = useTransition();
   const [generateError, setGenerateError] = useState<string | null>(null);
 
-  // Read after mount: localStorage isn't available during prerender, and
-  // reading it inline would desync the server and client markup.
-  const [canGenerate, setCanGenerate] = useState(false);
-  useEffect(() => setCanGenerate(hasOpenAIKey()), []);
+  // localStorage isn't available during prerender, so the server snapshot is
+  // `false` and the real value arrives on hydration. Nothing changes the key
+  // mid-page, hence the no-op subscribe.
+  const canGenerate = useSyncExternalStore(
+    () => () => {},
+    () => hasOpenAIKey(),
+    () => false,
+  );
 
   function handleDelete() {
     startTransition(async () => {

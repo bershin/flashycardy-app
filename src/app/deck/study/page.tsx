@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle } from "lucide-react";
@@ -44,15 +44,23 @@ function StudyPageContent() {
    * removes it from the due set. Subscribing to that would make cards vanish
    * from underneath the session as they were answered.
    */
-  const [dueCards, setDueCards] = useState<CardRow[] | null>(null);
+  const [session, setSession] = useState<{
+    deckId: number;
+    cards: CardRow[];
+  } | null>(null);
 
-  useEffect(() => {
-    if (!ready || !validId) return;
-    // Read the store directly rather than through `useStore`, so this does not
-    // resubscribe. Keyed on the deck and readiness alone, so the snapshot is
-    // taken once when the session opens.
-    setDueCards(selectDueCardsByDeckForUser(getSnapshot(), deckId, LOCAL_USER_ID));
-  }, [ready, validId, deckId]);
+  // Adjusted during render rather than in an effect: the snapshot has to be
+  // taken before the first paint, and doing it in an effect would both flash an
+  // empty session and trigger a cascading render. The store is read directly so
+  // this never resubscribes.
+  if (ready && validId && session?.deckId !== deckId) {
+    setSession({
+      deckId,
+      cards: selectDueCardsByDeckForUser(getSnapshot(), deckId, LOCAL_USER_ID),
+    });
+  }
+
+  const dueCards = session?.deckId === deckId ? session.cards : null;
 
   const backHref = `/deck?id=${deckId}`;
 

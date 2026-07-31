@@ -61,18 +61,6 @@ publishes `out/` to GitHub Pages. Enable it once under
 If you rename the repo or move to a custom domain, update
 `NEXT_PUBLIC_BASE_PATH` in that workflow.
 
-## Migrating from the old Postgres version
-
-Earlier versions used Neon Postgres, Clerk and Vercel. To bring that data across
-— **before** cancelling the database:
-
-```bash
-DATABASE_URL='postgres://...' npm run export:neon
-```
-
-This writes `data.json`. Check the reported deck and card counts, commit it to
-your private data repo, then point Settings at it.
-
 ## Architecture notes
 
 - `src/lib/store/` — the document, IndexedDB persistence, selectors, GitHub sync.
