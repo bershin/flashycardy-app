@@ -134,6 +134,59 @@ export async function markDeckStudied(deckId: number, userId: string) {
 }
 
 /**
+ * Re-parent a deck: into `targetParentId`, or to the top level when that is
+ * `null`.
+ *
+ * The one-level-deep rules are re-checked here rather than trusted from the
+ * caller, so a stale picker can't produce a deck nested two levels down or a
+ * parent that holds cards of its own. Returns `undefined` if the move isn't
+ * allowed.
+ */
+export async function moveDeck(
+  deckId: number,
+  userId: string,
+  targetParentId: number | null,
+) {
+  return mutate((draft) => {
+    const index = draft.decks.findIndex(
+      (d) => d.id === deckId && d.userId === userId,
+    );
+    if (index === -1) return undefined;
+
+    // Its children would end up two levels deep.
+    if (draft.decks.some((d) => d.parentId === deckId)) return undefined;
+
+    if (targetParentId !== null) {
+      if (targetParentId === deckId) return undefined;
+      const target = draft.decks.find(
+        (d) => d.id === targetParentId && d.userId === userId,
+      );
+      if (!target) return undefined;
+      if (target.parentId !== null) return undefined;
+      if (draft.cards.some((c) => c.deckId === targetParentId)) return undefined;
+    }
+
+    // Append after whatever is already in the destination.
+    const maxPosition = draft.decks.reduce(
+      (max, d) =>
+        d.userId === userId && d.parentId === targetParentId && d.id !== deckId
+          ? Math.max(max, d.position)
+          : max,
+      -1,
+    );
+
+    const moved: DeckRow = {
+      ...draft.decks[index],
+      parentId: targetParentId,
+      position: maxPosition + 1,
+      updatedAt: new Date(),
+    };
+    draft.decks[index] = moved;
+    return moved;
+  });
+}
+
+/**
  * Delete a deck along with its sub-decks and every card belonging to any of
  * them.
  *

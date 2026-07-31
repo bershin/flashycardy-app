@@ -3,7 +3,14 @@
 import { useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BookOpen, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  FolderInput,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { hasOpenAIKey } from "@/lib/settings";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -19,6 +26,7 @@ import {
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
 import { AddCardDialog } from "@/components/add-card-dialog";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
+import { MoveDeckDialog } from "@/components/move-deck-dialog";
 import { deleteDeckAction } from "@/app/dashboard/actions";
 import { generateCardsWithAIAction } from "./actions";
 
@@ -44,6 +52,7 @@ export function DeckHeader({
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [createSubDeckOpen, setCreateSubDeckOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isGenerating, startGenerating] = useTransition();
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -92,6 +101,14 @@ export function DeckHeader({
         >
           <Pencil className="size-4" />
           <span className="sr-only">Edit deck</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setMoveOpen(true)}
+        >
+          <FolderInput className="size-4" />
+          <span className="sr-only">Move deck</span>
         </Button>
         <Button
           variant="ghost"
@@ -170,6 +187,12 @@ export function DeckHeader({
         open={createSubDeckOpen}
         onOpenChange={setCreateSubDeckOpen}
         parentId={deck.id}
+      />
+      <MoveDeckDialog
+        deckId={deck.id}
+        deckTitle={deck.title}
+        open={moveOpen}
+        onOpenChange={setMoveOpen}
       />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

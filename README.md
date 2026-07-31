@@ -61,6 +61,23 @@ publishes `out/` to GitHub Pages. Enable it once under
 If you rename the repo or move to a custom domain, update
 `NEXT_PUBLIC_BASE_PATH` in that workflow.
 
+## Moving decks
+
+A deck's header has a **move** button next to edit and delete. It can be filed
+under another deck, or sent back out to the top level.
+
+Because decks are only ever one level deep, three rules apply, and the picker
+only offers destinations that satisfy them:
+
+- a deck that **has sub-decks** can't be moved under anything — its children
+  would end up two levels down, so move them out first;
+- the destination must be **top-level**, for the same reason;
+- the destination must hold **no cards of its own**, since a parent deck's card
+  list is the union of its children's.
+
+Moving the `Archive` deck's contents around is allowed too — it is an ordinary
+deck, and appears last in the list.
+
 ## Moving cards
 
 A card's `⋯` menu has **Move to deck…**, which lists every deck that can accept

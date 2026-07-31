@@ -19,6 +19,7 @@ import {
   updateDeck,
   deleteDeck,
   getDeckByIdForUser,
+  moveDeck,
   reorderDecks,
 } from "@/db/queries/decks";
 import { getCardsByDeckForUser } from "@/db/queries/cards";
@@ -96,6 +97,25 @@ export async function deleteDeckAction(data: DeleteDeckInput) {
 
   if (!deck) throw new Error("Deck not found");
   return deck;
+}
+
+const moveDeckSchema = z.object({
+  deckId: z.number(),
+  /** `null` moves the deck back out to the top level. */
+  targetParentId: z.number().nullable(),
+});
+
+type MoveDeckInput = z.infer<typeof moveDeckSchema>;
+
+export async function moveDeckAction(data: MoveDeckInput) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = moveDeckSchema.parse(data);
+
+  const moved = await moveDeck(parsed.deckId, userId, parsed.targetParentId);
+  if (!moved) throw new Error("That deck can't be moved there.");
+  return moved;
 }
 
 const reorderDecksSchema = z.object({

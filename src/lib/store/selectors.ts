@@ -238,6 +238,87 @@ export function selectMoveTargets(
     });
 }
 
+export type DeckMoveTarget = {
+  id: number;
+  title: string;
+  isArchive: boolean;
+  childCount: number;
+};
+
+export type DeckMoveOptions = {
+  /** Set when the deck cannot be moved at all; explains why, for the UI. */
+  blocked: string | null;
+  /** Only meaningful for a deck that is currently a sub-deck. */
+  canMoveToTopLevel: boolean;
+  targets: DeckMoveTarget[];
+};
+
+/**
+ * Where a deck can be moved to.
+ *
+ * The one-level-deep rule does most of the work here:
+ *
+ *  - a deck that has sub-decks can't move under anything, because its children
+ *    would land two levels deep;
+ *  - only top-level decks can receive it, for the same reason;
+ *  - a deck holding cards of its own can't receive it, because a parent's card
+ *    list is the union of its children's and it has nowhere to keep its own.
+ */
+export function selectDeckMoveOptions(
+  db: DbDoc,
+  userId: string,
+  deckId: number,
+): DeckMoveOptions {
+  const deck = db.decks.find((d) => d.id === deckId && d.userId === userId);
+  if (!deck) {
+    return { blocked: "Deck not found.", canMoveToTopLevel: false, targets: [] };
+  }
+
+  const children = db.decks.filter((d) => d.parentId === deckId);
+  if (children.length > 0) {
+    return {
+      blocked:
+        "This deck has sub-decks, and decks can only be one level deep. Move its sub-decks out first.",
+      canMoveToTopLevel: false,
+      targets: [],
+    };
+  }
+
+  const decksWithCards = new Set(db.cards.map((c) => c.deckId));
+  const childCounts = new Map<number, number>();
+  for (const d of db.decks) {
+    if (d.parentId !== null) {
+      childCounts.set(d.parentId, (childCounts.get(d.parentId) ?? 0) + 1);
+    }
+  }
+
+  const targets = db.decks
+    .filter(
+      (d) =>
+        d.userId === userId &&
+        d.id !== deckId &&
+        d.parentId === null &&
+        d.id !== deck.parentId &&
+        !decksWithCards.has(d.id),
+    )
+    .map((d) => ({
+      id: d.id,
+      title: d.title,
+      isArchive: isArchiveDeck(db, d),
+      childCount: childCounts.get(d.id) ?? 0,
+    }))
+    .sort((a, b) => {
+      if (a.isArchive !== b.isArchive) return a.isArchive ? 1 : -1;
+      return a.title.localeCompare(b.title);
+    });
+
+  return {
+    blocked: null,
+    canMoveToTopLevel: deck.parentId !== null,
+    targets,
+  };
+}
+
 /** Newest-updated first, matching the old `orderBy(desc(cards.updatedAt))`. */
 export function selectCardsByDeckForUser(
   db: DbDoc,
