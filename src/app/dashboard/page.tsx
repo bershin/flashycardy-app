@@ -64,7 +64,7 @@ export default function DashboardPage() {
     <div className="mx-auto w-full max-w-6xl px-4 py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+          <h1 className="bg-gradient-to-br from-[oklch(0.55_0.22_300)] via-[oklch(0.6_0.2_330)] to-[oklch(0.55_0.2_265)] bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl dark:from-[oklch(0.85_0.14_300)] dark:via-[oklch(0.82_0.13_330)] dark:to-[oklch(0.8_0.14_265)]">
             Your decks
           </h1>
           <p className="mt-2 text-muted-foreground">

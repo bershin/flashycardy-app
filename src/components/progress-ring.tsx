@@ -48,7 +48,7 @@ export function ProgressRing({ done, total, size = 44 }: ProgressRingProps) {
             fill="none"
             strokeWidth={stroke}
             strokeLinecap="round"
-            stroke="var(--accent)"
+            stroke="var(--deck-accent)"
             strokeDasharray={`${filled} ${circumference - filled}`}
             className="transition-[stroke-dasharray] duration-500"
           />

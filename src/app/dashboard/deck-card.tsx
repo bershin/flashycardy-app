@@ -58,23 +58,23 @@ export function DeckCard({ deck }: DeckCardProps) {
   }
 
   return (
-    <div className="group/deck relative" style={accentStyle(deck.id)}>
+    <div className="group/deck relative h-full" style={accentStyle(deck.id)}>
       <Card
         size="sm"
-        className="relative overflow-hidden transition-all duration-200 group-hover/deck:-translate-y-0.5 group-hover/deck:shadow-lg group-hover/deck:shadow-[var(--accent-soft)] group-hover/deck:border-[var(--accent-line)]"
+        className="relative flex h-full flex-col overflow-hidden transition-all duration-200 group-hover/deck:-translate-y-0.5 group-hover/deck:shadow-lg group-hover/deck:shadow-[var(--deck-accent-soft)] group-hover/deck:border-[var(--deck-accent-line)]"
       >
         {/* The deck's identity colour: a bar along the top, plus a wash that
             deepens on hover. Never the sole carrier of identity — the title
             sits directly beneath it. */}
         <span
           aria-hidden
-          className="absolute inset-x-0 top-0 h-1 bg-[var(--accent)]"
+          className="absolute inset-x-0 top-0 h-1.5 bg-[var(--deck-accent)]"
         />
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--accent-soft)] to-transparent opacity-60 transition-opacity duration-200 group-hover/deck:opacity-100"
+          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--deck-accent-soft)] to-transparent opacity-60 transition-opacity duration-200 group-hover/deck:opacity-100"
         />
-        <Link href={`/deck?id=${deck.id}`} className="relative">
+        <Link href={`/deck?id=${deck.id}`} className="relative flex-1">
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">

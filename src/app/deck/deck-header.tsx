@@ -96,7 +96,7 @@ export function DeckHeader({
       {/* Ties the page to the deck's colour on the dashboard. */}
       <span
         aria-hidden
-        className="mb-4 block h-1 w-16 rounded-full bg-[var(--accent)]"
+        className="mb-4 block h-1 w-16 rounded-full bg-[var(--deck-accent)]"
       />
       <div className="flex items-center gap-2">
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">

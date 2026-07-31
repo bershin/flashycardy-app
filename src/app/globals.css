@@ -48,25 +48,31 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Purple-tinted surfaces. Hue 300 throughout, with chroma kept low on the
+ * surfaces themselves — the deck accents supply the colour, and a strongly
+ * saturated background would fight them. Cards stay close to neutral so the
+ * five accent hues keep the contrast they were validated for.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: oklch(0.97 0.025 300);
+  --foreground: oklch(0.16 0.02 300);
+  --card: oklch(0.995 0.006 300);
+  --card-foreground: oklch(0.16 0.02 300);
+  --popover: oklch(0.995 0.006 300);
+  --popover-foreground: oklch(0.16 0.02 300);
+  --primary: oklch(0.48 0.2 300);
+  --primary-foreground: oklch(0.99 0.005 300);
+  --secondary: oklch(0.95 0.02 300);
+  --secondary-foreground: oklch(0.26 0.06 300);
+  --muted: oklch(0.95 0.02 300);
+  --muted-foreground: oklch(0.51 0.035 300);
+  --accent: oklch(0.93 0.035 300);
+  --accent-foreground: oklch(0.26 0.08 300);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.9 0.02 300);
+  --input: oklch(0.9 0.02 300);
+  --ring: oklch(0.55 0.15 300);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -85,24 +91,24 @@
 
 .dark {
   color-scheme: dark;
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.17 0.055 300);
+  --foreground: oklch(0.97 0.01 300);
+  --card: oklch(0.23 0.045 300);
+  --card-foreground: oklch(0.97 0.01 300);
+  --popover: oklch(0.23 0.045 300);
+  --popover-foreground: oklch(0.97 0.01 300);
+  --primary: oklch(0.72 0.17 300);
+  --primary-foreground: oklch(0.16 0.05 300);
+  --secondary: oklch(0.3 0.04 300);
+  --secondary-foreground: oklch(0.97 0.01 300);
+  --muted: oklch(0.3 0.04 300);
+  --muted-foreground: oklch(0.73 0.03 300);
+  --accent: oklch(0.32 0.06 300);
+  --accent-foreground: oklch(0.97 0.01 300);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(0.99 0.02 300 / 14%);
+  --input: oklch(0.99 0.02 300 / 18%);
+  --ring: oklch(0.66 0.15 300);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -155,17 +161,23 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* A very slight wash so large empty areas aren't a flat slab. */
+    /* Purple wash so large empty areas aren't a flat slab. Fixed so it reads as
+       a backdrop rather than something that scrolls with the content. */
     background-image:
       radial-gradient(
-        60rem 40rem at 15% -10%,
-        color-mix(in oklab, var(--accent-1) 12%, transparent),
-        transparent 60%
+        70rem 45rem at 12% -12%,
+        oklch(0.62 0.22 300 / 0.28),
+        transparent 62%
       ),
       radial-gradient(
-        50rem 35rem at 95% 0%,
-        color-mix(in oklab, var(--accent-4) 10%, transparent),
-        transparent 55%
+        55rem 40rem at 92% -5%,
+        oklch(0.6 0.2 330 / 0.22),
+        transparent 58%
+      ),
+      radial-gradient(
+        60rem 45rem at 60% 105%,
+        oklch(0.55 0.2 275 / 0.2),
+        transparent 60%
       );
     background-attachment: fixed;
   }

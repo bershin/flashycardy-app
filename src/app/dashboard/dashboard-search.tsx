@@ -120,7 +120,7 @@ function SortableDeckItem({
     <div
       ref={setNodeRef}
       style={style}
-      className="relative"
+      className="relative h-full"
       {...attributes}
       {...listeners}
     >
@@ -275,7 +275,7 @@ export function DashboardSearch({ decks }: DashboardSearchProps) {
       )}
 
       {isSearching ? (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map(({ deck, matchingCards }) => (
             <div key={deck.id} className="flex flex-col gap-2">
               <DeckCard
@@ -314,7 +314,9 @@ export function DashboardSearch({ decks }: DashboardSearchProps) {
             items={orderedDecks.map((d) => d.id)}
             strategy={rectSortingStrategy}
           >
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* auto-rows-fr keeps every row the same height, so a deck with a
+                long description doesn't make its neighbours look stunted. */}
+            <div className="mt-4 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {orderedDecks.map((deck) => (
                 <SortableDeckItem key={deck.id} deck={deck}>
                   {nestableIds.has(deck.id) && <NestZone deckId={deck.id} />}

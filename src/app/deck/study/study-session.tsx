@@ -366,12 +366,12 @@ export function StudySession({
           className={`relative min-h-0 overflow-hidden transition-all duration-200 ${
             flipped
               ? ""
-              : "cursor-pointer hover:-translate-y-0.5 hover:border-[var(--accent-line)] hover:shadow-lg hover:shadow-[var(--accent-soft)]"
+              : "cursor-pointer hover:-translate-y-0.5 hover:border-[var(--deck-accent-line)] hover:shadow-lg hover:shadow-[var(--deck-accent-soft)]"
           }`}
         >
           <span
             aria-hidden
-            className="absolute inset-x-0 top-0 h-1 bg-[var(--accent)]"
+            className="absolute inset-x-0 top-0 h-1.5 bg-[var(--deck-accent)]"
           />
           <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -395,7 +395,7 @@ export function StudySession({
 
         {/* Answer */}
         {flipped && (
-          <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--accent-line)] bg-[var(--accent-soft)] duration-200">
+          <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
             <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
               <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Answer

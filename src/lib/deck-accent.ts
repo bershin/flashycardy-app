@@ -24,8 +24,8 @@ export function accentVar(deckId: number): string {
 export function accentStyle(deckId: number): React.CSSProperties {
   const accent = accentVar(deckId);
   return {
-    "--accent": accent,
-    "--accent-soft": `color-mix(in oklab, ${accent} 14%, transparent)`,
-    "--accent-line": `color-mix(in oklab, ${accent} 40%, transparent)`,
+    "--deck-accent": accent,
+    "--deck-accent-soft": `color-mix(in oklab, ${accent} 22%, transparent)`,
+    "--deck-accent-line": `color-mix(in oklab, ${accent} 55%, transparent)`,
   } as React.CSSProperties;
 }

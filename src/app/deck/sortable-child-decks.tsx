@@ -114,7 +114,7 @@ export function SortableChildDecks({
         items={orderedDecks.map((d) => d.id)}
         strategy={rectSortingStrategy}
       >
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-8 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {orderedDecks.map((deck) => (
             <SortableItem key={deck.id} id={deck.id}>
               <ChildDeckCard deck={deck} />
