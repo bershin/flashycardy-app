@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import {
+  dueCutoff,
   isArchiveDeck,
   selectCardsByDeckForUser,
   selectChildDecksWithCards,
@@ -102,13 +103,12 @@ function DeckPageContent() {
           decks={childDecks.map((child) => {
             const startOfToday = new Date();
             startOfToday.setHours(0, 0, 0, 0);
-            const endOfToday = new Date(startOfToday);
-            endOfToday.setDate(endOfToday.getDate() + 1);
+            const cutoff = dueCutoff();
             const totalCards = child.cards.length;
             // Archived cards are retired — no due prompts here either.
             const dueCount = isArchive
               ? 0
-              : child.cards.filter((c) => c.nextReviewAt <= endOfToday).length;
+              : child.cards.filter((c) => c.nextReviewAt < cutoff).length;
             const studiedToday =
               !isArchive &&
               child.lastStudiedAt !== null &&

@@ -3,8 +3,14 @@
 import { Suspense, useCallback, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle } from "lucide-react";
+import { CheckCircle, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { LOCAL_USER_ID } from "@/lib/auth";
+import {
+  clearSession,
+  loadSession,
+  type SavedSession,
+} from "@/lib/study-session-store";
 import { getSnapshot } from "@/lib/store/local-store";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import {
@@ -14,6 +20,54 @@ import {
 } from "@/lib/store/selectors";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { StudySession } from "./study-session";
+
+type Rating = "got_it" | "missed";
+
+type Decision =
+  /** An unfinished session exists — ask before discarding it. */
+  | { kind: "resume"; deckId: number; saved: SavedSession; order: CardRow[]; source: CardRow[] }
+  | {
+      kind: "study";
+      deckId: number;
+      cards: CardRow[];
+      order?: CardRow[];
+      index: number;
+      ratings: Array<[number, Rating]>;
+      round: number;
+    };
+
+function freshSession(deckId: number): Decision {
+  return {
+    kind: "study",
+    deckId,
+    cards: selectDueCardsByDeckForUser(getSnapshot(), deckId, LOCAL_USER_ID),
+    index: 0,
+    ratings: [],
+    round: 1,
+  };
+}
+
+/**
+ * Turn saved card ids back into cards.
+ *
+ * Cards can disappear between sessions — archived on graduation, or deleted
+ * outright — so anything that no longer exists is dropped rather than allowed
+ * to blow up the session. If nothing usable survives, the caller falls back to
+ * a fresh session.
+ */
+function restore(db: DbDoc, saved: SavedSession): Decision | null {
+  const byId = new Map(db.cards.map((c) => [c.id, c]));
+  const pick = (ids: number[]) =>
+    ids
+      .map((id) => byId.get(id))
+      .filter((c): c is CardRow => c !== undefined);
+
+  const order = pick(saved.cardIds);
+  const source = pick(saved.sourceCardIds);
+  if (order.length === 0) return null;
+
+  return { kind: "resume", deckId: saved.deckId, saved, order, source };
+}
 
 /** Study a deck, reached as `/deck/study?id=123`. */
 function StudyPageContent() {
@@ -38,33 +92,32 @@ function StudyPageContent() {
   );
 
   /**
-   * The due list is captured once per session rather than read live.
+   * What this page has settled on for the current deck: either an unfinished
+   * session to offer back, or the card set to study.
    *
-   * Rating a card pushes its `nextReviewAt` into the future, which immediately
-   * removes it from the due set. Subscribing to that would make cards vanish
-   * from underneath the session as they were answered.
+   * The card list is captured once and then held, never re-read. Rating a card
+   * pushes its `nextReviewAt` into the future and so removes it from the due
+   * set; subscribing to that would make cards vanish from underneath the
+   * session as they were answered.
    */
-  const [session, setSession] = useState<{
-    deckId: number;
-    cards: CardRow[];
-  } | null>(null);
+  const [decision, setDecision] = useState<Decision | null>(null);
 
   // Adjusted during render rather than in an effect: the snapshot has to be
   // taken before the first paint, and doing it in an effect would both flash an
   // empty session and trigger a cascading render. The store is read directly so
   // this never resubscribes.
-  if (ready && validId && session?.deckId !== deckId) {
-    setSession({
-      deckId,
-      cards: selectDueCardsByDeckForUser(getSnapshot(), deckId, LOCAL_USER_ID),
-    });
+  if (ready && validId && decision?.deckId !== deckId) {
+    const saved = loadSession(deckId);
+    const resumable = saved ? restore(getSnapshot(), saved) : null;
+    setDecision(resumable ?? freshSession(deckId));
   }
 
-  const dueCards = session?.deckId === deckId ? session.cards : null;
+  const active = decision?.deckId === deckId ? decision : null;
+  const dueCards = active?.kind === "study" ? active.cards : null;
 
   const backHref = `/deck?id=${deckId}`;
 
-  if (!ready || (deck && dueCards === null)) {
+  if (!ready || (deck && active === null)) {
     return (
       <div className="mx-auto w-full max-w-4xl px-4 py-8">
         <div className="h-6 w-32 animate-pulse rounded bg-muted" />
@@ -107,6 +160,65 @@ function StudyPageContent() {
           >
             Go back and add cards
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (active?.kind === "resume") {
+    const { saved, order } = active;
+    const answered = saved.ratings.length;
+    return (
+      <div className="mx-auto w-full max-w-4xl px-4 py-8">
+        <Link
+          href={backHref}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          &larr; Back to deck
+        </Link>
+        <div className="mt-16 flex flex-col items-center text-center">
+          <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
+            <RotateCcw className="size-8 text-primary" />
+          </div>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight">
+            {deck.title}
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            You left a session unfinished — card {saved.currentIndex + 1} of{" "}
+            {order.length}
+            {saved.round > 1 ? `, round ${saved.round}` : ""}.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {answered} card{answered === 1 ? "" : "s"} already answered.
+            {" "}Those answers are saved either way.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <Button
+              onClick={() =>
+                setDecision({
+                  kind: "study",
+                  deckId,
+                  cards: active.source.length > 0 ? active.source : order,
+                  order,
+                  index: Math.min(saved.currentIndex, order.length - 1),
+                  ratings: saved.ratings,
+                  round: saved.round,
+                })
+              }
+            >
+              <RotateCcw className="size-4" />
+              Resume
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                clearSession(deckId);
+                setDecision(freshSession(deckId));
+              }}
+            >
+              Start fresh
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -156,7 +268,14 @@ function StudyPageContent() {
         </p>
       </div>
       <h1 className="mt-2 text-xl font-bold tracking-tight">{deck.title}</h1>
-      <StudySession cards={dueCards} deckId={deckId} />
+      <StudySession
+        cards={dueCards}
+        deckId={deckId}
+        initialOrder={active?.kind === "study" ? active.order : undefined}
+        initialIndex={active?.kind === "study" ? active.index : 0}
+        initialRatings={active?.kind === "study" ? active.ratings : undefined}
+        initialRound={active?.kind === "study" ? active.round : 1}
+      />
     </div>
   );
 }

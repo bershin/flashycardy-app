@@ -79,9 +79,25 @@ being archived. The intervals live in `REVIEW_INTERVAL_DAYS` in
 `src/db/queries/cards.ts`; adding another entry extends the ladder and pushes
 archiving back automatically.
 
-Answering **Missed** resets the streak to zero and schedules the card for
-tomorrow. Intervals are measured from today rather than from the date a card was
-due, so a long gap between sessions never builds up a compounding backlog.
+Answering **Missed** resets the streak to zero and brings the card back about
+ten minutes later, so something you just got wrong reappears in the same sitting
+rather than waiting until tomorrow. Intervals are measured from today rather
+than from the date a card was due, so a long gap between sessions never builds
+up a compounding backlog.
+
+### If you close the app mid-session
+
+Every rating is written to the database the moment you press it, so nothing you
+have already answered is ever lost. The session position — where you were, the
+running tally, which round you are on — is saved separately, and reopening the
+deck offers to pick up where you left off:
+
+> You left a session unfinished — card 60 of 100.
+> **Resume** · **Start fresh**
+
+Unfinished sessions are kept per deck and expire at the end of the day, since by
+the next morning the schedule has moved on. They live only on the device that
+made them and are never synced.
 
 Cards answered correctly five times running are **archived, not deleted**. An
 `Archive` deck is created automatically, with one sub-deck per source deck, so

@@ -124,6 +124,9 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
  */
 const REVIEW_INTERVAL_DAYS = [1, 7, 14, 21];
 
+/** How soon a missed card comes back round. */
+const MISSED_REVIEW_MINUTES = 10;
+
 /** Correct answers in a row before a card is considered learned. */
 const GRADUATION_STREAK = REVIEW_INTERVAL_DAYS.length + 1;
 
@@ -236,7 +239,10 @@ export async function recordStudyResult(
 
   if (rating === "missed") {
     consecutiveCorrect = 0;
-    nextReviewAt = addDays(today, 1);
+    // Comes back shortly, not tomorrow: something you just got wrong is worth
+    // seeing again in the same sitting. Late at night this naturally rolls over
+    // into tomorrow, which is the right answer then anyway.
+    nextReviewAt = new Date(now.getTime() + MISSED_REVIEW_MINUTES * 60_000);
   } else {
     consecutiveCorrect = existing.consecutiveCorrect + 1;
 

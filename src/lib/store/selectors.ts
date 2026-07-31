@@ -209,19 +209,29 @@ export function selectCardByIdForUser(
 }
 
 /**
- * Cards due for review, i.e. `nextReviewAt` on or before the end of today.
- * The cutoff is the start of tomorrow, matching the original query.
+ * Start of tomorrow — a card is due when its next review falls strictly before
+ * this.
+ *
+ * The comparison has to be strict. `addDays(startOfDay(now), 1)` lands exactly
+ * on this boundary, so a `<=` test would count every "review tomorrow" card as
+ * due today and they would never leave the queue.
  */
+export function dueCutoff(): Date {
+  const cutoff = startOfDay(new Date());
+  cutoff.setDate(cutoff.getDate() + 1);
+  return cutoff;
+}
+
+/** Cards whose next review falls today or earlier. */
 export function selectDueCardsByDeckForUser(
   db: DbDoc,
   deckId: number,
   userId: string,
 ): CardRow[] {
-  const cutoff = startOfDay(new Date());
-  cutoff.setDate(cutoff.getDate() + 1);
+  const cutoff = dueCutoff();
 
   return selectCardsByDeckForUser(db, deckId, userId).filter(
-    (c) => c.nextReviewAt <= cutoff,
+    (c) => c.nextReviewAt < cutoff,
   );
 }
 

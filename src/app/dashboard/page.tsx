@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
-import { selectDecksWithCardsByUser } from "@/lib/store/selectors";
+import { dueCutoff, selectDecksWithCardsByUser } from "@/lib/store/selectors";
 import type { DbDoc } from "@/lib/store/types";
 import { CreateDeckButton } from "./create-deck-button";
 import { DashboardSearch } from "./dashboard-search";
@@ -51,14 +51,13 @@ export default function DashboardPage() {
         decks={userDecks.map((deck) => {
           const startOfToday = new Date();
           startOfToday.setHours(0, 0, 0, 0);
-          const endOfToday = new Date(startOfToday);
-          endOfToday.setDate(endOfToday.getDate() + 1);
+          const cutoff = dueCutoff();
           const totalCards = deck.cards.length;
           // Archived cards are retired: they stay browsable and can be studied
           // deliberately, but they must never nag from the dashboard.
           const dueCount = deck.isArchive
             ? 0
-            : deck.cards.filter((c) => c.nextReviewAt <= endOfToday).length;
+            : deck.cards.filter((c) => c.nextReviewAt < cutoff).length;
           const studiedToday =
             !deck.isArchive &&
             deck.lastStudiedAt !== null &&

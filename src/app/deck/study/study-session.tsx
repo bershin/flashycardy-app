@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { clearSession, saveSession } from "@/lib/study-session-store";
 import { rateCardAction, markDeckStudiedAction } from "./actions";
 
 interface StudyCard {
@@ -21,8 +22,14 @@ interface StudyCard {
 }
 
 interface StudySessionProps {
+  /** The full set this session started from — drives "review missed cards". */
   cards: StudyCard[];
   deckId: number;
+  /** Working order when resuming; defaults to `cards`. */
+  initialOrder?: StudyCard[];
+  initialIndex?: number;
+  initialRatings?: Array<[number, Rating]>;
+  initialRound?: number;
 }
 
 type Rating = "got_it" | "missed";
@@ -36,13 +43,22 @@ function shuffleArray<T>(arr: T[]): T[] {
   return copy;
 }
 
-export function StudySession({ cards, deckId }: StudySessionProps) {
-  const [studyCards, setStudyCards] = useState(cards);
-  const [currentIndex, setCurrentIndex] = useState(0);
+export function StudySession({
+  cards,
+  deckId,
+  initialOrder,
+  initialIndex = 0,
+  initialRatings,
+  initialRound = 1,
+}: StudySessionProps) {
+  const [studyCards, setStudyCards] = useState(initialOrder ?? cards);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [flipped, setFlipped] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [ratings, setRatings] = useState<Map<number, Rating>>(new Map());
-  const [round, setRound] = useState(1);
+  const [ratings, setRatings] = useState<Map<number, Rating>>(
+    () => new Map(initialRatings ?? []),
+  );
+  const [round, setRound] = useState(initialRound);
   const [isPending, startTransition] = useTransition();
 
   const current = studyCards[currentIndex];
@@ -130,6 +146,41 @@ export function StudySession({ cards, deckId }: StudySessionProps) {
       markDeckStudiedAction(deckId);
     }
   }, [finished, round, deckId]);
+
+  /**
+   * Mirror the session position so a crash or a closed tab can pick it back up.
+   *
+   * Nothing is written until there is something worth restoring, otherwise
+   * merely opening a deck and walking away would leave a resume prompt behind
+   * for a session with no progress in it.
+   */
+  const hasProgress = currentIndex > 0 || ratings.size > 0 || round > 1;
+  useEffect(() => {
+    if (finished) {
+      clearSession(deckId);
+      return;
+    }
+    if (!hasProgress) return;
+
+    saveSession({
+      deckId,
+      sourceCardIds: cards.map((c) => c.id),
+      cardIds: studyCards.map((c) => c.id),
+      currentIndex,
+      ratings: [...ratings.entries()],
+      round,
+      savedAt: new Date().toISOString(),
+    });
+  }, [
+    finished,
+    hasProgress,
+    deckId,
+    cards,
+    studyCards,
+    currentIndex,
+    ratings,
+    round,
+  ]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
