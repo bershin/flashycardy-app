@@ -18,11 +18,46 @@ import {
   bulkInsertCards,
 } from "@/db/queries/cards";
 
-const addCardSchema = z.object({
-  deckId: z.number(),
-  front: z.string().min(1, "Front is required").max(500_000),
-  back: z.string().min(1, "Back is required").max(500_000),
+const cardTypeSchema = z.enum(["basic", "quiz", "vocab"]);
+
+const quizSchema = z.object({
+  options: z.array(z.string().min(1).max(500)).min(2).max(6),
+  correctIndex: z.number().int().min(0),
 });
+
+const vocabSchema = z.object({
+  senseHint: z.string().max(500).optional(),
+});
+
+/**
+ * `back` is required for a basic card (it is the answer) but optional for the
+ * other two, where it is just an explanation shown after answering.
+ */
+const cardContentSchema = z
+  .object({
+    front: z.string().min(1, "Front is required").max(500_000),
+    back: z.string().max(500_000),
+    type: cardTypeSchema.default("basic"),
+    quiz: quizSchema.optional(),
+    vocab: vocabSchema.optional(),
+  })
+  .refine((v) => v.type !== "basic" || v.back.trim().length > 0, {
+    message: "Back is required",
+    path: ["back"],
+  })
+  .refine((v) => v.type !== "quiz" || v.quiz !== undefined, {
+    message: "Quiz cards need options",
+    path: ["quiz"],
+  })
+  .refine((v) => !v.quiz || v.quiz.correctIndex < v.quiz.options.length, {
+    message: "The correct answer must be one of the options",
+    path: ["quiz"],
+  });
+
+const addCardSchema = z.intersection(
+  z.object({ deckId: z.number() }),
+  cardContentSchema,
+);
 
 type AddCardInput = z.infer<typeof addCardSchema>;
 
@@ -37,16 +72,18 @@ export async function addCardAction(data: AddCardInput) {
 
   return insertCard({
     deckId: parsed.deckId,
+    type: parsed.type,
     front: parsed.front,
     back: parsed.back,
+    quiz: parsed.quiz,
+    vocab: parsed.vocab,
   });
 }
 
-const updateCardSchema = z.object({
-  cardId: z.number(),
-  front: z.string().min(1, "Front is required").max(500_000),
-  back: z.string().min(1, "Back is required").max(500_000),
-});
+const updateCardSchema = z.intersection(
+  z.object({ cardId: z.number() }),
+  cardContentSchema,
+);
 
 type UpdateCardInput = z.infer<typeof updateCardSchema>;
 
@@ -60,8 +97,11 @@ export async function updateCardAction(data: UpdateCardInput) {
   if (!existingCard) throw new Error("Card not found");
 
   return updateCard(parsed.cardId, userId, {
+    type: parsed.type,
     front: parsed.front,
     back: parsed.back,
+    quiz: parsed.quiz,
+    vocab: parsed.vocab,
   });
 }
 

@@ -4,10 +4,11 @@ import { useCallback, useState } from "react";
 import { CheckSquare, FolderInput, Shuffle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MoveCardDialog } from "@/components/move-card-dialog";
+import type { CardRow } from "@/lib/store/types";
 import { FlashCard } from "./flash-card";
 
 interface CardGridProps {
-  cards: { id: number; front: string; back: string; deckId: number }[];
+  cards: CardRow[];
 }
 
 function shuffleArray<T>(arr: T[]): T[] {

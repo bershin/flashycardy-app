@@ -10,8 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { RichTextEditor } from "@/components/rich-text-editor";
+import {
+  CardFields,
+  draftToInput,
+  emptyDraft,
+  validateDraft,
+  type CardDraft,
+} from "@/components/card-fields";
 import { addCardAction } from "@/app/deck/actions";
 
 interface AddCardDialogProps {
@@ -25,48 +30,29 @@ export function AddCardDialog({
   open,
   onOpenChange,
 }: AddCardDialogProps) {
-  const [front, setFront] = useState("");
-  const [back, setBack] = useState("");
+  const [draft, setDraft] = useState<CardDraft>(emptyDraft);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function resetForm() {
-    setFront("");
-    setBack("");
-    setError(null);
-  }
-
   function handleOpenChange(nextOpen: boolean) {
     onOpenChange(nextOpen);
-    if (nextOpen) resetForm();
+    if (nextOpen) {
+      setDraft(emptyDraft());
+      setError(null);
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
 
-    const isEmpty = (html: string) => {
-      const text = html.replace(/<[^>]*>/g, "").trim();
-      return text.length === 0;
-    };
-
-    if (isEmpty(front)) {
-      setError("Front side is required");
-      return;
-    }
-    if (isEmpty(back)) {
-      setError("Back side is required");
-      return;
-    }
+    const problem = validateDraft(draft);
+    setError(problem);
+    if (problem) return;
 
     startTransition(async () => {
       try {
-        await addCardAction({
-          deckId,
-          front,
-          back,
-        });
-        resetForm();
+        await addCardAction({ deckId, ...draftToInput(draft) });
+        setDraft(emptyDraft());
         onOpenChange(false);
       } catch {
         setError("Failed to add card. Please try again.");
@@ -76,42 +62,23 @@ export function AddCardDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Add Card</DialogTitle>
+            <DialogTitle>Add card</DialogTitle>
             <DialogDescription>
-              Enter the front and back content for your new flashcard.
+              Pick a card type, then fill in what it needs.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4 grid gap-4">
-            <div className="grid gap-2">
-              <Label>Front</Label>
-              <RichTextEditor
-                content={front}
-                onChange={setFront}
-                placeholder="Question or term…"
-                disabled={isPending}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Back</Label>
-              <RichTextEditor
-                content={back}
-                onChange={setBack}
-                placeholder="Answer or definition…"
-                disabled={isPending}
-              />
-            </div>
-
-            {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="mt-4">
+            <CardFields draft={draft} onChange={setDraft} disabled={isPending} />
+            {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
           </div>
 
           <DialogFooter className="mt-4">
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Adding…" : "Add Card"}
+              {isPending ? "Adding…" : "Add card"}
             </Button>
           </DialogFooter>
         </form>

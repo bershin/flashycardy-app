@@ -22,7 +22,13 @@ import {
   selectDueCardsByDeckForUser,
   startOfDay,
 } from "@/lib/store/selectors";
-import type { CardRow, DbDoc } from "@/lib/store/types";
+import type {
+  CardRow,
+  CardType,
+  DbDoc,
+  QuizPayload,
+  VocabPayload,
+} from "@/lib/store/types";
 
 /** `WHERE deckId IN (SELECT id FROM decks WHERE userId = ?)` */
 function ownsCard(draft: DbDoc, card: CardRow, userId: string): boolean {
@@ -45,14 +51,20 @@ export async function insertCard(data: {
   deckId: number;
   front: string;
   back: string;
+  type?: CardType;
+  quiz?: QuizPayload;
+  vocab?: VocabPayload;
 }) {
   return mutate((draft) => {
     const now = new Date();
     const card: CardRow = {
       id: allocateCardId(draft),
       deckId: data.deckId,
+      type: data.type ?? "basic",
       front: data.front,
       back: data.back,
+      ...(data.quiz ? { quiz: data.quiz } : {}),
+      ...(data.vocab ? { vocab: data.vocab } : {}),
       nextReviewAt: now,
       consecutiveCorrect: 0,
       createdAt: now,
@@ -74,6 +86,7 @@ export async function bulkInsertCards(
       const card: CardRow = {
         id: allocateCardId(draft),
         deckId: row.deckId,
+        type: "basic",
         front: row.front,
         back: row.back,
         nextReviewAt: now,
@@ -91,18 +104,32 @@ export async function bulkInsertCards(
 export async function updateCard(
   cardId: number,
   userId: string,
-  data: { front?: string; back?: string },
+  data: {
+    front?: string;
+    back?: string;
+    type?: CardType;
+    quiz?: QuizPayload;
+    vocab?: VocabPayload;
+  },
 ) {
   return mutate((draft) => {
     const index = draft.cards.findIndex((c) => c.id === cardId);
     if (index === -1) return undefined;
     if (!ownsCard(draft, draft.cards[index], userId)) return undefined;
 
+    const current = draft.cards[index];
+    const type = data.type ?? current.type;
+
     const updated: CardRow = {
-      ...draft.cards[index],
+      ...current,
+      type,
       ...(data.front !== undefined ? { front: data.front } : {}),
       ...(data.back !== undefined ? { back: data.back } : {}),
       updatedAt: new Date(),
+      // Payloads follow the type, so switching a card away from quiz doesn't
+      // leave orphaned options behind to reappear if it is switched back.
+      quiz: type === "quiz" ? (data.quiz ?? current.quiz) : undefined,
+      vocab: type === "vocab" ? (data.vocab ?? current.vocab) : undefined,
     };
     draft.cards[index] = updated;
     return updated;

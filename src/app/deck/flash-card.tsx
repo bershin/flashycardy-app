@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Copy, Ellipsis, FolderInput, Pencil, Trash2 } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Ellipsis,
+  FolderInput,
+  Languages,
+  ListChecks,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -25,15 +34,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EditCardDialog } from "@/components/edit-card-dialog";
 import { MoveCardDialog } from "@/components/move-card-dialog";
+import type { CardRow } from "@/lib/store/types";
 import { cloneCardAction, deleteCardAction } from "./actions";
 
 interface FlashCardProps {
-  card: {
-    id: number;
-    front: string;
-    back: string;
-    deckId: number;
-  };
+  card: CardRow;
   selecting?: boolean;
   selected?: boolean;
   onToggleSelected?: (id: number) => void;
@@ -46,7 +51,9 @@ export function FlashCard({
   onToggleSelected,
 }: FlashCardProps) {
   const [editOpen, setEditOpen] = useState(false);
-  const [editCardId, setEditCardId] = useState(card.id);
+  // Holds the card the dialog is editing. Normally this card, but cloning
+  // retargets it at the fresh copy so you land straight in editing that.
+  const [editCard, setEditCard] = useState<CardRow>(card);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -56,7 +63,7 @@ export function FlashCard({
       try {
         const cloned = await cloneCardAction({ cardId: card.id });
         if (cloned) {
-          setEditCardId(cloned.id);
+          setEditCard(cloned);
           setEditOpen(true);
         }
       } catch {
@@ -137,7 +144,7 @@ export function FlashCard({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   onClick={() => {
-                    setEditCardId(card.id);
+                    setEditCard(card);
                     setEditOpen(true);
                   }}
                 >
@@ -167,21 +174,56 @@ export function FlashCard({
           </CardAction>
         </CardHeader>
         <CardContent>
-          <div
-            className="rich-content text-muted-foreground"
-            dangerouslySetInnerHTML={{ __html: card.back }}
-          />
+          {card.type === "quiz" ? (
+            <ul className="grid gap-1">
+              {card.quiz?.options.map((option, index) => (
+                <li
+                  key={index}
+                  className={`flex items-center gap-2 text-sm ${
+                    index === card.quiz?.correctIndex
+                      ? "font-medium text-emerald-600 dark:text-emerald-400"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <span className="flex size-4 shrink-0 items-center justify-center">
+                    {index === card.quiz?.correctIndex && (
+                      <Check className="size-3.5" />
+                    )}
+                  </span>
+                  {option}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div
+              className="rich-content text-muted-foreground"
+              dangerouslySetInnerHTML={{ __html: card.back }}
+            />
+          )}
+          {card.type !== "basic" && (
+            <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {card.type === "quiz" ? (
+                <>
+                  <ListChecks className="size-3" />
+                  Quiz
+                </>
+              ) : (
+                <>
+                  <Languages className="size-3" />
+                  Vocabulary
+                </>
+              )}
+            </span>
+          )}
         </CardContent>
       </Card>
 
       <EditCardDialog
-        cardId={editCardId}
-        front={card.front}
-        back={card.back}
+        card={editCard}
         open={editOpen}
         onOpenChange={(nextOpen) => {
           setEditOpen(nextOpen);
-          if (!nextOpen) setEditCardId(card.id);
+          if (!nextOpen) setEditCard(card);
         }}
       />
 

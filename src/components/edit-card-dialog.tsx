@@ -10,71 +10,54 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { RichTextEditor } from "@/components/rich-text-editor";
+import {
+  CardFields,
+  draftFromCard,
+  draftToInput,
+  validateDraft,
+  type CardDraft,
+} from "@/components/card-fields";
+import type { CardRow } from "@/lib/store/types";
 import { updateCardAction } from "@/app/deck/actions";
 
 interface EditCardDialogProps {
-  cardId: number;
-  front: string;
-  back: string;
+  card: CardRow;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function EditCardDialog({
-  cardId,
-  front: initialFront,
-  back: initialBack,
+  card,
   open,
   onOpenChange,
 }: EditCardDialogProps) {
-  const [front, setFront] = useState(initialFront);
-  const [back, setBack] = useState(initialBack);
+  const [draft, setDraft] = useState<CardDraft>(() => draftFromCard(card));
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [prevCardId, setPrevCardId] = useState(cardId);
+  const [prevCardId, setPrevCardId] = useState(card.id);
   const [prevOpen, setPrevOpen] = useState(open);
 
-  if (cardId !== prevCardId || (open && !prevOpen)) {
-    setPrevCardId(cardId);
-    setFront(initialFront);
-    setBack(initialBack);
+  // Reload the draft when a different card is opened, or the same one reopened
+  // — otherwise edits abandoned last time would still be sitting in the form.
+  if (card.id !== prevCardId || (open && !prevOpen)) {
+    setPrevCardId(card.id);
+    setDraft(draftFromCard(card));
     setError(null);
   }
   if (open !== prevOpen) {
     setPrevOpen(open);
   }
 
-  function handleOpenChange(nextOpen: boolean) {
-    onOpenChange(nextOpen);
-  }
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
 
-    const isEmpty = (html: string) => {
-      const text = html.replace(/<[^>]*>/g, "").trim();
-      return text.length === 0;
-    };
-
-    if (isEmpty(front)) {
-      setError("Front side is required");
-      return;
-    }
-    if (isEmpty(back)) {
-      setError("Back side is required");
-      return;
-    }
+    const problem = validateDraft(draft);
+    setError(problem);
+    if (problem) return;
 
     startTransition(async () => {
       try {
-        await updateCardAction({
-          cardId,
-          front,
-          back,
-        });
+        await updateCardAction({ cardId: card.id, ...draftToInput(draft) });
         onOpenChange(false);
       } catch {
         setError("Failed to update card. Please try again.");
@@ -83,43 +66,24 @@ export function EditCardDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Edit Card</DialogTitle>
+            <DialogTitle>Edit card</DialogTitle>
             <DialogDescription>
-              Update the front and back content for this flashcard.
+              Update this card, or change what kind of card it is.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4 grid gap-4">
-            <div className="grid gap-2">
-              <Label>Front</Label>
-              <RichTextEditor
-                content={front}
-                onChange={setFront}
-                placeholder="Question or term…"
-                disabled={isPending}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Back</Label>
-              <RichTextEditor
-                content={back}
-                onChange={setBack}
-                placeholder="Answer or definition…"
-                disabled={isPending}
-              />
-            </div>
-
-            {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="mt-4">
+            <CardFields draft={draft} onChange={setDraft} disabled={isPending} />
+            {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
           </div>
 
           <DialogFooter className="mt-4">
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving…" : "Save Changes"}
+              {isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </form>

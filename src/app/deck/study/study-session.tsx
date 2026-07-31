@@ -13,14 +13,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { accentStyle } from "@/lib/deck-accent";
+import type { CardRow } from "@/lib/store/types";
+import { QuizAnswer } from "./quiz-answer";
+import { VocabAnswer } from "./vocab-answer";
 import { clearSession, saveSession } from "@/lib/study-session-store";
 import { rateCardAction, markDeckStudiedAction } from "./actions";
 
-interface StudyCard {
-  id: number;
-  front: string;
-  back: string;
-}
+/** Study needs the whole card now, since behaviour branches on its type. */
+type StudyCard = CardRow;
 
 interface StudySessionProps {
   /** The full set this session started from — drives "review missed cards". */
@@ -64,6 +64,8 @@ export function StudySession({
 
   const current = studyCards[currentIndex];
   const total = studyCards.length;
+  /** Types answered in their own surface rather than by flipping and self-rating. */
+  const interactive = current?.type === "quiz" || current?.type === "vocab";
 
   const gotItCount = useMemo(
     () => [...ratings.values()].filter((r) => r === "got_it").length,
@@ -191,6 +193,11 @@ export function StudySession({
       )
         return;
 
+      // Quiz and vocabulary cards are answered in their own surface, so the
+      // flip and self-rate shortcuts would either do nothing or record a
+      // rating the user didn't intend.
+      if (interactive) return;
+
       switch (e.key) {
         case " ":
           e.preventDefault();
@@ -217,7 +224,7 @@ export function StudySession({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [flip, goPrev, rate, finished, flipped]);
+  }, [flip, goPrev, rate, finished, flipped, interactive]);
 
   if (finished) {
     const scorePercent =
@@ -353,18 +360,18 @@ export function StudySession({
       >
         {/* Question */}
         <Card
-          role={flipped ? undefined : "button"}
-          tabIndex={flipped ? undefined : 0}
-          onClick={flipped ? undefined : flip}
+          role={flipped || interactive ? undefined : "button"}
+          tabIndex={flipped || interactive ? undefined : 0}
+          onClick={flipped || interactive ? undefined : flip}
           onKeyDown={
-            flipped
+            flipped || interactive
               ? undefined
               : (e) => {
                   if (e.key === "Enter") flip();
                 }
           }
           className={`relative min-h-0 overflow-hidden transition-all duration-200 ${
-            flipped
+            flipped || interactive
               ? ""
               : "cursor-pointer hover:-translate-y-0.5 hover:border-[var(--deck-accent-line)] hover:shadow-lg hover:shadow-[var(--deck-accent-soft)]"
           }`}
@@ -375,13 +382,18 @@ export function StudySession({
           />
           <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Question
+              {current.type === "vocab" ? "Word" : "Question"}
             </p>
             <div
               className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
               dangerouslySetInnerHTML={{ __html: current.front }}
             />
-            {!flipped && (
+            {current.type === "vocab" && current.vocab?.senseHint && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {current.vocab.senseHint}
+              </p>
+            )}
+            {!flipped && !interactive && (
               <p className="mt-4 text-xs text-muted-foreground">
                 Click or press{" "}
                 <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
@@ -393,8 +405,15 @@ export function StudySession({
           </CardContent>
         </Card>
 
-        {/* Answer */}
-        {flipped && (
+        {/* Answer — self-revealed for basic cards, answered directly for the
+            other two. `key` resets each answer surface between cards. */}
+        {current.type === "quiz" && (
+          <QuizAnswer key={current.id} card={current} onResolved={rate} />
+        )}
+        {current.type === "vocab" && (
+          <VocabAnswer key={current.id} card={current} onResolved={rate} />
+        )}
+        {current.type === "basic" && flipped && (
           <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
             <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
               <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -409,10 +428,15 @@ export function StudySession({
         )}
       </div>
 
-      {/* Rating / Navigation */}
-      {flipped ? (
+      {/* Rating / Navigation.
+          Vocabulary always shows these: they are the override when the grader
+          gets it wrong, and the only way to rate at all when there is no key or
+          no connection. Quiz cards grade themselves, so they don't need them. */}
+      {(flipped && !interactive) || current.type === "vocab" ? (
         <div className="flex shrink-0 flex-col items-center gap-2">
-          <p className="text-sm text-muted-foreground">How did you do?</p>
+          <p className="text-sm text-muted-foreground">
+            {current.type === "vocab" ? "Or rate yourself" : "How did you do?"}
+          </p>
           <div className="flex gap-3">
             <Button
               variant="outline"
@@ -435,7 +459,13 @@ export function StudySession({
               Got it
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
+          {/* The number shortcuts are suppressed on vocabulary cards, where
+              they would fire while you are typing an answer. */}
+          <p
+            className={`text-xs text-muted-foreground ${
+              current.type === "vocab" ? "hidden" : ""
+            }`}
+          >
             Press{" "}
             <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
               1
