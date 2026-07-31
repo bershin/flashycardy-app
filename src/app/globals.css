@@ -118,12 +118,56 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/**
+ * Deck identity accents.
+ *
+ * Five hues from the reference categorical palette, assigned to a deck by its
+ * id so a deck keeps the same colour for life. Both modes are selected rather
+ * than flipped: the dark column is the same five hues re-stepped for the dark
+ * surface. Validated in both modes (worst adjacent CVD ΔE 9.2 light / 9.4 dark;
+ * normal-vision 27.6 / 22.5). Aqua sits under 3:1 on the light surface, which is
+ * fine here because the deck title is always visible beside the colour — the
+ * accent never carries identity on its own.
+ *
+ * Yellow, green and magenta from that palette are deliberately unused: the first
+ * two collide with the reserved status colours (amber "due", emerald "caught
+ * up") and magenta fails CVD separation against aqua.
+ */
+:root {
+  --accent-1: #2a78d6; /* blue   */
+  --accent-2: #eb6834; /* orange */
+  --accent-3: #1baf7a; /* aqua   */
+  --accent-4: #4a3aa7; /* violet */
+  --accent-5: #e34948; /* red    */
+}
+
+.dark {
+  --accent-1: #3987e5;
+  --accent-2: #d95926;
+  --accent-3: #199e70;
+  --accent-4: #9085e9;
+  --accent-5: #e66767;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    /* A very slight wash so large empty areas aren't a flat slab. */
+    background-image:
+      radial-gradient(
+        60rem 40rem at 15% -10%,
+        color-mix(in oklab, var(--accent-1) 12%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        50rem 35rem at 95% 0%,
+        color-mix(in oklab, var(--accent-4) 10%, transparent),
+        transparent 55%
+      );
+    background-attachment: fixed;
   }
   html {
     @apply font-sans;

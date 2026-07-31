@@ -17,6 +17,33 @@ export default function DashboardPage() {
     ),
   );
 
+  // Hoisted out of the JSX so the header can summarise across every deck.
+  const deckViews = userDecks.map((deck) => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const cutoff = dueCutoff();
+    const totalCards = deck.cards.length;
+    // Archived cards are retired: they stay browsable and can be studied
+    // deliberately, but they must never nag from the dashboard.
+    const dueCount = deck.isArchive
+      ? 0
+      : deck.cards.filter((c) => c.nextReviewAt < cutoff).length;
+    const studiedToday =
+      !deck.isArchive &&
+      deck.lastStudiedAt !== null &&
+      deck.lastStudiedAt >= startOfToday;
+
+    return {
+      ...deck,
+      updatedAtFormatted: deck.updatedAt.toLocaleDateString("en-US"),
+      totalCards,
+      dueCount,
+      studiedToday,
+      childCount: deck.childCount,
+    };
+  });
+  const totalDue = deckViews.reduce((sum, d) => sum + d.dueCount, 0);
+
   // The database lives in IndexedDB, so there is a brief moment after mount
   // where it genuinely isn't loaded yet. Showing the empty state during it
   // would read as data loss.
@@ -35,44 +62,23 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Your Decks</h1>
-          <p className="mt-1 text-muted-foreground">
+          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+            Your decks
+          </h1>
+          <p className="mt-2 text-muted-foreground">
             {userDecks.length === 0
-              ? "You don't have any decks yet. Create one to get started!"
-              : `${userDecks.length} deck${userDecks.length === 1 ? "" : "s"}`}
+              ? "Nothing here yet — create your first deck to get started."
+              : totalDue > 0
+                ? `${totalDue} card${totalDue === 1 ? "" : "s"} ready to review across ${userDecks.length} deck${userDecks.length === 1 ? "" : "s"}.`
+                : `All caught up across ${userDecks.length} deck${userDecks.length === 1 ? "" : "s"}. Nice.`}
           </p>
         </div>
         <CreateDeckButton />
       </div>
 
-      <DashboardSearch
-        decks={userDecks.map((deck) => {
-          const startOfToday = new Date();
-          startOfToday.setHours(0, 0, 0, 0);
-          const cutoff = dueCutoff();
-          const totalCards = deck.cards.length;
-          // Archived cards are retired: they stay browsable and can be studied
-          // deliberately, but they must never nag from the dashboard.
-          const dueCount = deck.isArchive
-            ? 0
-            : deck.cards.filter((c) => c.nextReviewAt < cutoff).length;
-          const studiedToday =
-            !deck.isArchive &&
-            deck.lastStudiedAt !== null &&
-            deck.lastStudiedAt >= startOfToday;
-
-          return {
-            ...deck,
-            updatedAtFormatted: deck.updatedAt.toLocaleDateString("en-US"),
-            totalCards,
-            dueCount,
-            studiedToday,
-            childCount: deck.childCount,
-          };
-        })}
-      />
+      <DashboardSearch decks={deckViews} />
     </div>
   );
 }

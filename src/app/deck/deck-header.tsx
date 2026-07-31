@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { hasOpenAIKey } from "@/lib/settings";
+import { accentStyle } from "@/lib/deck-accent";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -91,9 +92,16 @@ export function DeckHeader({
   }
 
   return (
-    <div className="mt-4">
+    <div className="mt-4" style={accentStyle(deck.id)}>
+      {/* Ties the page to the deck's colour on the dashboard. */}
+      <span
+        aria-hidden
+        className="mb-4 block h-1 w-16 rounded-full bg-[var(--accent)]"
+      />
       <div className="flex items-center gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">{deck.title}</h1>
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          {deck.title}
+        </h1>
         <Button
           variant="ghost"
           size="icon-sm"

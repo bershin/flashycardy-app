@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { accentStyle } from "@/lib/deck-accent";
 import { clearSession, saveSession } from "@/lib/study-session-store";
 import { rateCardAction, markDeckStudiedAction } from "./actions";
 
@@ -304,7 +305,10 @@ export function StudySession({
   }
 
   return (
-    <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
+    <div
+      className="mt-3 flex min-h-0 flex-1 flex-col gap-3"
+      style={accentStyle(deckId)}
+    >
       {/* Progress header */}
       <div className="flex w-full items-center justify-between">
         <p className="text-sm text-muted-foreground">
@@ -359,8 +363,16 @@ export function StudySession({
                   if (e.key === "Enter") flip();
                 }
           }
-          className={`min-h-0 ${flipped ? "" : "cursor-pointer"}`}
+          className={`relative min-h-0 overflow-hidden transition-all duration-200 ${
+            flipped
+              ? ""
+              : "cursor-pointer hover:-translate-y-0.5 hover:border-[var(--accent-line)] hover:shadow-lg hover:shadow-[var(--accent-soft)]"
+          }`}
         >
+          <span
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-1 bg-[var(--accent)]"
+          />
           <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Question
@@ -383,7 +395,7 @@ export function StudySession({
 
         {/* Answer */}
         {flipped && (
-          <Card className="min-h-0 border-primary/30 bg-primary/5">
+          <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--accent-line)] bg-[var(--accent-soft)] duration-200">
             <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
               <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Answer
@@ -404,18 +416,20 @@ export function StudySession({
           <div className="flex gap-3">
             <Button
               variant="outline"
+              size="lg"
               onClick={() => rate("missed")}
               disabled={isPending}
-              className="border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-500"
+              className="min-w-32 border-red-500/40 text-red-500 transition-transform hover:-translate-y-0.5 hover:bg-red-500/10 hover:text-red-500"
             >
               <X className="size-4" />
               Missed
             </Button>
             <Button
               variant="outline"
+              size="lg"
               onClick={() => rate("got_it")}
               disabled={isPending}
-              className="border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500"
+              className="min-w-32 border-emerald-500/40 text-emerald-500 transition-transform hover:-translate-y-0.5 hover:bg-emerald-500/10 hover:text-emerald-500"
             >
               <Check className="size-4" />
               Got it

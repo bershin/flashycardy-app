@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
+import { accentStyle } from "@/lib/deck-accent";
 import { deleteDeckAction } from "@/app/dashboard/actions";
 
 interface ChildDeckCardProps {
@@ -55,9 +56,16 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
   }
 
   return (
-    <div className="group/deck relative">
-      <Card size="sm" className="transition-colors hover:bg-muted/50">
-        <Link href={`/deck?id=${deck.id}`}>
+    <div className="group/deck relative" style={accentStyle(deck.id)}>
+      <Card
+        size="sm"
+        className="relative overflow-hidden transition-all duration-200 group-hover/deck:-translate-y-0.5 group-hover/deck:border-[var(--accent-line)] group-hover/deck:shadow-lg group-hover/deck:shadow-[var(--accent-soft)]"
+      >
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-1 bg-[var(--accent)]"
+        />
+        <Link href={`/deck?id=${deck.id}`} className="relative">
           <CardHeader>
             <CardTitle>{deck.title}</CardTitle>
             {deck.description && (
@@ -65,7 +73,7 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
             )}
           </CardHeader>
         </Link>
-        <CardFooter className="flex items-center justify-between gap-2">
+        <CardFooter className="relative flex items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
             Updated {deck.updatedAtFormatted}
           </p>

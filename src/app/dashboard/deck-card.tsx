@@ -23,6 +23,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
+import { ProgressRing } from "@/components/progress-ring";
+import { accentStyle } from "@/lib/deck-accent";
 import { deleteDeckAction } from "./actions";
 
 interface DeckCardProps {
@@ -56,17 +58,43 @@ export function DeckCard({ deck }: DeckCardProps) {
   }
 
   return (
-    <div className="group/deck relative">
-      <Card size="sm" className="transition-colors hover:bg-muted/50">
-        <Link href={`/deck?id=${deck.id}`}>
+    <div className="group/deck relative" style={accentStyle(deck.id)}>
+      <Card
+        size="sm"
+        className="relative overflow-hidden transition-all duration-200 group-hover/deck:-translate-y-0.5 group-hover/deck:shadow-lg group-hover/deck:shadow-[var(--accent-soft)] group-hover/deck:border-[var(--accent-line)]"
+      >
+        {/* The deck's identity colour: a bar along the top, plus a wash that
+            deepens on hover. Never the sole carrier of identity — the title
+            sits directly beneath it. */}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-1 bg-[var(--accent)]"
+        />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--accent-soft)] to-transparent opacity-60 transition-opacity duration-200 group-hover/deck:opacity-100"
+        />
+        <Link href={`/deck?id=${deck.id}`} className="relative">
           <CardHeader>
-            <CardTitle>{deck.title}</CardTitle>
-            {deck.description && (
-              <CardDescription>{deck.description}</CardDescription>
-            )}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="truncate">{deck.title}</CardTitle>
+                {deck.description && (
+                  <CardDescription className="line-clamp-2">
+                    {deck.description}
+                  </CardDescription>
+                )}
+              </div>
+              {deck.totalCards > 0 && !deck.isArchive && (
+                <ProgressRing
+                  done={deck.totalCards - deck.dueCount}
+                  total={deck.totalCards}
+                />
+              )}
+            </div>
           </CardHeader>
         </Link>
-        <CardFooter className="flex items-center justify-between gap-2">
+        <CardFooter className="relative flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <p className="text-xs text-muted-foreground">
               Updated {deck.updatedAtFormatted}

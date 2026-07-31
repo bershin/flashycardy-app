@@ -6,9 +6,18 @@ import {
   AlertTriangle,
   Check,
   CloudOff,
+  Moon,
   RefreshCw,
   Settings as SettingsIcon,
+  Sun,
 } from "lucide-react";
+import {
+  getServerTheme,
+  getTheme,
+  setTheme,
+  subscribeTheme,
+  type Theme,
+} from "@/lib/theme";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Tooltip,
@@ -46,6 +55,7 @@ export function AppChrome() {
   return (
     <header className="flex items-center justify-end gap-2 p-4">
       <SyncIndicator />
+      <ThemeToggle />
       <Tooltip>
         <TooltipTrigger
           render={
@@ -61,6 +71,40 @@ export function AppChrome() {
         <TooltipContent>Settings</TooltipContent>
       </Tooltip>
     </header>
+  );
+}
+
+function ThemeToggle() {
+  // The theme is stamped onto <html> by an inline script before React runs, so
+  // it is external state. Reading it through useSyncExternalStore lets React
+  // reconcile the prerendered guess with the real value on hydration.
+  const theme = useSyncExternalStore(
+    subscribeTheme,
+    getTheme,
+    getServerTheme,
+  );
+  const next: Theme = theme === "dark" ? "light" : "dark";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={`Switch to ${next} mode`}
+            onClick={() => setTheme(next)}
+            className={buttonVariants({ variant: "ghost", size: "icon" })}
+          >
+            {theme === "dark" ? (
+              <Sun className="size-4" />
+            ) : (
+              <Moon className="size-4" />
+            )}
+          </button>
+        }
+      />
+      <TooltipContent>Switch to {next} mode</TooltipContent>
+    </Tooltip>
   );
 }
 
