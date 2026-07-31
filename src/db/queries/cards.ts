@@ -113,8 +113,19 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
   return selectDueCardsByDeckForUser(getSnapshot(), deckId, userId);
 }
 
+/**
+ * Days until the next review, indexed by streak — element 0 is the wait after
+ * the first correct answer, element 1 after the second, and so on.
+ *
+ * The ladder widens so each success buys progressively more time: a day, a
+ * week, two weeks, three weeks. Running off the end of the table means the card
+ * has been learned and is archived, so adding another interval here
+ * automatically extends the schedule rather than requiring two edits.
+ */
+const REVIEW_INTERVAL_DAYS = [1, 7, 14, 21];
+
 /** Correct answers in a row before a card is considered learned. */
-const GRADUATION_STREAK = 5;
+const GRADUATION_STREAK = REVIEW_INTERVAL_DAYS.length + 1;
 
 /**
  * Move a learned card into the archive.
@@ -201,8 +212,8 @@ function archiveCard(cardId: number, userId: string): CardRow | undefined {
  * Record a study rating and reschedule the card.
  *
  *  - `missed`  → streak resets, review again tomorrow
- *  - `got_it`  → streak + 1; from the second correct answer the interval jumps
- *                to a week
+ *  - `got_it`  → streak + 1, next review taken from `REVIEW_INTERVAL_DAYS`
+ *                (1 day → 1 week → 2 weeks → 3 weeks)
  *  - five correct in a row → the card is **archived** (see `archiveCard`)
  *
  * Returns `null` when the card graduated into the archive, `undefined` when the
@@ -234,7 +245,7 @@ export async function recordStudyResult(
       return null;
     }
 
-    nextReviewAt = consecutiveCorrect >= 2 ? addDays(today, 7) : addDays(today, 1);
+    nextReviewAt = addDays(today, REVIEW_INTERVAL_DAYS[consecutiveCorrect - 1]);
   }
 
   return mutate((draft) => {

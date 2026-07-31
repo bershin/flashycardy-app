@@ -69,8 +69,15 @@ correctly.
 | Correct in a row | Next review |
 | --- | --- |
 | 1 | tomorrow |
-| 2, 3, 4 | in 7 days |
+| 2 | in 1 week |
+| 3 | in 2 weeks |
+| 4 | in 3 weeks |
 | 5 | archived |
+
+Cleanly learned, a card is therefore seen on days 0, 1, 8, 22 and 43 before
+being archived. The intervals live in `REVIEW_INTERVAL_DAYS` in
+`src/db/queries/cards.ts`; adding another entry extends the ladder and pushes
+archiving back automatically.
 
 Answering **Missed** resets the streak to zero and schedules the card for
 tomorrow. Intervals are measured from today rather than from the date a card was
