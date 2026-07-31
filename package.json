@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "lint": "eslint",
-    "serve": "npx serve out"
+    "serve": "npx serve out",
+    "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
