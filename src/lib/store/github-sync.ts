@@ -286,7 +286,10 @@ async function runPush() {
     dirty = true;
     return;
   }
-  if (state === "conflict") return;
+  // Read through the getter, here and below. `setState` is opaque to control
+  // flow analysis, so comparing the module variable directly would let an early
+  // `state === "conflict"` guard narrow it for the rest of the function.
+  if (getSyncState() === "conflict") return;
 
   inFlight = true;
   setState("pushing");
@@ -305,7 +308,7 @@ async function runPush() {
     setState(navigator.onLine ? "error" : "offline", message);
   } finally {
     inFlight = false;
-    if (dirty && state !== "conflict") {
+    if (dirty && getSyncState() !== "conflict") {
       dirty = false;
       schedulePush();
     }
@@ -347,7 +350,7 @@ export function startSync(): () => void {
   setState("idle");
 
   const doPull = async () => {
-    if (state === "conflict" || inFlight) return;
+    if (getSyncState() === "conflict" || inFlight) return;
     setState("pulling");
     try {
       const result = await pull(config);
