@@ -8,7 +8,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { FolderInput, Search, X } from "lucide-react";
+import { FolderInput } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -29,7 +29,6 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Input } from "@/components/ui/input";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import { selectDeckMoveOptions } from "@/lib/store/selectors";
@@ -88,6 +87,8 @@ interface DeckWithCards {
 
 interface DashboardSearchProps {
   decks: DeckWithCards[];
+  /** Owned by the page, so the input can live up in the header row. */
+  query: string;
 }
 
 function stripHtml(html: string): string {
@@ -129,9 +130,8 @@ function SortableDeckItem({
   );
 }
 
-export function DashboardSearch({ decks }: DashboardSearchProps) {
+export function DashboardSearch({ decks, query }: DashboardSearchProps) {
   const dndId = useId();
-  const [query, setQuery] = useState("");
   const [orderedDecks, setOrderedDecks] = useState(decks);
   const [, startTransition] = useTransition();
 
@@ -246,26 +246,6 @@ export function DashboardSearch({ decks }: DashboardSearchProps) {
 
   return (
     <>
-      <div className="relative mt-6">
-        <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-        <Input
-          type="search"
-          placeholder="Search decks and cards..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="h-10 pl-9 pr-9"
-        />
-        {isSearching && (
-          <button
-            onClick={() => setQuery("")}
-            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
-          >
-            <X className="size-4" />
-            <span className="sr-only">Clear search</span>
-          </button>
-        )}
-      </div>
-
       {isSearching && (
         <p className="text-muted-foreground mt-3 text-sm">
           {filtered.length === 0

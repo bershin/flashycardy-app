@@ -1,15 +1,19 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import { dueCutoff, selectDecksWithCardsByUser } from "@/lib/store/selectors";
 import type { DbDoc } from "@/lib/store/types";
 import { CreateDeckButton } from "./create-deck-button";
+import { DeckSearchControl } from "./deck-search-control";
 import { DashboardSearch } from "./dashboard-search";
 
 export default function DashboardPage() {
   const ready = useStoreReady();
+  // Owned here so the search control can sit in the header row beside the
+  // New Deck button, while the results list below consumes the same query.
+  const [query, setQuery] = useState("");
   const userDecks = useStore(
     useCallback(
       (db: DbDoc) => selectDecksWithCardsByUser(db, LOCAL_USER_ID),
@@ -64,21 +68,30 @@ export default function DashboardPage() {
     <div className="mx-auto w-full max-w-6xl px-4 py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
+          {/* The heading states where you stand rather than naming the page —
+              "Your decks" was decoration above a line that already said it. */}
           <h1 className="bg-gradient-to-br from-[oklch(0.55_0.22_300)] via-[oklch(0.6_0.2_330)] to-[oklch(0.55_0.2_265)] bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl dark:from-[oklch(0.85_0.14_300)] dark:via-[oklch(0.82_0.13_330)] dark:to-[oklch(0.8_0.14_265)]">
-            Your decks
+            {userDecks.length === 0
+              ? "No decks yet"
+              : totalDue > 0
+                ? "Ready to review"
+                : "All caught up"}
           </h1>
           <p className="mt-2 text-muted-foreground">
             {userDecks.length === 0
-              ? "Nothing here yet — create your first deck to get started."
+              ? "Create your first deck to get started."
               : totalDue > 0
-                ? `${totalDue} card${totalDue === 1 ? "" : "s"} ready to review across ${userDecks.length} deck${userDecks.length === 1 ? "" : "s"}.`
-                : `All caught up across ${userDecks.length} deck${userDecks.length === 1 ? "" : "s"}. Nice.`}
+                ? `${totalDue} card${totalDue === 1 ? "" : "s"} across ${userDecks.length} deck${userDecks.length === 1 ? "" : "s"}`
+                : `${userDecks.length} deck${userDecks.length === 1 ? "" : "s"} · nothing due today`}
           </p>
         </div>
-        <CreateDeckButton />
+        <div className="flex items-center gap-2">
+          <DeckSearchControl query={query} onChange={setQuery} />
+          <CreateDeckButton />
+        </div>
       </div>
 
-      <DashboardSearch decks={deckViews} />
+      <DashboardSearch decks={deckViews} query={query} />
     </div>
   );
 }

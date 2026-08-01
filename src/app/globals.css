@@ -184,6 +184,13 @@
   html {
     @apply font-sans;
   }
+  /* WebKit draws its own clear button inside type="search", which sits next to
+     the one we render and looks like a duplicate. */
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
 }
 
 @supports (padding: env(safe-area-inset-top)) {
