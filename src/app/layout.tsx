@@ -12,12 +12,12 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "FlashyCardy",
+  title: "Cue",
   description: "Personal flashcard study app",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "FlashyCardy",
+    title: "Cue",
   },
   other: {
     "mobile-web-app-capable": "yes",

@@ -1,4 +1,4 @@
-# FlashyCardy
+# Cue
 
 A personal flashcard app with sub-decks, rich-text cards, and spaced repetition.
 
@@ -19,7 +19,7 @@ database until you enter your sync settings. Nothing is stored on any server.
 
 ## Setup
 
-1. **Create a private repo** for your data, e.g. `flashycardy-data`. It can be
+1. **Create a private repo** for your data, e.g. `cue-data`. It can be
    empty. It must be a *separate* repo — GitHub Pages only publishes from public
    repos on a free account, and you do not want your cards public.
 2. **Create a fine-grained access token** at
@@ -89,6 +89,16 @@ union of its children's, so it has nowhere of its own to put a card. Moving a
 card keeps its streak and next review date — it is the same card, just filed
 somewhere else. Pulling one back out of the archive therefore puts it straight
 back into rotation.
+
+## Card types
+
+**Basic** — a question and an answer. Flip it, then rate yourself.
+
+**Quiz** — a question with 2–6 options, one of which you marked correct. Options
+are shuffled on every review so you learn the answer rather than its position.
+Answering right moves straight on; answering wrong shows which one was right,
+along with the optional explanation, and waits for you. No AI and no network
+involved: you wrote the answer, so grading is a comparison.
 
 ## How reviews are scheduled
 

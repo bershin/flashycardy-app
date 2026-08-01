@@ -14,14 +14,14 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "FlashyCardy",
-    short_name: "FlashyCardy",
+    name: "Cue",
+    short_name: "Cue",
     description: "Personal flashcard study app",
     start_url: `${basePath}/dashboard/`,
     scope: `${basePath}/`,
     display: "standalone",
-    background_color: "#0a0a0a",
-    theme_color: "#0a0a0a",
+    background_color: "#130823",
+    theme_color: "#130823",
     icons: [
       {
         src: `${basePath}/icon-192x192.png`,

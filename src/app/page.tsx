@@ -25,7 +25,7 @@ export default function Home() {
           <Layers className="size-7 text-white" />
         </span>
         <h1 className="bg-gradient-to-br from-foreground to-muted-foreground bg-clip-text text-5xl font-bold tracking-tight text-transparent">
-          FlashyCardy
+          Cue
         </h1>
         <p className="text-xl text-muted-foreground">My personal flash cards</p>
       </div>

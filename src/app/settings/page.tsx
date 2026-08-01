@@ -138,7 +138,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `flashycardy-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `cue-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -149,7 +149,7 @@ export default function SettingsPage() {
     try {
       const parsed = JSON.parse(await file.text()) as SerializedDbDoc;
       if (!Array.isArray(parsed.decks) || !Array.isArray(parsed.cards)) {
-        throw new Error("That file doesn't look like a FlashyCardy backup.");
+        throw new Error("That file doesn't look like a Cue backup.");
       }
       await replaceDoc(deserializeDoc(parsed));
       setMessage(
@@ -211,7 +211,7 @@ export default function SettingsPage() {
                 <Input
                   id="repo"
                   value={config.repo}
-                  placeholder="flashycardy-data"
+                  placeholder="cue-data"
                   onChange={(e) =>
                     setConfig({ ...config, repo: e.target.value.trim() })
                   }
