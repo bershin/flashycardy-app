@@ -73,14 +73,8 @@ export const STAGE_TEXT: Record<TimerStage, string> = {
   red: "text-red-500",
 };
 
-export const STAGE_BG: Record<TimerStage, string> = {
-  green: "bg-emerald-500",
-  amber: "bg-amber-500",
-  red: "bg-red-500",
-};
-
-export const STAGE_SURFACE: Record<TimerStage, string> = {
-  green: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  amber: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  red: "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400",
+export const STAGE_STROKE: Record<TimerStage, string> = {
+  green: "stroke-emerald-500",
+  amber: "stroke-amber-500",
+  red: "stroke-red-500",
 };

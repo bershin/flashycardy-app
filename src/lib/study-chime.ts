@@ -1,12 +1,18 @@
 "use client";
 
 /**
- * The two study chimes, synthesised rather than shipped.
+ * The study sounds, synthesised rather than shipped.
  *
- * A couple of oscillators cost nothing and keep the static export free of audio
- * assets — an mp3 would be a network request on a site that is otherwise happy
- * offline. Amber is one soft tone; red is a lower, louder pair, so the second
- * warning is distinguishable from the first without having to look up.
+ * A handful of oscillators cost nothing and keep the static export free of
+ * audio assets — an mp3 would be a network request on a site that is otherwise
+ * happy offline.
+ *
+ * Two kinds of sound. The *chimes* mark crossing into amber and into red: one
+ * soft tone, then a lower and louder pair, so the second warning is
+ * distinguishable from the first without having to look up. The *ticks* then
+ * run once a second for as long as you stay past thirty seconds, quiet in amber
+ * and harder in red. A tick is deliberately much shorter and quieter than a
+ * chime: heard sixty times a minute, anything with a tail becomes unbearable.
  *
  * Browsers refuse to start audio before the user has interacted with the page.
  * Studying is all interaction — opening the deck, flipping the card — so by the
@@ -32,6 +38,12 @@ const CHIMES: Record<"amber" | "red", Beep[]> = {
     { frequency: 440, at: 0, duration: 0.22, gain: 0.22 },
     { frequency: 370, at: 0.26, duration: 0.28, gain: 0.22 },
   ],
+};
+
+/** The once-a-second pulse. Short enough to read as a clock, not a note. */
+const TICKS: Record<"amber" | "red", Beep> = {
+  amber: { frequency: 900, at: 0, duration: 0.035, gain: 0.03 },
+  red: { frequency: 620, at: 0, duration: 0.05, gain: 0.11 },
 };
 
 let context: AudioContext | null = null;
@@ -75,25 +87,29 @@ function schedule(ctx: AudioContext, beep: Beep) {
   oscillator.stop(end + 0.02);
 }
 
-/** Sound the warning for a stage the card has just crossed into. */
-export function playStageChime(stage: "amber" | "red") {
-  if (!isStudySoundEnabled()) return;
+function play(beeps: Beep[]) {
   const ctx = audioContext();
   if (!ctx) return;
   try {
-    for (const beep of CHIMES[stage]) schedule(ctx, beep);
+    for (const beep of beeps) schedule(ctx, beep);
   } catch {
     // Audio is decoration here. Never let it interrupt a session.
   }
 }
 
+/** Sound the warning for a stage the card has just crossed into. */
+export function playStageChime(stage: "amber" | "red") {
+  if (!isStudySoundEnabled()) return;
+  play(CHIMES[stage]);
+}
+
+/** One second gone, still past thirty. */
+export function playTick(stage: "amber" | "red") {
+  if (!isStudySoundEnabled()) return;
+  play([TICKS[stage]]);
+}
+
 /** Preview a chime — used by the sound toggle so the volume isn't a surprise. */
 export function previewStageChime(stage: "amber" | "red") {
-  const ctx = audioContext();
-  if (!ctx) return;
-  try {
-    for (const beep of CHIMES[stage]) schedule(ctx, beep);
-  } catch {
-    // As above.
-  }
+  play(CHIMES[stage]);
 }

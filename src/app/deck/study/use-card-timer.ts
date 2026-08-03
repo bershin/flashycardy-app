@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { playStageChime } from "@/lib/study-chime";
+import { playStageChime, playTick } from "@/lib/study-chime";
 import { stageForMs, type TimerStage } from "@/lib/study-timer";
 
 interface CardTimerOptions {
@@ -52,6 +52,8 @@ export function useCardTimer({
   /** When the current stretch began; null while paused. */
   const startedAt = useRef<number | null>(null);
   const lastStage = useRef<TimerStage>("green");
+  /** Whole seconds already ticked, so each one sounds exactly once. */
+  const lastSecond = useRef(0);
 
   /**
    * The displayed time, tagged with what it is the time *for*.
@@ -81,15 +83,27 @@ export function useCardTimer({
     banked.current = priorMs;
     startedAt.current = Date.now();
     lastStage.current = stageForMs(priorMs);
+    lastSecond.current = Math.floor(priorMs / 1000);
 
     const interval = window.setInterval(() => {
       const ms = read();
       setShown((prev) => ({ ...prev, elapsedMs: ms }));
 
       const stage = stageForMs(ms);
-      if (stage !== lastStage.current) {
+      const second = Math.floor(ms / 1000);
+      const crossed = stage !== lastStage.current;
+
+      if (crossed) {
         lastStage.current = stage;
         if (stage !== "green") playStageChime(stage);
+      }
+
+      // Once past the first window, every second is audible. The crossing
+      // second is skipped because its chime has just played — a tick under it
+      // would only muddy the one sound that means something.
+      if (second !== lastSecond.current) {
+        lastSecond.current = second;
+        if (!crossed && stage !== "green") playTick(stage);
       }
     }, TICK_MS);
 
