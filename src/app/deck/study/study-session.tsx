@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useTransition } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import {
   ArrowLeft,
   RotateCcw,
@@ -9,6 +16,8 @@ import {
   X,
   Trophy,
   BookOpen,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +25,21 @@ import { accentStyle } from "@/lib/deck-accent";
 import type { CardRow } from "@/lib/store/types";
 import { QuizAnswer } from "./quiz-answer";
 import { clearSession, saveSession } from "@/lib/study-session-store";
+import {
+  isStudySoundEnabled,
+  setStudySoundEnabled,
+  studySoundServerSnapshot,
+  subscribeStudySound,
+} from "@/lib/settings";
+import { previewStageChime } from "@/lib/study-chime";
+import {
+  STAGE_TEXT,
+  formatDuration,
+  stageForMs,
+  spokenDuration,
+} from "@/lib/study-timer";
+import { CardTimer } from "./card-timer";
+import { useCardTimer } from "./use-card-timer";
 import { rateCardAction, markDeckStudiedAction } from "./actions";
 
 /** Study needs the whole card now, since behaviour branches on its type. */
@@ -29,10 +53,17 @@ interface StudySessionProps {
   initialOrder?: StudyCard[];
   initialIndex?: number;
   initialRatings?: Array<[number, Rating]>;
+  /** Time already spent per card, when resuming. */
+  initialDurations?: Array<[number, number]>;
   initialRound?: number;
 }
 
 type Rating = "got_it" | "missed";
+
+/** Card fronts are rich text; the summary list wants one plain line of it. */
+function plainText(html: string): string {
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
 
 function shuffleArray<T>(arr: T[]): T[] {
   const copy = [...arr];
@@ -49,6 +80,7 @@ export function StudySession({
   initialOrder,
   initialIndex = 0,
   initialRatings,
+  initialDurations,
   initialRound = 1,
 }: StudySessionProps) {
   const [studyCards, setStudyCards] = useState(initialOrder ?? cards);
@@ -58,13 +90,30 @@ export function StudySession({
   const [ratings, setRatings] = useState<Map<number, Rating>>(
     () => new Map(initialRatings ?? []),
   );
+  /** Milliseconds spent per card, banked as each one is answered. */
+  const [durations, setDurations] = useState<Map<number, number>>(
+    () => new Map(initialDurations ?? []),
+  );
   const [round, setRound] = useState(initialRound);
   const [isPending, startTransition] = useTransition();
+  /** Read straight from localStorage — it is browser state, not session state. */
+  const soundOn = useSyncExternalStore(
+    subscribeStudySound,
+    isStudySoundEnabled,
+    studySoundServerSnapshot,
+  );
 
   const current = studyCards[currentIndex];
   const total = studyCards.length;
   /** Answered in its own surface rather than by flipping and self-rating. */
   const interactive = current?.type === "quiz";
+
+  const timer = useCardTimer({
+    cardId: current?.id,
+    priorMs: current ? (durations.get(current.id) ?? 0) : 0,
+    running: !finished && current !== undefined,
+  });
+  const readElapsed = timer.read;
 
   const gotItCount = useMemo(
     () => [...ratings.values()].filter((r) => r === "got_it").length,
@@ -79,10 +128,47 @@ export function StudySession({
     [cards, ratings],
   );
 
+  /**
+   * The round's time, card by card.
+   *
+   * Only cards with a recorded time count towards the total and the average: a
+   * session resumed from before the timer existed has cards it genuinely does
+   * not know the time for, and treating those as zero would quietly flatter
+   * both numbers.
+   */
+  const timings = useMemo(() => {
+    const timed = studyCards
+      .map((card) => durations.get(card.id))
+      .filter((ms): ms is number => ms !== undefined);
+    const totalMs = timed.reduce((sum, ms) => sum + ms, 0);
+    return {
+      totalMs,
+      timedCount: timed.length,
+      averageMs: timed.length > 0 ? totalMs / timed.length : 0,
+    };
+  }, [studyCards, durations]);
+
   const flip = useCallback(() => setFlipped((f) => !f), []);
+
+  /**
+   * Bank the time on the card being left.
+   *
+   * Called on the way out rather than continuously, so the map only ever holds
+   * settled numbers — and called when stepping back as well as when answering,
+   * or a card visited twice would only be credited with the second visit.
+   */
+  const bankTime = useCallback((cardId: number, ms: number) => {
+    setDurations((prev) => {
+      const next = new Map(prev);
+      next.set(cardId, ms);
+      return next;
+    });
+  }, []);
 
   const rate = useCallback(
     (rating: Rating) => {
+      bankTime(current.id, readElapsed());
+
       setRatings((prev) => {
         const next = new Map(prev);
         next.set(current.id, rating);
@@ -100,15 +186,16 @@ export function StudySession({
         setFinished(true);
       }
     },
-    [current, currentIndex, total, deckId],
+    [current, currentIndex, total, deckId, bankTime, readElapsed],
   );
 
   const goPrev = useCallback(() => {
     if (currentIndex > 0) {
+      bankTime(current.id, readElapsed());
       setCurrentIndex((i) => i - 1);
       setFlipped(false);
     }
-  }, [currentIndex]);
+  }, [current, currentIndex, bankTime, readElapsed]);
 
   const restart = useCallback(() => {
     setStudyCards(cards);
@@ -116,6 +203,7 @@ export function StudySession({
     setFlipped(false);
     setFinished(false);
     setRatings(new Map());
+    setDurations(new Map());
     setRound(1);
   }, [cards]);
 
@@ -125,6 +213,7 @@ export function StudySession({
     setFlipped(false);
     setFinished(false);
     setRatings(new Map());
+    setDurations(new Map());
     setRound(1);
   }, [cards]);
 
@@ -134,6 +223,7 @@ export function StudySession({
     setFlipped(false);
     setFinished(false);
     setRatings(new Map());
+    setDurations(new Map());
     setRound((r) => r + 1);
   }, [missedCards]);
 
@@ -170,6 +260,7 @@ export function StudySession({
       cardIds: studyCards.map((c) => c.id),
       currentIndex,
       ratings: [...ratings.entries()],
+      durations: [...durations.entries()],
       round,
       savedAt: new Date().toISOString(),
     });
@@ -181,6 +272,7 @@ export function StudySession({
     studyCards,
     currentIndex,
     ratings,
+    durations,
     round,
   ]);
 
@@ -240,7 +332,22 @@ export function StudySession({
             {round > 1 ? `Round ${round} Complete` : "Session Complete"}
           </h2>
           <p className="mt-1 text-muted-foreground">
-            You reviewed {total} card{total === 1 ? "" : "s"}.
+            You reviewed {total} card{total === 1 ? "" : "s"}
+            {timings.timedCount > 0 && (
+              <>
+                {" "}
+                in{" "}
+                {/* The abbreviated form is for the eye; the spoken one is what
+                    a screen reader should read out. */}
+                <span aria-hidden className="font-medium text-foreground">
+                  {formatDuration(timings.totalMs)}
+                </span>
+                <span className="sr-only">
+                  {spokenDuration(timings.totalMs)}
+                </span>
+              </>
+            )}
+            .
           </p>
         </div>
 
@@ -287,6 +394,75 @@ export function StudySession({
             )}
           </div>
         </div>
+
+        {/* Time — the deck total, then where it went */}
+        {timings.timedCount > 0 && (
+          <div className="w-full max-w-md">
+            <div className="flex items-stretch justify-center gap-6 rounded-xl border bg-muted/40 p-4">
+              <div className="flex-1">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Total time
+                </p>
+                <p className="mt-1 text-2xl font-bold tabular-nums">
+                  {formatDuration(timings.totalMs)}
+                </p>
+              </div>
+              <div className="w-px bg-border" />
+              <div className="flex-1">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Average card
+                </p>
+                {/* Coloured by the same thresholds as the timer, so an average
+                    in amber means the pace was amber. */}
+                <p
+                  className={`mt-1 text-2xl font-bold tabular-nums ${STAGE_TEXT[stageForMs(timings.averageMs)]}`}
+                >
+                  {formatDuration(timings.averageMs)}
+                </p>
+              </div>
+            </div>
+
+            <ul className="mt-3 max-h-56 divide-y divide-border overflow-y-auto rounded-xl border text-left">
+              {studyCards.map((card, index) => {
+                const ms = durations.get(card.id);
+                const rating = ratings.get(card.id);
+                return (
+                  <li
+                    key={card.id}
+                    className="flex items-center gap-3 px-3 py-2 text-sm"
+                  >
+                    <span className="w-6 shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {index + 1}
+                    </span>
+                    {rating === "got_it" ? (
+                      <Check className="size-3.5 shrink-0 text-emerald-500" />
+                    ) : (
+                      <X className="size-3.5 shrink-0 text-red-500" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">
+                      {plainText(card.front) || "Untitled card"}
+                    </span>
+                    {ms === undefined ? (
+                      <span
+                        className="shrink-0 text-xs text-muted-foreground"
+                        title="Answered before this session was resumed"
+                      >
+                        &mdash;
+                      </span>
+                    ) : (
+                      <span
+                        className={`shrink-0 text-xs font-semibold tabular-nums ${STAGE_TEXT[stageForMs(ms)]}`}
+                      >
+                        <span aria-hidden>{formatDuration(ms)}</span>
+                        <span className="sr-only">{spokenDuration(ms)}</span>
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex flex-wrap justify-center gap-3">
@@ -336,6 +512,30 @@ export function StudySession({
               </span>
             </div>
           )}
+          <CardTimer elapsedMs={timer.elapsedMs} stage={timer.stage} />
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-pressed={soundOn}
+            title={soundOn ? "Mute timer chimes" : "Unmute timer chimes"}
+            onClick={() => {
+              const next = !soundOn;
+              setStudySoundEnabled(next);
+              // Turning it on plays the amber chime, both to confirm the
+              // switch and because a warning sound should never be first
+              // heard at full volume mid-card.
+              if (next) previewStageChime("amber");
+            }}
+          >
+            {soundOn ? (
+              <Volume2 className="size-3.5" />
+            ) : (
+              <VolumeX className="size-3.5" />
+            )}
+            <span className="sr-only">
+              {soundOn ? "Mute timer chimes" : "Unmute timer chimes"}
+            </span>
+          </Button>
           <Button variant="ghost" size="sm" onClick={shuffleCurrent}>
             <Shuffle className="size-3.5" />
             Shuffle

@@ -30,6 +30,11 @@ export type SavedSession = {
   cardIds: number[];
   currentIndex: number;
   ratings: Array<[number, SavedRating]>;
+  /**
+   * Milliseconds spent per card so far. Absent in sessions saved before the
+   * timer existed, which resume with an unknown — not a zero — time budget.
+   */
+  durations?: Array<[number, number]>;
   round: number;
   savedAt: string;
 };

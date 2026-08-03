@@ -9,6 +9,7 @@
 
 const OPENAI_KEY = "flashycardy.openaiKey";
 const OPENAI_MODEL = "flashycardy.openaiModel";
+const STUDY_SOUND = "flashycardy.studySound";
 
 export const DEFAULT_OPENAI_MODEL = "gpt-5.3-chat-latest";
 
@@ -36,4 +37,37 @@ export function setOpenAIModel(model: string | null) {
 
 export function hasOpenAIKey(): boolean {
   return Boolean(getOpenAIKey());
+}
+
+/**
+ * Whether the study timer is allowed to make a noise.
+ *
+ * On by default — the amber and red chimes are the point of the pacing, and a
+ * warning you have to be watching for isn't much of a warning. Only an explicit
+ * "off" silences them, so a browser with no localStorage still gets sound.
+ *
+ * Subscribable, so the study screen can read it with `useSyncExternalStore`
+ * rather than mirroring it into component state after mount.
+ */
+const soundListeners = new Set<() => void>();
+
+export function isStudySoundEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(STUDY_SOUND) !== "off";
+}
+
+/** The value before the browser is available — sound is on by default. */
+export function studySoundServerSnapshot(): boolean {
+  return true;
+}
+
+export function setStudySoundEnabled(enabled: boolean) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(STUDY_SOUND, enabled ? "on" : "off");
+  for (const listener of soundListeners) listener();
+}
+
+export function subscribeStudySound(listener: () => void): () => void {
+  soundListeners.add(listener);
+  return () => soundListeners.delete(listener);
 }

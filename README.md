@@ -100,6 +100,35 @@ Answering right moves straight on; answering wrong shows which one was right,
 along with the optional explanation, and waits for you. No AI and no network
 involved: you wrote the answer, so grading is a comparison.
 
+## The study timer
+
+Every card is timed while it is on screen, in three thirty-second windows:
+
+| Time on the card | Colour | Sound |
+| --- | --- | --- |
+| 0:00 – 0:30 | green | — |
+| 0:30 – 1:00 | amber | one soft tone |
+| 1:00 onwards | red | two lower, louder tones |
+
+The clock sits in the study header with three pips beside it, one per window,
+so the pace is readable without relying on the colour. Crossing into amber or
+red is the only thing that makes a noise, and nothing ever cuts a card off — the
+timer paces you, it doesn't grade you.
+
+The chimes are synthesised in the browser rather than shipped as audio files, so
+they cost no network. The speaker button next to the clock mutes them; the
+choice is remembered per device, and turning them back on replays the amber tone
+so the volume is never a surprise mid-card.
+
+Time is measured from timestamps and pauses while the tab is in the background —
+a session left open in another window doesn't count as studying. Stepping back
+with **Previous** and returning to a card adds to that card's total rather than
+restarting it.
+
+Finishing a deck reports the whole session: total time, average per card, and
+every card listed with what it took, coloured by the same thresholds. Reviewing
+missed cards or starting over begins a fresh set of times.
+
 ## How reviews are scheduled
 
 Each card tracks one number: how many times in a row you've answered it

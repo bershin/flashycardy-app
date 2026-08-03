@@ -33,6 +33,7 @@ type Decision =
       order?: CardRow[];
       index: number;
       ratings: Array<[number, Rating]>;
+      durations: Array<[number, number]>;
       round: number;
     };
 
@@ -43,6 +44,7 @@ function freshSession(deckId: number): Decision {
     cards: selectDueCardsByDeckForUser(getSnapshot(), deckId, LOCAL_USER_ID),
     index: 0,
     ratings: [],
+    durations: [],
     round: 1,
   };
 }
@@ -202,6 +204,7 @@ function StudyPageContent() {
                   order,
                   index: Math.min(saved.currentIndex, order.length - 1),
                   ratings: saved.ratings,
+                  durations: saved.durations ?? [],
                   round: saved.round,
                 })
               }
@@ -274,6 +277,9 @@ function StudyPageContent() {
         initialOrder={active?.kind === "study" ? active.order : undefined}
         initialIndex={active?.kind === "study" ? active.index : 0}
         initialRatings={active?.kind === "study" ? active.ratings : undefined}
+        initialDurations={
+          active?.kind === "study" ? active.durations : undefined
+        }
         initialRound={active?.kind === "study" ? active.round : 1}
       />
     </div>
