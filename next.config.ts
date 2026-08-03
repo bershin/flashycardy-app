@@ -1,12 +1,12 @@
 import type { NextConfig } from "next";
 
 /**
- * GitHub Pages serves this repo at `https://<user>.github.io/flashycardy-app/`,
- * so every asset and route needs that prefix. Set `NEXT_PUBLIC_BASE_PATH=""`
- * when building for a custom domain or a `<user>.github.io` repo, where the site
- * lives at the domain root.
+ * The site is served from the root of its own domain (card.bjohn.online), so no
+ * path prefix is needed. Set `NEXT_PUBLIC_BASE_PATH=/some-repo` to build for a
+ * project Pages URL instead, where the site lives under a subpath and every
+ * asset and route has to carry it.
  */
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "/flashycardy-app";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 const nextConfig: NextConfig = {
   // No server: `next build` emits a plain `out/` directory of static files.

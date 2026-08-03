@@ -30,10 +30,11 @@ jobs:
       - run: npm ci
 
       - name: Build static export
-        # Must match the repository name, since Pages serves the site from
-        # /<repo>/. Set to "" if you move to a custom domain.
+        # Empty because the site is served from the root of its own domain.
+        # Set to /<repo> to go back to the project Pages URL, where the site
+        # lives under a subpath.
         env:
-          NEXT_PUBLIC_BASE_PATH: /flashycardy-app
+          NEXT_PUBLIC_BASE_PATH: ""
         run: npm run build
 
       - name: Disable Jekyll
