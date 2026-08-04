@@ -12,6 +12,8 @@ import {
 interface CardTimerProps {
   elapsedMs: number;
   stage: TimerStage;
+  /** The answer is up and the clock has stopped at this number. */
+  stopped?: boolean;
   size?: number;
 }
 
@@ -34,8 +36,16 @@ const STAGE_ANNOUNCEMENT: Record<TimerStage, string> = {
  * there is no further stage, and a ring that restarted there would read as
  * progress. The digits in the middle are the real number, and they never rely
  * on the colour to be legible.
+ *
+ * A stopped clock is dimmed, so digits that have quit moving read as finished
+ * rather than stuck.
  */
-export function CardTimer({ elapsedMs, stage, size = 40 }: CardTimerProps) {
+export function CardTimer({
+  elapsedMs,
+  stage,
+  stopped = false,
+  size = 40,
+}: CardTimerProps) {
   const stroke = 3;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -44,15 +54,17 @@ export function CardTimer({ elapsedMs, stage, size = 40 }: CardTimerProps) {
   return (
     <div
       role="timer"
-      aria-label={`${spokenDuration(elapsedMs)} on this card`}
-      className="relative shrink-0"
+      aria-label={`${spokenDuration(elapsedMs)} on this card${
+        stopped ? ", stopped" : ""
+      }`}
+      className={`relative shrink-0 transition-opacity ${stopped ? "opacity-50" : ""}`}
       style={{ width: size, height: size }}
     >
       <svg
         aria-hidden
         width={size}
         height={size}
-        className={`-rotate-90 ${stage === "red" ? "animate-pulse" : ""}`}
+        className={`-rotate-90 ${stage === "red" && !stopped ? "animate-pulse" : ""}`}
       >
         <circle
           cx={size / 2}

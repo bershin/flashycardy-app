@@ -9,6 +9,13 @@ interface QuizAnswerProps {
   card: CardRow;
   /** Called once the user has seen the outcome and is ready to move on. */
   onResolved: (rating: "got_it" | "missed") => void;
+  /**
+   * Called the instant an option is picked — the moment the answer is on
+   * screen, which is where the card's timer stops. Separate from `onResolved`
+   * because a wrong answer then sits there for as long as it takes to read the
+   * explanation, and that reading isn't part of the recall.
+   */
+  onRevealed: () => void;
 }
 
 /**
@@ -19,7 +26,11 @@ interface QuizAnswerProps {
  * and shows which one was right, because being wrong without seeing the answer
  * teaches nothing.
  */
-export function QuizAnswer({ card, onResolved }: QuizAnswerProps) {
+export function QuizAnswer({
+  card,
+  onResolved,
+  onRevealed,
+}: QuizAnswerProps) {
   const options = card.quiz?.options ?? [];
   const correctIndex = card.quiz?.correctIndex ?? 0;
 
@@ -43,6 +54,7 @@ export function QuizAnswer({ card, onResolved }: QuizAnswerProps) {
   function choose(index: number) {
     if (answered) return;
     setPicked(index);
+    onRevealed();
     if (index === correctIndex) {
       // Right: a beat to register the tick, then straight on.
       setTimeout(() => onResolved("got_it"), 550);

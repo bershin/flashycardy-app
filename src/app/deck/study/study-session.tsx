@@ -85,7 +85,9 @@ export function StudySession({
 }: StudySessionProps) {
   const [studyCards, setStudyCards] = useState(initialOrder ?? cards);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [flipped, setFlipped] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  /** What the clock read when the answer went up. Only meaningful while revealed. */
+  const [revealedMs, setRevealedMs] = useState(0);
   const [finished, setFinished] = useState(false);
   const [ratings, setRatings] = useState<Map<number, Rating>>(
     () => new Map(initialRatings ?? []),
@@ -108,10 +110,12 @@ export function StudySession({
   /** Answered in its own surface rather than by flipping and self-rating. */
   const interactive = current?.type === "quiz";
 
+  // Stopped the moment the answer is on screen: what the time is worth
+  // knowing about is the recall, not how long the self-rating took afterwards.
   const timer = useCardTimer({
     cardId: current?.id,
     priorMs: current ? (durations.get(current.id) ?? 0) : 0,
-    running: !finished && current !== undefined,
+    running: !finished && current !== undefined && !revealed,
   });
   const readElapsed = timer.read;
 
@@ -148,7 +152,17 @@ export function StudySession({
     };
   }, [studyCards, durations]);
 
-  const flip = useCallback(() => setFlipped((f) => !f), []);
+  /**
+   * Show the answer, and stop the clock on the millisecond it happened.
+   *
+   * The stopped time is captured here rather than read off the timer's own
+   * quarter-second tick, so the frozen digits are the same moment the card is
+   * credited with rather than up to a quarter-second short of it.
+   */
+  const reveal = useCallback(() => {
+    setRevealedMs(readElapsed());
+    setRevealed(true);
+  }, [readElapsed]);
 
   /**
    * Bank the time on the card being left.
@@ -180,7 +194,7 @@ export function StudySession({
       });
 
       if (currentIndex < total - 1) {
-        setFlipped(false);
+        setRevealed(false);
         setCurrentIndex((i) => i + 1);
       } else {
         setFinished(true);
@@ -193,14 +207,14 @@ export function StudySession({
     if (currentIndex > 0) {
       bankTime(current.id, readElapsed());
       setCurrentIndex((i) => i - 1);
-      setFlipped(false);
+      setRevealed(false);
     }
   }, [current, currentIndex, bankTime, readElapsed]);
 
   const restart = useCallback(() => {
     setStudyCards(cards);
     setCurrentIndex(0);
-    setFlipped(false);
+    setRevealed(false);
     setFinished(false);
     setRatings(new Map());
     setDurations(new Map());
@@ -210,7 +224,7 @@ export function StudySession({
   const shuffleAndRestart = useCallback(() => {
     setStudyCards(shuffleArray(cards));
     setCurrentIndex(0);
-    setFlipped(false);
+    setRevealed(false);
     setFinished(false);
     setRatings(new Map());
     setDurations(new Map());
@@ -220,7 +234,7 @@ export function StudySession({
   const reviewMissed = useCallback(() => {
     setStudyCards(shuffleArray(missedCards));
     setCurrentIndex(0);
-    setFlipped(false);
+    setRevealed(false);
     setFinished(false);
     setRatings(new Map());
     setDurations(new Map());
@@ -292,20 +306,20 @@ export function StudySession({
       switch (e.key) {
         case " ":
           e.preventDefault();
-          if (!finished && !flipped) flip();
+          if (!finished && !revealed) reveal();
           break;
         case "ArrowLeft":
           e.preventDefault();
-          if (!finished && !flipped) goPrev();
+          if (!finished && !revealed) goPrev();
           break;
         case "1":
-          if (!finished && flipped) {
+          if (!finished && revealed) {
             e.preventDefault();
             rate("missed");
           }
           break;
         case "2":
-          if (!finished && flipped) {
+          if (!finished && revealed) {
             e.preventDefault();
             rate("got_it");
           }
@@ -315,7 +329,7 @@ export function StudySession({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [flip, goPrev, rate, finished, flipped, interactive]);
+  }, [reveal, goPrev, rate, finished, revealed, interactive]);
 
   if (finished) {
     const scorePercent =
@@ -512,7 +526,11 @@ export function StudySession({
               </span>
             </div>
           )}
-          <CardTimer elapsedMs={timer.elapsedMs} stage={timer.stage} />
+          <CardTimer
+            elapsedMs={revealed ? revealedMs : timer.elapsedMs}
+            stage={revealed ? stageForMs(revealedMs) : timer.stage}
+            stopped={revealed}
+          />
           <Button
             variant="ghost"
             size="sm"
@@ -555,22 +573,22 @@ export function StudySession({
 
       {/* Flashcard */}
       <div
-        className={`grid min-h-0 w-full flex-1 gap-3 ${flipped ? "md:grid-cols-2" : ""}`}
+        className={`grid min-h-0 w-full flex-1 gap-3 ${revealed ? "md:grid-cols-2" : ""}`}
       >
         {/* Question */}
         <Card
-          role={flipped || interactive ? undefined : "button"}
-          tabIndex={flipped || interactive ? undefined : 0}
-          onClick={flipped || interactive ? undefined : flip}
+          role={revealed || interactive ? undefined : "button"}
+          tabIndex={revealed || interactive ? undefined : 0}
+          onClick={revealed || interactive ? undefined : reveal}
           onKeyDown={
-            flipped || interactive
+            revealed || interactive
               ? undefined
               : (e) => {
-                  if (e.key === "Enter") flip();
+                  if (e.key === "Enter") reveal();
                 }
           }
           className={`relative min-h-0 overflow-hidden transition-all duration-200 ${
-            flipped || interactive
+            revealed || interactive
               ? ""
               : "cursor-pointer hover:-translate-y-0.5 hover:border-[var(--deck-accent-line)] hover:shadow-lg hover:shadow-[var(--deck-accent-soft)]"
           }`}
@@ -587,7 +605,7 @@ export function StudySession({
               className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
               dangerouslySetInnerHTML={{ __html: current.front }}
             />
-            {!flipped && !interactive && (
+            {!revealed && !interactive && (
               <p className="mt-4 text-xs text-muted-foreground">
                 Click or press{" "}
                 <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
@@ -602,9 +620,14 @@ export function StudySession({
         {/* Answer — self-revealed for basic cards, answered directly for the
             other two. `key` resets each answer surface between cards. */}
         {current.type === "quiz" && (
-          <QuizAnswer key={current.id} card={current} onResolved={rate} />
+          <QuizAnswer
+            key={current.id}
+            card={current}
+            onResolved={rate}
+            onRevealed={reveal}
+          />
         )}
-        {current.type === "basic" && flipped && (
+        {current.type === "basic" && revealed && (
           <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
             <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
               <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -621,7 +644,7 @@ export function StudySession({
 
       {/* Rating / Navigation. Quiz cards grade themselves, so they never show
           these. */}
-      {flipped && !interactive ? (
+      {revealed && !interactive ? (
         <div className="flex shrink-0 flex-col items-center gap-2">
           <p className="text-sm text-muted-foreground">How did you do?</p>
           <div className="flex gap-3">

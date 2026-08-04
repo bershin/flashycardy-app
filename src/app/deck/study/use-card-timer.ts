@@ -9,7 +9,11 @@ interface CardTimerOptions {
   cardId: number | undefined;
   /** Time already banked against this card, from an earlier visit or session. */
   priorMs: number;
-  /** False while the summary is up, or before there is a card to time. */
+  /**
+   * False once the answer is on screen, while the summary is up, or before
+   * there is a card to time. Stopping holds the clock where it is rather than
+   * discarding it — the card can be answered, or resumed, from that number.
+   */
   running: boolean;
 }
 
@@ -29,13 +33,14 @@ interface CardTimer {
 const TICK_MS = 250;
 
 /**
- * Time spent on the card currently on screen.
+ * Time spent working on the card currently on screen.
  *
  * Elapsed time is derived from timestamps rather than counted in ticks, so a
- * throttled background tab or a slow frame can't make the clock drift. Time
- * while the tab is hidden isn't counted at all: leaving a session open in
- * another window is not time spent studying, and counting it would put every
- * card into red and make the deck total meaningless.
+ * throttled background tab or a slow frame can't make the clock drift. Two
+ * things stop it: the tab being hidden, since a session left open in another
+ * window is not time spent studying; and the answer being revealed, since what
+ * is worth measuring is how long the recall took, not how long you then spent
+ * deciding which button to press.
  *
  * The stage crossings are detected here, on the tick, rather than in an effect
  * watching the stage. An effect would also fire on the render where a new card
@@ -49,23 +54,11 @@ export function useCardTimer({
 }: CardTimerOptions): CardTimer {
   /** Time banked on this card, excluding the stretch since `startedAt`. */
   const banked = useRef(priorMs);
-  /** When the current stretch began; null while paused. */
+  /** When the current stretch began; null while stopped. */
   const startedAt = useRef<number | null>(null);
   const lastStage = useRef<TimerStage>("green");
   /** Whole seconds already ticked, so each one sounds exactly once. */
   const lastSecond = useRef(0);
-
-  /**
-   * The displayed time, tagged with what it is the time *for*.
-   *
-   * Reset during render rather than in the effect that starts the interval:
-   * showing the previous card's clock for a frame is exactly the sort of stale
-   * flash the effect would introduce, and the tag makes "a different card" and
-   * "the same card, restarted" the same case.
-   */
-  const key = `${cardId}:${priorMs}:${running}`;
-  const [shown, setShown] = useState({ key, elapsedMs: priorMs });
-  if (shown.key !== key) setShown({ key, elapsedMs: priorMs });
 
   const read = useCallback(
     () =>
@@ -74,16 +67,33 @@ export function useCardTimer({
     [],
   );
 
-  useEffect(() => {
-    if (cardId === undefined || !running) {
-      startedAt.current = null;
-      return;
-    }
+  /**
+   * The displayed time, tagged with what it is the time *for*.
+   *
+   * Reset during render rather than in an effect: showing the previous card's
+   * clock for a frame is exactly the sort of stale flash an effect would
+   * introduce. Only a different card resets it — stopping simply leaves the
+   * digits where the last tick put them, and starting again carries on from the
+   * banked total. A caller that wants the stopped clock to read to the
+   * millisecond can `read()` in the handler that stopped it.
+   */
+  const cardKey = `${cardId}:${priorMs}`;
+  const [shown, setShown] = useState({ cardKey, elapsedMs: priorMs });
+  if (shown.cardKey !== cardKey) setShown({ cardKey, elapsedMs: priorMs });
 
+  // Split from the effect below so that stopping and starting the clock leaves
+  // the time banked so far alone — only a different card starts from scratch.
+  useEffect(() => {
     banked.current = priorMs;
-    startedAt.current = Date.now();
+    startedAt.current = null;
     lastStage.current = stageForMs(priorMs);
     lastSecond.current = Math.floor(priorMs / 1000);
+  }, [cardId, priorMs]);
+
+  useEffect(() => {
+    if (cardId === undefined || !running) return;
+
+    startedAt.current = Date.now();
 
     const interval = window.setInterval(() => {
       const ms = read();
@@ -108,20 +118,22 @@ export function useCardTimer({
     }, TICK_MS);
 
     function handleVisibility() {
-      if (document.hidden) {
-        if (startedAt.current !== null) {
-          banked.current += Date.now() - startedAt.current;
-          startedAt.current = null;
-        }
-      } else if (startedAt.current === null) {
-        startedAt.current = Date.now();
-      }
+      if (document.hidden) stop();
+      else if (startedAt.current === null) startedAt.current = Date.now();
+    }
+
+    /** Fold the running stretch into the banked total and hold there. */
+    function stop() {
+      if (startedAt.current === null) return;
+      banked.current += Date.now() - startedAt.current;
+      startedAt.current = null;
     }
 
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
+      stop();
     };
   }, [cardId, priorMs, running, read]);
 

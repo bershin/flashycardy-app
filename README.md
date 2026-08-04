@@ -120,6 +120,11 @@ they cost no network. The speaker button next to the clock mutes them; the
 choice is remembered per device, and turning them back on replays the amber tone
 so the volume is never a surprise mid-card.
 
+The clock stops the moment the answer appears — flipping a basic card, or
+picking an option on a quiz card — so what it measures is the recall, not how
+long you then spent choosing **Missed** or **Got it**, or reading why a quiz
+answer was wrong. The stopped time dims but stays on screen.
+
 Time is measured from timestamps and pauses while the tab is in the background —
 a session left open in another window doesn't count as studying. Stepping back
 with **Previous** and returning to a card adds to that card's total rather than
