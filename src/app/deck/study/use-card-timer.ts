@@ -93,7 +93,11 @@ export function useCardTimer({
   useEffect(() => {
     if (cardId === undefined || !running) return;
 
-    startedAt.current = Date.now();
+    // Held at zero when the page opens in a background tab. `visibilitychange`
+    // only fires on a *change*, so a card that was never on screen would
+    // otherwise be timed from the moment the tab was opened until it was
+    // eventually looked at.
+    if (!document.hidden) startedAt.current = Date.now();
 
     const interval = window.setInterval(() => {
       const ms = read();
