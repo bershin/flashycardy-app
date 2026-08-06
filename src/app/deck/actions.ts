@@ -19,6 +19,7 @@ import {
 } from "@/db/queries/cards";
 
 const cardTypeSchema = z.enum(["basic", "quiz"]);
+const scheduleSchema = z.enum(["incremental", "weekly"]);
 
 const quizSchema = z.object({
   options: z.array(z.string().min(1).max(500)).min(2).max(6),
@@ -34,6 +35,7 @@ const cardContentSchema = z
     front: z.string().min(1, "Front is required").max(500_000),
     back: z.string().max(500_000),
     type: cardTypeSchema.default("basic"),
+    schedule: scheduleSchema.default("incremental"),
     quiz: quizSchema.optional(),
   })
   .refine((v) => v.type !== "basic" || v.back.trim().length > 0, {
@@ -70,6 +72,7 @@ export async function addCardAction(data: AddCardInput) {
     type: parsed.type,
     front: parsed.front,
     back: parsed.back,
+    schedule: parsed.schedule,
     quiz: parsed.quiz,
   });
 }
@@ -94,6 +97,7 @@ export async function updateCardAction(data: UpdateCardInput) {
     type: parsed.type,
     front: parsed.front,
     back: parsed.back,
+    schedule: parsed.schedule,
     quiz: parsed.quiz,
   });
 }
@@ -138,6 +142,7 @@ export async function cloneCardAction(data: CloneCardInput) {
     type: existingCard.type,
     front: existingCard.front,
     back: existingCard.back,
+    schedule: existingCard.schedule,
     quiz: existingCard.quiz,
   });
 }

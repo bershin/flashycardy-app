@@ -22,11 +22,13 @@ import {
   selectDueCardsByDeckForUser,
   startOfDay,
 } from "@/lib/store/selectors";
-import type {
-  CardRow,
-  CardType,
-  DbDoc,
-  QuizPayload,
+import {
+  DEFAULT_REVIEW_SCHEDULE,
+  type CardRow,
+  type CardType,
+  type DbDoc,
+  type QuizPayload,
+  type ReviewSchedule,
 } from "@/lib/store/types";
 
 /** `WHERE deckId IN (SELECT id FROM decks WHERE userId = ?)` */
@@ -52,6 +54,7 @@ export async function insertCard(data: {
   back: string;
   type?: CardType;
   quiz?: QuizPayload;
+  schedule?: ReviewSchedule;
 }) {
   return mutate((draft) => {
     const now = new Date();
@@ -61,6 +64,7 @@ export async function insertCard(data: {
       type: data.type ?? "basic",
       front: data.front,
       back: data.back,
+      schedule: data.schedule ?? DEFAULT_REVIEW_SCHEDULE,
       ...(data.quiz ? { quiz: data.quiz } : {}),
       nextReviewAt: now,
       consecutiveCorrect: 0,
@@ -87,6 +91,7 @@ export async function bulkInsertCards(
         type: "basic",
         front: row.front,
         back: row.back,
+        schedule: DEFAULT_REVIEW_SCHEDULE,
         nextReviewAt: now,
         consecutiveCorrect: 0,
         lastCorrectAt: null,
@@ -108,6 +113,7 @@ export async function updateCard(
     back?: string;
     type?: CardType;
     quiz?: QuizPayload;
+    schedule?: ReviewSchedule;
   },
 ) {
   return mutate((draft) => {
@@ -123,6 +129,9 @@ export async function updateCard(
       type,
       ...(data.front !== undefined ? { front: data.front } : {}),
       ...(data.back !== undefined ? { back: data.back } : {}),
+      // Changing the schedule re-aims future reviews without disturbing the
+      // streak already earned or the date the card is currently waiting on.
+      schedule: data.schedule ?? current.schedule,
       updatedAt: new Date(),
       // The payload follows the type, so switching a card away from quiz
       // doesn't leave orphaned options behind to reappear if it switches back.
@@ -141,18 +150,35 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
  * Days until the next review, indexed by streak — element 0 is the wait after
  * the first correct answer, element 1 after the second, and so on.
  *
- * The ladder widens so each success buys progressively more time: a day, a
- * week, two weeks, three weeks. Running off the end of the table means the card
- * has been learned and is archived, so adding another interval here
- * automatically extends the schedule rather than requiring two edits.
+ * Both ladders open with a single day, because one night's sleep is the point
+ * of the first repetition, and both are four rungs long, so a card graduates
+ * after five correct answers whichever it uses.
+ *
+ *  - `incremental` widens: each success buys progressively more time, so
+ *    something learned cleanly drops out of the way.
+ *  - `weekly` holds at seven days: the card keeps coming back at the same
+ *    cadence rather than receding.
+ *
+ * Running off the end of a ladder means the card has been learned and is
+ * archived, so adding a rung extends that schedule rather than needing a second
+ * edit somewhere else.
  */
-const REVIEW_INTERVAL_DAYS = [1, 7, 14, 21];
+const REVIEW_SCHEDULES: Record<ReviewSchedule, readonly number[]> = {
+  incremental: [1, 7, 14, 21],
+  weekly: [1, 7, 7, 7],
+};
 
 /** How soon a missed card comes back round. */
 const MISSED_REVIEW_MINUTES = 10;
 
-/** Correct answers in a row before a card is considered learned. */
-const GRADUATION_STREAK = REVIEW_INTERVAL_DAYS.length + 1;
+function intervalsFor(schedule: ReviewSchedule): readonly number[] {
+  return REVIEW_SCHEDULES[schedule] ?? REVIEW_SCHEDULES.incremental;
+}
+
+/** Correct answers in a row before a card on this schedule is learned. */
+function graduationStreak(schedule: ReviewSchedule): number {
+  return intervalsFor(schedule).length + 1;
+}
 
 /**
  * Move a learned card into the archive.
@@ -239,8 +265,8 @@ function archiveCard(cardId: number, userId: string): CardRow | undefined {
  * Record a study rating and reschedule the card.
  *
  *  - `missed`  → streak resets, review again in a few minutes
- *  - `got_it`  → streak + 1, next review taken from `REVIEW_INTERVAL_DAYS`
- *                (1 day → 1 week → 2 weeks → 3 weeks)
+ *  - `got_it`  → streak + 1, next review taken from the card's own ladder in
+ *                `REVIEW_SCHEDULES` — widening, or a steady week
  *  - five correct in a row → the card is **archived** (see `archiveCard`)
  *
  * The streak moves at most one step a day. A card answered correctly a second
@@ -265,6 +291,7 @@ export async function recordStudyResult(
 
   const now = new Date();
   const today = startOfDay(now);
+  const intervals = intervalsFor(existing.schedule);
   const creditedToday =
     existing.lastCorrectAt !== null &&
     startOfDay(existing.lastCorrectAt).getTime() === today.getTime();
@@ -286,17 +313,17 @@ export async function recordStudyResult(
     // it has just been answered correctly, so it shouldn't nag again today.
     nextReviewAt = addDays(
       today,
-      REVIEW_INTERVAL_DAYS[Math.max(consecutiveCorrect, 1) - 1],
+      intervals[Math.max(consecutiveCorrect, 1) - 1],
     );
   } else {
     consecutiveCorrect = existing.consecutiveCorrect + 1;
 
-    if (consecutiveCorrect >= GRADUATION_STREAK) {
+    if (consecutiveCorrect >= graduationStreak(existing.schedule)) {
       archiveCard(cardId, userId);
       return null;
     }
 
-    nextReviewAt = addDays(today, REVIEW_INTERVAL_DAYS[consecutiveCorrect - 1]);
+    nextReviewAt = addDays(today, intervals[consecutiveCorrect - 1]);
   }
 
   return mutate((draft) => {

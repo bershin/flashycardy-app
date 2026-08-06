@@ -5,7 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/rich-text-editor";
-import type { CardRow, CardType } from "@/lib/store/types";
+import {
+  DEFAULT_REVIEW_SCHEDULE,
+  type CardRow,
+  type CardType,
+  type ReviewSchedule,
+} from "@/lib/store/types";
 
 export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 6;
@@ -23,6 +28,7 @@ export type CardDraft = {
   back: string;
   options: string[];
   correctIndex: number;
+  schedule: ReviewSchedule;
 };
 
 export function emptyDraft(): CardDraft {
@@ -32,6 +38,7 @@ export function emptyDraft(): CardDraft {
     back: "",
     options: ["", "", "", ""],
     correctIndex: 0,
+    schedule: DEFAULT_REVIEW_SCHEDULE,
   };
 }
 
@@ -42,6 +49,7 @@ export function draftFromCard(card: CardRow): CardDraft {
     back: card.back,
     options: card.quiz?.options ?? ["", "", "", ""],
     correctIndex: card.quiz?.correctIndex ?? 0,
+    schedule: card.schedule,
   };
 }
 
@@ -84,6 +92,7 @@ export function draftToInput(draft: CardDraft) {
     type: draft.type,
     front: draft.front,
     back: draft.back,
+    schedule: draft.schedule,
     quiz:
       draft.type === "quiz"
         ? {
@@ -96,6 +105,23 @@ export function draftToInput(draft: CardDraft) {
         : undefined,
   };
 }
+
+const SCHEDULES: Array<{
+  value: ReviewSchedule;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "incremental",
+    label: "Widening",
+    hint: "1 day → 1 week → 2 weeks → 3 weeks",
+  },
+  {
+    value: "weekly",
+    label: "Weekly",
+    hint: "1 day, then every week",
+  },
+];
 
 const TYPES: Array<{ value: CardType; label: string; hint: string }> = [
   { value: "basic", label: "Basic", hint: "Question and answer, self-rated" },
@@ -225,6 +251,34 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
           )}
         </div>
       )}
+
+      <div className="grid gap-2">
+        <Label>Review schedule</Label>
+        <p className="-mt-1 text-xs text-muted-foreground">
+          How far apart reviews spread as you keep getting it right. Either way
+          the card is archived after five correct answers in a row.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {SCHEDULES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              disabled={disabled}
+              onClick={() => set({ schedule: option.value })}
+              className={`rounded-lg border p-2 text-left transition-colors disabled:opacity-50 ${
+                draft.schedule === option.value
+                  ? "border-primary bg-primary/10"
+                  : "border-border hover:bg-muted"
+              }`}
+            >
+              <span className="block text-sm font-medium">{option.label}</span>
+              <span className="block text-xs text-muted-foreground">
+                {option.hint}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="grid gap-2">
         <Label>

@@ -37,6 +37,24 @@ export type QuizPayload = {
   correctIndex: number;
 };
 
+/**
+ * How far apart a card's reviews spread as its streak grows.
+ *
+ *  - `incremental` — a day, then one, two and three weeks. Intervals widen, so
+ *    something learned cleanly is seen less and less.
+ *  - `weekly` — a day, then every week. Holds a steady cadence instead of
+ *    backing off, for material worth keeping warm.
+ *
+ * The actual day counts live in `REVIEW_SCHEDULES` in `src/db/queries/cards.ts`,
+ * next to the code that applies them.
+ */
+export const REVIEW_SCHEDULES = ["incremental", "weekly"] as const;
+
+export type ReviewSchedule = (typeof REVIEW_SCHEDULES)[number];
+
+/** What a card gets when it doesn't say — and what every card had before. */
+export const DEFAULT_REVIEW_SCHEDULE: ReviewSchedule = "incremental";
+
 export type CardRow = {
   id: number;
   deckId: number;
@@ -45,6 +63,7 @@ export type CardRow = {
   /** The answer for `basic`; an optional explanation for `quiz`. */
   back: string;
   quiz?: QuizPayload;
+  schedule: ReviewSchedule;
   nextReviewAt: Date;
   consecutiveCorrect: number;
   /**
@@ -98,13 +117,20 @@ export type SerializedDbDoc = {
   cards: Array<
     Omit<
       CardRow,
-      "type" | "nextReviewAt" | "lastCorrectAt" | "createdAt" | "updatedAt"
+      | "type"
+      | "schedule"
+      | "nextReviewAt"
+      | "lastCorrectAt"
+      | "createdAt"
+      | "updatedAt"
     > & {
       /**
        * Absent in version-1 documents, and may name a type this build no
        * longer has (vocabulary was removed). Normalised on read.
        */
       type?: string;
+      /** Absent before schedules were selectable; normalised on read. */
+      schedule?: string;
       nextReviewAt: string;
       /** Absent in documents written before the streak was capped per day. */
       lastCorrectAt?: string | null;
@@ -124,6 +150,19 @@ export type SerializedDbDoc = {
  */
 function normaliseType(type: string | undefined): CardType {
   return CARD_TYPES.includes(type as CardType) ? (type as CardType) : "basic";
+}
+
+/**
+ * Coerce a stored schedule to one this build knows.
+ *
+ * Cards written before schedules existed have none, and fall back to the
+ * incremental ladder — which is exactly how they were already being scheduled,
+ * so nothing about their timing changes.
+ */
+function normaliseSchedule(schedule: string | undefined): ReviewSchedule {
+  return REVIEW_SCHEDULES.includes(schedule as ReviewSchedule)
+    ? (schedule as ReviewSchedule)
+    : DEFAULT_REVIEW_SCHEDULE;
 }
 
 export function emptyDoc(deviceId: string): DbDoc {
@@ -176,6 +215,7 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       // Per-card rather than keyed on the document version, so a hand-edited or
       // partially-written file can't produce a card with no usable type.
       type: normaliseType(c.type),
+      schedule: normaliseSchedule(c.schedule),
       nextReviewAt: toDate(c.nextReviewAt),
       // A card that predates the stamp reads as never credited, so its next
       // correct answer counts — the cap only ever costs a card one step, and

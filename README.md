@@ -137,20 +137,31 @@ missed cards or starting over begins a fresh set of times.
 ## How reviews are scheduled
 
 Each card tracks one number: how many times in a row you've answered it
-correctly.
+correctly. How far apart those reviews spread is chosen per card when you
+create it — **Widening** or **Weekly**.
 
-| Correct in a row | Next review |
-| --- | --- |
-| 1 | tomorrow |
-| 2 | in 1 week |
-| 3 | in 2 weeks |
-| 4 | in 3 weeks |
-| 5 | archived |
+| Correct in a row | Widening | Weekly |
+| --- | --- | --- |
+| 1 | tomorrow | tomorrow |
+| 2 | in 1 week | in 1 week |
+| 3 | in 2 weeks | in 1 week |
+| 4 | in 3 weeks | in 1 week |
+| 5 | archived | archived |
 
-Cleanly learned, a card is therefore seen on days 0, 1, 8, 22 and 43 before
-being archived. The intervals live in `REVIEW_INTERVAL_DAYS` in
-`src/db/queries/cards.ts`; adding another entry extends the ladder and pushes
-archiving back automatically.
+**Widening** backs off as you prove you know something: learned cleanly, a card
+is seen on days 0, 1, 8, 22 and 43 before being archived. Best for facts that
+stick once they land.
+
+**Weekly** holds a steady cadence instead — days 0, 1, 8, 15 and 22 — so the
+card keeps coming back at the same rhythm. Better for material you want kept
+warm rather than filed away.
+
+Either way five correct answers in a row archives the card, so the choice
+changes the spacing, not the destination. Existing cards use Widening, which is
+how everything was already scheduled.
+
+The ladders live in `REVIEW_SCHEDULES` in `src/db/queries/cards.ts`; adding a
+rung to one extends that schedule and pushes its archiving back automatically.
 
 Answering **Missed** resets the streak to zero and brings the card back about
 ten minutes later, so something you just got wrong reappears in the same sitting
