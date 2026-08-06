@@ -64,6 +64,7 @@ export async function insertCard(data: {
       ...(data.quiz ? { quiz: data.quiz } : {}),
       nextReviewAt: now,
       consecutiveCorrect: 0,
+      lastCorrectAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -88,6 +89,7 @@ export async function bulkInsertCards(
         back: row.back,
         nextReviewAt: now,
         consecutiveCorrect: 0,
+        lastCorrectAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -236,10 +238,17 @@ function archiveCard(cardId: number, userId: string): CardRow | undefined {
 /**
  * Record a study rating and reschedule the card.
  *
- *  - `missed`  → streak resets, review again tomorrow
+ *  - `missed`  → streak resets, review again in a few minutes
  *  - `got_it`  → streak + 1, next review taken from `REVIEW_INTERVAL_DAYS`
  *                (1 day → 1 week → 2 weeks → 3 weeks)
  *  - five correct in a row → the card is **archived** (see `archiveCard`)
+ *
+ * The streak moves at most one step a day. A card answered correctly a second
+ * time today is rescheduled but not promoted: the ladder is built on the idea
+ * that a day passed between answers, and recalling something ten seconds after
+ * last seeing it is not the same evidence. Otherwise running the same deck four
+ * times in an evening would archive it as learned. Answering **Missed** still
+ * resets the streak whenever it happens — only the promotion is capped.
  *
  * Returns `null` when the card graduated into the archive, `undefined` when the
  * card isn't the user's, and the updated card otherwise. `study-session.tsx`
@@ -256,6 +265,10 @@ export async function recordStudyResult(
 
   const now = new Date();
   const today = startOfDay(now);
+  const creditedToday =
+    existing.lastCorrectAt !== null &&
+    startOfDay(existing.lastCorrectAt).getTime() === today.getTime();
+
   let consecutiveCorrect: number;
   let nextReviewAt: Date;
 
@@ -265,6 +278,16 @@ export async function recordStudyResult(
     // seeing again in the same sitting. Late at night this naturally rolls over
     // into tomorrow, which is the right answer then anyway.
     nextReviewAt = new Date(now.getTime() + MISSED_REVIEW_MINUTES * 60_000);
+  } else if (creditedToday) {
+    consecutiveCorrect = existing.consecutiveCorrect;
+    // Rescheduled from the streak it already has, which lands on the same date
+    // the earlier answer chose. The floor of one covers a card that was missed
+    // after being credited today: the streak stays where the miss left it, but
+    // it has just been answered correctly, so it shouldn't nag again today.
+    nextReviewAt = addDays(
+      today,
+      REVIEW_INTERVAL_DAYS[Math.max(consecutiveCorrect, 1) - 1],
+    );
   } else {
     consecutiveCorrect = existing.consecutiveCorrect + 1;
 
@@ -285,6 +308,10 @@ export async function recordStudyResult(
       ...draft.cards[index],
       consecutiveCorrect,
       nextReviewAt,
+      // Stamped on every correct answer, not just promoting ones, so a third
+      // and fourth answer today are held back by the same rule as the second.
+      lastCorrectAt:
+        rating === "got_it" ? now : draft.cards[index].lastCorrectAt,
       updatedAt: now,
     };
     draft.cards[index] = updated;

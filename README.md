@@ -158,6 +158,14 @@ rather than waiting until tomorrow. Intervals are measured from today rather
 than from the date a card was due, so a long gap between sessions never builds
 up a compounding backlog.
 
+**The streak moves at most one step a day.** Answering a card correctly a second
+time today reschedules it but doesn't promote it: the ladder assumes a day
+passed between answers, and recalling something a minute after last seeing it
+isn't the same evidence. Without the cap, running a deck through four times in
+one evening would archive it as learned. Missed still resets the streak whenever
+you press it — only the promotion is capped, so a card you get right after
+missing it earlier the same day holds its ground rather than climbing.
+
 ### If you close the app mid-session
 
 Every rating is written to the database the moment you press it, so nothing you

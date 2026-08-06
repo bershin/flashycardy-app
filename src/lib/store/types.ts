@@ -47,6 +47,14 @@ export type CardRow = {
   quiz?: QuizPayload;
   nextReviewAt: Date;
   consecutiveCorrect: number;
+  /**
+   * When the streak last went up. Null for a card that has never been answered
+   * correctly, and for cards from documents written before this existed.
+   *
+   * Kept so the streak can be capped at one step a day: see
+   * `recordStudyResult`.
+   */
+  lastCorrectAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -88,13 +96,18 @@ export type SerializedDbDoc = {
     updatedAt: string;
   }>;
   cards: Array<
-    Omit<CardRow, "type" | "nextReviewAt" | "createdAt" | "updatedAt"> & {
+    Omit<
+      CardRow,
+      "type" | "nextReviewAt" | "lastCorrectAt" | "createdAt" | "updatedAt"
+    > & {
       /**
        * Absent in version-1 documents, and may name a type this build no
        * longer has (vocabulary was removed). Normalised on read.
        */
       type?: string;
       nextReviewAt: string;
+      /** Absent in documents written before the streak was capped per day. */
+      lastCorrectAt?: string | null;
       createdAt: string;
       updatedAt: string;
     }
@@ -164,6 +177,10 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       // partially-written file can't produce a card with no usable type.
       type: normaliseType(c.type),
       nextReviewAt: toDate(c.nextReviewAt),
+      // A card that predates the stamp reads as never credited, so its next
+      // correct answer counts — the cap only ever costs a card one step, and
+      // only on a day it has already had one.
+      lastCorrectAt: c.lastCorrectAt ? toDate(c.lastCorrectAt) : null,
       createdAt: toDate(c.createdAt),
       updatedAt: toDate(c.updatedAt),
     })),
@@ -186,6 +203,7 @@ export function serializeDoc(doc: DbDoc): SerializedDbDoc {
     cards: doc.cards.map((c) => ({
       ...c,
       nextReviewAt: toIso(c.nextReviewAt),
+      lastCorrectAt: toIso(c.lastCorrectAt),
       createdAt: toIso(c.createdAt),
       updatedAt: toIso(c.updatedAt),
     })),
