@@ -52,8 +52,17 @@ export const REVIEW_SCHEDULES = ["incremental", "weekly"] as const;
 
 export type ReviewSchedule = (typeof REVIEW_SCHEDULES)[number];
 
-/** What a card gets when it doesn't say — and what every card had before. */
-export const DEFAULT_REVIEW_SCHEDULE: ReviewSchedule = "incremental";
+/**
+ * What a stored card gets when its document doesn't name a schedule.
+ *
+ * Stays `incremental` no matter what new cards default to: cards written before
+ * schedules existed were being scheduled on the widening ladder, so reading them
+ * as anything else would quietly rewrite how they behave.
+ */
+export const LEGACY_REVIEW_SCHEDULE: ReviewSchedule = "incremental";
+
+/** What a newly created card starts on. */
+export const NEW_CARD_SCHEDULE: ReviewSchedule = "weekly";
 
 export type CardRow = {
   id: number;
@@ -162,7 +171,7 @@ function normaliseType(type: string | undefined): CardType {
 function normaliseSchedule(schedule: string | undefined): ReviewSchedule {
   return REVIEW_SCHEDULES.includes(schedule as ReviewSchedule)
     ? (schedule as ReviewSchedule)
-    : DEFAULT_REVIEW_SCHEDULE;
+    : LEGACY_REVIEW_SCHEDULE;
 }
 
 export function emptyDoc(deviceId: string): DbDoc {

@@ -53,6 +53,7 @@ export function FlashCard({
   // Holds the card the dialog is editing. Normally this card, but cloning
   // retargets it at the fresh copy so you land straight in editing that.
   const [editCard, setEditCard] = useState<CardRow>(card);
+  const [editMode, setEditMode] = useState<"edit" | "clone">("edit");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -63,6 +64,7 @@ export function FlashCard({
         const cloned = await cloneCardAction({ cardId: card.id });
         if (cloned) {
           setEditCard(cloned);
+          setEditMode("clone");
           setEditOpen(true);
         }
       } catch {
@@ -210,10 +212,14 @@ export function FlashCard({
 
       <EditCardDialog
         card={editCard}
+        mode={editMode}
         open={editOpen}
         onOpenChange={(nextOpen) => {
           setEditOpen(nextOpen);
-          if (!nextOpen) setEditCard(card);
+          if (!nextOpen) {
+            setEditCard(card);
+            setEditMode("edit");
+          }
         }}
       />
 

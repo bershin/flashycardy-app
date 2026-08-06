@@ -338,6 +338,24 @@ export function RichTextEditor({
     }
   }, [editor, disabled]);
 
+  /**
+   * Follow `content` when the parent changes it.
+   *
+   * TipTap reads `content` only when the editor is created, so a dialog that
+   * stays mounted kept showing the previous card's text — reopening "Add card"
+   * arrived with the last card's answer already filled in.
+   *
+   * Comparing against the current HTML stops this fighting with typing: each
+   * keystroke round-trips through the parent and comes back identical, so the
+   * effect does nothing. `emitUpdate: false` keeps a programmatic reset from
+   * being reported back as a user edit.
+   */
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    if (content === editor.getHTML()) return;
+    editor.commands.setContent(content, { emitUpdate: false });
+  }, [editor, content]);
+
   if (!editor) return null;
 
   return (

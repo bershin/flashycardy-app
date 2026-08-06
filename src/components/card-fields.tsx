@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { graduationStreak } from "@/db/queries/cards";
 import {
-  DEFAULT_REVIEW_SCHEDULE,
+  NEW_CARD_SCHEDULE,
   type CardRow,
   type CardType,
   type ReviewSchedule,
@@ -39,7 +39,7 @@ export function emptyDraft(): CardDraft {
     back: "",
     options: ["", "", "", ""],
     correctIndex: 0,
-    schedule: DEFAULT_REVIEW_SCHEDULE,
+    schedule: NEW_CARD_SCHEDULE,
   };
 }
 

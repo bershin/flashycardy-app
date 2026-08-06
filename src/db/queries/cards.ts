@@ -23,7 +23,7 @@ import {
   startOfDay,
 } from "@/lib/store/selectors";
 import {
-  DEFAULT_REVIEW_SCHEDULE,
+  NEW_CARD_SCHEDULE,
   type CardRow,
   type CardType,
   type DbDoc,
@@ -64,7 +64,7 @@ export async function insertCard(data: {
       type: data.type ?? "basic",
       front: data.front,
       back: data.back,
-      schedule: data.schedule ?? DEFAULT_REVIEW_SCHEDULE,
+      schedule: data.schedule ?? NEW_CARD_SCHEDULE,
       ...(data.quiz ? { quiz: data.quiz } : {}),
       nextReviewAt: now,
       consecutiveCorrect: 0,
@@ -91,7 +91,7 @@ export async function bulkInsertCards(
         type: "basic",
         front: row.front,
         back: row.back,
-        schedule: DEFAULT_REVIEW_SCHEDULE,
+        schedule: NEW_CARD_SCHEDULE,
         nextReviewAt: now,
         consecutiveCorrect: 0,
         lastCorrectAt: null,

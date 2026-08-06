@@ -9,6 +9,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getOpenAIKey, getOpenAIModel } from "@/lib/settings";
 import { getDeckByIdForUser } from "@/db/queries/decks";
+import { NEW_CARD_SCHEDULE } from "@/lib/store/types";
 import {
   insertCard,
   getCardByIdForUser,
@@ -48,7 +49,7 @@ const cardContentSchema = z
     front: z.string().min(1, "Front is required").max(MAX_FIELD, TOO_LARGE),
     back: z.string().max(MAX_FIELD, TOO_LARGE),
     type: cardTypeSchema.default("basic"),
-    schedule: scheduleSchema.default("incremental"),
+    schedule: scheduleSchema.default(NEW_CARD_SCHEDULE),
     quiz: quizSchema.optional(),
   })
   .refine((v) => v.type !== "basic" || v.back.trim().length > 0, {

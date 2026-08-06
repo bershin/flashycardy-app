@@ -24,12 +24,19 @@ interface EditCardDialogProps {
   card: CardRow;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Cloning makes the copy first and then opens this dialog on it, so the
+   * heading needs to say which of the two just happened — "Edit card" over a
+   * card you asked to clone reads like the clone didn't work.
+   */
+  mode?: "edit" | "clone";
 }
 
 export function EditCardDialog({
   card,
   open,
   onOpenChange,
+  mode = "edit",
 }: EditCardDialogProps) {
   const [draft, setDraft] = useState<CardDraft>(() => draftFromCard(card));
   const [isPending, startTransition] = useTransition();
@@ -76,9 +83,13 @@ export function EditCardDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Edit card</DialogTitle>
+            <DialogTitle>
+              {mode === "clone" ? "Clone card" : "Edit card"}
+            </DialogTitle>
             <DialogDescription>
-              Update this card, or change what kind of card it is.
+              {mode === "clone"
+                ? "This copy has been created. Adjust it, or close to keep it as-is."
+                : "Update this card, or change what kind of card it is."}
             </DialogDescription>
           </DialogHeader>
 
