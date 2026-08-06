@@ -40,8 +40,8 @@ export type QuizPayload = {
 /**
  * How far apart a card's reviews spread as its streak grows.
  *
- *  - `incremental` — a day, then one, two and three weeks. Intervals widen, so
- *    something learned cleanly is seen less and less.
+ *  - `incremental` — a day, then weeks, then months, then a year. Intervals
+ *    widen, so something learned cleanly is seen less and less.
  *  - `weekly` — a day, then every week. Holds a steady cadence instead of
  *    backing off, for material worth keeping warm.
  *

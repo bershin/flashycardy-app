@@ -146,19 +146,25 @@ create it — **Widening** or **Weekly**.
 | 2 | in 1 week | in 1 week |
 | 3 | in 2 weeks | in 1 week |
 | 4 | in 3 weeks | in 1 week |
-| 5 | archived | archived |
+| 5 | in 1 month | archived |
+| 6 | in 3 months | |
+| 7 | in 6 months | |
+| 8 | in 1 year | |
+| 9 | archived | |
 
-**Widening** backs off as you prove you know something: learned cleanly, a card
-is seen on days 0, 1, 8, 22 and 43 before being archived. Best for facts that
-stick once they land.
+**Widening** backs off as you prove you know something, and keeps backing off
+into months and then a year. Learned cleanly, a card is seen on days 0, 1, 8,
+22, 43, 73, 163, 343 and 708 before being archived — so it takes about two
+years, and the last few reviews are cheap checks that it really stuck. Best for
+facts you want to keep for good.
 
-**Weekly** holds a steady cadence instead — days 0, 1, 8, 15 and 22 — so the
-card keeps coming back at the same rhythm. Better for material you want kept
-warm rather than filed away.
+**Weekly** holds a steady cadence instead — days 0, 1, 8, 15 and 22 — and
+archives after five. Better for material you want kept warm over a few weeks
+rather than carried for years.
 
-Either way five correct answers in a row archives the card, so the choice
-changes the spacing, not the destination. Existing cards use Widening, which is
-how everything was already scheduled.
+The two ladders are deliberately different lengths; nothing assumes otherwise,
+since the graduation point is derived from each ladder's own length. Existing
+cards use Widening, which is how everything was already scheduled.
 
 The ladders live in `REVIEW_SCHEDULES` in `src/db/queries/cards.ts`; adding a
 rung to one extends that schedule and pushes its archiving back automatically.
@@ -191,7 +197,7 @@ Unfinished sessions are kept per deck and expire at the end of the day, since by
 the next morning the schedule has moved on. They live only on the device that
 made them and are never synced.
 
-Cards answered correctly five times running are **archived, not deleted**. An
+Cards that clear their whole ladder are **archived, not deleted**. An
 `Archive` deck is created automatically, with one sub-deck per source deck, so
 you can always find what you learned and where it came from. Archived cards
 never appear as due and won't nag from the dashboard — open the Archive and hit

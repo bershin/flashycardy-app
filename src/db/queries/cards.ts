@@ -151,20 +151,22 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
  * the first correct answer, element 1 after the second, and so on.
  *
  * Both ladders open with a single day, because one night's sleep is the point
- * of the first repetition, and both are four rungs long, so a card graduates
- * after five correct answers whichever it uses.
+ * of the first repetition. They are deliberately different lengths after that:
  *
- *  - `incremental` widens: each success buys progressively more time, so
- *    something learned cleanly drops out of the way.
- *  - `weekly` holds at seven days: the card keeps coming back at the same
- *    cadence rather than receding.
+ *  - `incremental` widens all the way out to a year, so something learned
+ *    cleanly drops out of the way while still being checked occasionally. Eight
+ *    rungs, so it graduates on the ninth correct answer, roughly two years after
+ *    the card was first seen.
+ *  - `weekly` holds at seven days and stops after four, since a card meant to
+ *    come back at a fixed cadence has nothing to prove by running longer.
  *
  * Running off the end of a ladder means the card has been learned and is
  * archived, so adding a rung extends that schedule rather than needing a second
- * edit somewhere else.
+ * edit somewhere else. Nothing assumes the two are the same length —
+ * `graduationStreak` derives each from its own ladder.
  */
 const REVIEW_SCHEDULES: Record<ReviewSchedule, readonly number[]> = {
-  incremental: [1, 7, 14, 21],
+  incremental: [1, 7, 14, 21, 30, 90, 180, 365],
   weekly: [1, 7, 7, 7],
 };
 
@@ -175,8 +177,14 @@ function intervalsFor(schedule: ReviewSchedule): readonly number[] {
   return REVIEW_SCHEDULES[schedule] ?? REVIEW_SCHEDULES.incremental;
 }
 
-/** Correct answers in a row before a card on this schedule is learned. */
-function graduationStreak(schedule: ReviewSchedule): number {
+/**
+ * Correct answers in a row before a card on this schedule is learned.
+ *
+ * Exported so the card form can state the number rather than hard-coding it —
+ * the ladders are different lengths, and prose that says "five" goes stale the
+ * moment one of them gains a rung.
+ */
+export function graduationStreak(schedule: ReviewSchedule): number {
   return intervalsFor(schedule).length + 1;
 }
 
@@ -267,7 +275,8 @@ function archiveCard(cardId: number, userId: string): CardRow | undefined {
  *  - `missed`  → streak resets, review again in a few minutes
  *  - `got_it`  → streak + 1, next review taken from the card's own ladder in
  *                `REVIEW_SCHEDULES` — widening, or a steady week
- *  - five correct in a row → the card is **archived** (see `archiveCard`)
+ *  - clearing that ladder → the card is **archived** (see `archiveCard`), which
+ *    takes nine correct answers on the widening schedule and five on weekly
  *
  * The streak moves at most one step a day. A card answered correctly a second
  * time today is rescheduled but not promoted: the ladder is built on the idea

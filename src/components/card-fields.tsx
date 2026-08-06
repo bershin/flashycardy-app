@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/rich-text-editor";
+import { graduationStreak } from "@/db/queries/cards";
 import {
   DEFAULT_REVIEW_SCHEDULE,
   type CardRow,
@@ -114,7 +115,7 @@ const SCHEDULES: Array<{
   {
     value: "incremental",
     label: "Widening",
-    hint: "1 day → 1 week → 2 weeks → 3 weeks",
+    hint: "1 day, then 1–3 weeks, 1–6 months, a year",
   },
   {
     value: "weekly",
@@ -255,8 +256,8 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
       <div className="grid gap-2">
         <Label>Review schedule</Label>
         <p className="-mt-1 text-xs text-muted-foreground">
-          How far apart reviews spread as you keep getting it right. Either way
-          the card is archived after five correct answers in a row.
+          How far apart reviews spread as you keep getting it right. Clearing the
+          whole ladder archives the card.
         </p>
         <div className="grid grid-cols-2 gap-2">
           {SCHEDULES.map((option) => (
@@ -274,6 +275,11 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
               <span className="block text-sm font-medium">{option.label}</span>
               <span className="block text-xs text-muted-foreground">
                 {option.hint}
+              </span>
+              {/* Counted from the ladder itself, so the two can be different
+                  lengths without this line going stale. */}
+              <span className="mt-1 block text-xs text-muted-foreground/80">
+                {graduationStreak(option.value)} in a row to archive
               </span>
             </button>
           ))}
