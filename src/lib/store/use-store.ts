@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
+  getNotice,
   getServerSnapshot,
   getSnapshot,
   getStatus,
@@ -48,5 +49,14 @@ export function useStoreReady(): boolean {
     subscribe,
     useCallback(() => getStatus() === "ready", []),
     useCallback(() => false, []),
+  );
+}
+
+/** A message from the store about something it did on its own, or null. */
+export function useStoreNotice(): string | null {
+  return useSyncExternalStore(
+    subscribe,
+    getNotice,
+    useCallback(() => null, []),
   );
 }

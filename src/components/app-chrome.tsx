@@ -24,7 +24,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useStoreBootstrap } from "@/lib/store/use-store";
+import { useStoreBootstrap, useStoreNotice } from "@/lib/store/use-store";
+import { dismissNotice } from "@/lib/store/local-store";
 import {
   getSyncError,
   getSyncState,
@@ -53,24 +54,55 @@ export function AppChrome() {
   }, []);
 
   return (
-    <header className="flex items-center justify-end gap-2 p-4">
-      <SyncIndicator />
-      <ThemeToggle />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Link
-              href="/settings"
-              aria-label="Settings"
-              className={buttonVariants({ variant: "ghost", size: "icon" })}
-            >
-              <SettingsIcon className="size-4" />
-            </Link>
-          }
-        />
-        <TooltipContent>Settings</TooltipContent>
-      </Tooltip>
-    </header>
+    <>
+      <TabNotice />
+      <header className="flex items-center justify-end gap-2 p-4">
+        <SyncIndicator />
+        <ThemeToggle />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Link
+                href="/settings"
+                aria-label="Settings"
+                className={buttonVariants({ variant: "ghost", size: "icon" })}
+              >
+                <SettingsIcon className="size-4" />
+              </Link>
+            }
+          />
+          <TooltipContent>Settings</TooltipContent>
+        </Tooltip>
+      </header>
+    </>
+  );
+}
+
+/**
+ * Shown when the store stepped aside for a newer document from another tab.
+ *
+ * Worth interrupting for: the decks on screen have just changed underneath the
+ * user, and an edit they made did not survive. Silence would look like the app
+ * had lost their work at random.
+ */
+function TabNotice() {
+  const notice = useStoreNotice();
+  if (!notice) return null;
+
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100"
+    >
+      <span className="flex-1">{notice}</span>
+      <button
+        type="button"
+        onClick={dismissNotice}
+        className="shrink-0 rounded px-2 py-0.5 font-medium underline-offset-2 hover:underline"
+      >
+        Dismiss
+      </button>
+    </div>
   );
 }
 
