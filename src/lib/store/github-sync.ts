@@ -23,6 +23,8 @@ import {
 const CONFIG_KEY = "flashycardy.sync";
 const SHA_KEY = "flashycardy.sync.sha";
 const LAST_SYNCED_KEY = "flashycardy.sync.lastSyncedAt";
+/** Web Locks name holding pushes to one tab at a time. */
+const SYNC_LOCK = "flashycardy.sync.push";
 const PUSH_DEBOUNCE_MS = 3000;
 const API = "https://api.github.com";
 
@@ -215,16 +217,58 @@ export async function pull(config: SyncConfig): Promise<PullResult> {
 }
 
 /**
+ * Whether two serialized documents hold the same decks and cards.
+ *
+ * `mutatedAt` and `deviceId` are bookkeeping — they move whenever any tab
+ * touches the document — so comparing whole files would call two copies of
+ * identical data different. The id counters are left out for the same reason:
+ * they only ever drift upward, and the next push carries the higher one.
+ */
+function sameContent(a: SerializedDbDoc, b: SerializedDbDoc): boolean {
+  return (
+    JSON.stringify(a.decks) === JSON.stringify(b.decks) &&
+    JSON.stringify(a.cards) === JSON.stringify(b.cards)
+  );
+}
+
+/**
+ * Run `work` with no other tab pushing at the same time.
+ *
+ * Two tabs reading the same SHA and then both writing is a genuine race: the
+ * first wins and the second is rejected, even when they hold identical data.
+ * Holding a lock across the whole read-modify-write closes that window, since
+ * the second tab re-reads the SHA only after the first has finished.
+ *
+ * Best effort — where the Web Locks API is missing the work simply runs, and
+ * the conflict handling below still catches the race after the fact.
+ */
+async function withSyncLock<T>(work: () => Promise<T>): Promise<T> {
+  const locks =
+    typeof navigator !== "undefined" ? navigator.locks : undefined;
+  if (!locks) return work();
+  return await locks.request(SYNC_LOCK, async () => await work());
+}
+
+/**
  * Write the current document. Returns `"conflict"` when the remote file changed
  * since our last read, rather than overwriting it.
  */
-export async function push(
+export function push(
   config: SyncConfig,
   options: { force?: boolean } = {},
 ): Promise<"ok" | "conflict"> {
-  const doc = getSnapshot();
-  const json = JSON.stringify(serializeDoc(doc), null, 2);
+  return withSyncLock(() => pushLocked(config, options));
+}
 
+async function pushLocked(
+  config: SyncConfig,
+  options: { force?: boolean },
+): Promise<"ok" | "conflict"> {
+  const doc = getSnapshot();
+  const serialized = serializeDoc(doc);
+  const json = JSON.stringify(serialized, null, 2);
+
+  // Read inside the lock: another tab may have pushed while this one queued.
   let sha = getSha();
   if (options.force) {
     // Re-read so we overwrite whatever is actually there now.
@@ -247,13 +291,56 @@ export async function push(
 
   // 409 is the documented conflict; 422 is what you get when the supplied SHA
   // is stale or when a SHA was required but omitted.
-  if (response.status === 409 || response.status === 422) return "conflict";
+  if (response.status === 409 || response.status === 422) {
+    // A rejection where the remote already holds exactly this data is
+    // bookkeeping, not a disagreement — another writer got there first with the
+    // same content. Take its SHA and carry on, rather than asking the user to
+    // choose between two identical versions.
+    const meta = await fetchMeta(config);
+    if (meta) {
+      try {
+        const remote = JSON.parse(
+          await fetchBlob(config, meta.sha),
+        ) as SerializedDbDoc;
+        if (sameContent(remote, serialized)) {
+          setSha(meta.sha);
+          markSynced();
+          return "ok";
+        }
+      } catch {
+        // Unreadable or unparseable remote: fall through and let the user decide.
+      }
+    }
+    return "conflict";
+  }
   if (!response.ok) throw new Error(await describe(response));
 
   const body = (await response.json()) as { content: { sha: string } };
   setSha(body.content.sha);
   markSynced();
   return "ok";
+}
+
+/**
+ * Push because the user asked, reporting through the same state the background
+ * sync uses.
+ *
+ * Pushing directly would leave the state untouched, so a conflict raised from
+ * the Settings button told the user to choose a version "below" while the
+ * buttons that offer that choice — which render off the conflict state — never
+ * appeared.
+ */
+export async function syncNow(config: SyncConfig): Promise<"ok" | "conflict"> {
+  const result = await push(config);
+  if (result === "conflict") {
+    setState(
+      "conflict",
+      "This file changed on GitHub since this device last synced.",
+    );
+  } else {
+    setState("idle");
+  }
+  return result;
 }
 
 /** Fetch the remote document during conflict resolution. */

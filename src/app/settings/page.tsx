@@ -35,7 +35,7 @@ import {
   getSyncConfig,
   getSyncError,
   getSyncState,
-  push,
+  syncNow,
   resolveWithLocal,
   resolveWithRemote,
   setSyncConfig,
@@ -118,7 +118,7 @@ export default function SettingsPage() {
     setMessage(null);
     try {
       flushPush();
-      const result = await push(active);
+      const result = await syncNow(active);
       setMessage(
         result === "conflict"
           ? "The file changed on GitHub. Choose which version to keep below."
