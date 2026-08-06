@@ -55,6 +55,10 @@ export function draftFromCard(card: CardRow): CardDraft {
 }
 
 export function isBlank(html: string): boolean {
+  // Embedded media counts as content even though it carries no text. A question
+  // that is nothing but a screenshot is perfectly valid — most of a maths deck
+  // looks like that — and rejecting it as empty made picture cards unaddable.
+  if (/<(?:img|video|audio)\b/i.test(html)) return false;
   return html.replace(/<[^>]*>/g, "").trim().length === 0;
 }
 

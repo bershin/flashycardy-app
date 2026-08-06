@@ -71,6 +71,55 @@ function ToolbarButton({
 const MAX_IMAGE_EDGE = 1600;
 const IMAGE_QUALITY = 0.85;
 
+/**
+ * How large a single encoded image may be, counted in characters of its base64
+ * data URL. Comfortably under the per-field limit in `deck/actions.ts`, so a
+ * card can hold several images without the save being rejected.
+ */
+const IMAGE_BUDGET = 400_000;
+
+/**
+ * Encode a canvas, preferring WebP.
+ *
+ * WebP keeps transparency *and* compresses screenshots to a fraction of PNG.
+ * That combination matters: the old code kept PNG sources as PNG to preserve
+ * the alpha channel, but `toDataURL` ignores the quality argument for PNG
+ * because PNG is lossless — so a pasted screenshot came through at full size
+ * and was rejected by the save.
+ */
+function encodeCanvas(
+  canvas: HTMLCanvasElement,
+  quality: number,
+  sourceType: string,
+): string {
+  const webp = canvas.toDataURL("image/webp", quality);
+  if (webp.startsWith("data:image/webp")) return webp;
+
+  // A browser that cannot write WebP quietly hands back PNG instead, so fall
+  // back explicitly — to PNG where transparency might matter, JPEG otherwise.
+  const fallback = sourceType === "image/png" ? "image/png" : "image/jpeg";
+  return canvas.toDataURL(fallback, quality);
+}
+
+function renderAt(
+  image: HTMLImageElement,
+  edge: number,
+  quality: number,
+  sourceType: string,
+): string | null {
+  const scale = Math.min(1, edge / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  return encodeCanvas(canvas, quality, sourceType);
+}
+
 function downscaleImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -89,31 +138,22 @@ function downscaleImage(file: File): Promise<string> {
       // than losing the user's paste.
       image.onerror = () => resolve(dataUrl);
       image.onload = () => {
-        const scale = Math.min(
-          1,
-          MAX_IMAGE_EDGE / Math.max(image.width, image.height),
-        );
-        if (scale === 1 && file.size < 512 * 1024) {
-          resolve(dataUrl);
-          return;
+        let best = dataUrl;
+        let edge = MAX_IMAGE_EDGE;
+        let quality = IMAGE_QUALITY;
+
+        // Give up dimensions and quality only as far as the budget demands. A
+        // screenshot almost always fits on the first pass; a photograph off a
+        // phone may take one or two more.
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const encoded = renderAt(image, edge, quality, file.type);
+          if (encoded !== null && encoded.length < best.length) best = encoded;
+          if (best.length <= IMAGE_BUDGET) break;
+          edge = Math.round(edge * 0.75);
+          quality = Math.max(0.5, quality - 0.1);
         }
 
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(image.width * scale);
-        canvas.height = Math.round(image.height * scale);
-
-        const context = canvas.getContext("2d");
-        if (!context) {
-          resolve(dataUrl);
-          return;
-        }
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-        // PNGs with transparency have to stay PNG; everything else compresses
-        // far better as JPEG.
-        const type = file.type === "image/png" ? "image/png" : "image/jpeg";
-        const resized = canvas.toDataURL(type, IMAGE_QUALITY);
-        resolve(resized.length < dataUrl.length ? resized : dataUrl);
+        resolve(best);
       };
       image.src = dataUrl;
     };

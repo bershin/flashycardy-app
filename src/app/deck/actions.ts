@@ -18,6 +18,19 @@ import {
   bulkInsertCards,
 } from "@/db/queries/cards";
 
+/**
+ * Ceiling on one side of a card, in characters of HTML.
+ *
+ * Images live inline as base64, so this is really an image budget. It was
+ * 500,000, which a single pasted screenshot could exceed on its own — the save
+ * then failed with nothing to explain why. The editor now targets 400,000 per
+ * image, so this leaves room for several on one side while still keeping
+ * `data.json` a sane size to sync.
+ */
+const MAX_FIELD = 2_000_000;
+const TOO_LARGE =
+  "This side of the card is too large. Try fewer or smaller images.";
+
 const cardTypeSchema = z.enum(["basic", "quiz"]);
 const scheduleSchema = z.enum(["incremental", "weekly"]);
 
@@ -32,8 +45,8 @@ const quizSchema = z.object({
  */
 const cardContentSchema = z
   .object({
-    front: z.string().min(1, "Front is required").max(500_000),
-    back: z.string().max(500_000),
+    front: z.string().min(1, "Front is required").max(MAX_FIELD, TOO_LARGE),
+    back: z.string().max(MAX_FIELD, TOO_LARGE),
     type: cardTypeSchema.default("basic"),
     schedule: scheduleSchema.default("incremental"),
     quiz: quizSchema.optional(),

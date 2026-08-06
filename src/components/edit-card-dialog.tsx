@@ -59,8 +59,14 @@ export function EditCardDialog({
       try {
         await updateCardAction({ cardId: card.id, ...draftToInput(draft) });
         onOpenChange(false);
-      } catch {
-        setError("Failed to update card. Please try again.");
+      } catch (error) {
+        // See `add-card-dialog.tsx`: the real message matters, because the
+        // common failure is a size limit that no amount of retrying clears.
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Failed to update card. Please try again.",
+        );
       }
     });
   }

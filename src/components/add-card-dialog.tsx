@@ -54,8 +54,15 @@ export function AddCardDialog({
         await addCardAction({ deckId, ...draftToInput(draft) });
         setDraft(emptyDraft());
         onOpenChange(false);
-      } catch {
-        setError("Failed to add card. Please try again.");
+      } catch (error) {
+        // Show what actually failed. The usual cause is the size limit, and
+        // "try again" is useless advice for a card that can only fail the
+        // same way every time.
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Failed to add card. Please try again.",
+        );
       }
     });
   }
