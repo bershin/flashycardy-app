@@ -13,6 +13,7 @@ import {
   List,
   ListOrdered,
   Code,
+  SquareCode,
   Heading2,
   ImagePlus,
   Undo,
@@ -226,12 +227,22 @@ function Toolbar({ editor }: { editor: Editor }) {
       >
         <ListOrdered className="size-3.5" />
       </ToolbarButton>
+      {/* Inline code sits next to the block form because the two are easy to
+          confuse: this one highlights a word mid-sentence, the other takes a
+          whole paragraph. */}
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleCode().run()}
+        active={editor.isActive("code")}
+        title="Inline code (⌘E)"
+      >
+        <Code className="size-3.5" />
+      </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         active={editor.isActive("codeBlock")}
         title="Code block"
       >
-        <Code className="size-3.5" />
+        <SquareCode className="size-3.5" />
       </ToolbarButton>
 
       <div className="mx-1 h-4 w-px bg-border" />
