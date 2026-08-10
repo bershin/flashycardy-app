@@ -18,7 +18,9 @@ import {
   BookOpen,
   Volume2,
   VolumeX,
+  Pencil,
 } from "lucide-react";
+import { EditCardDialog } from "@/components/edit-card-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { accentStyle } from "@/lib/deck-accent";
@@ -97,6 +99,7 @@ export function StudySession({
     () => new Map(initialDurations ?? []),
   );
   const [round, setRound] = useState(initialRound);
+  const [editOpen, setEditOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   /** Read straight from localStorage — it is browser state, not session state. */
   const soundOn = useSyncExternalStore(
@@ -115,7 +118,9 @@ export function StudySession({
   const timer = useCardTimer({
     cardId: current?.id,
     priorMs: current ? (durations.get(current.id) ?? 0) : 0,
-    running: !finished && current !== undefined && !revealed,
+    // Paused while correcting the card: the clock is there to pace recall, and
+    // time spent fixing a typo is not time spent trying to remember.
+    running: !finished && current !== undefined && !revealed && !editOpen,
   });
   const readElapsed = timer.read;
 
@@ -292,11 +297,20 @@ export function StudySession({
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Never steal keys from somewhere the user is typing. `isContentEditable`
+      // matters as much as the input checks: the card editor is a
+      // contenteditable div, so without it a space typed while correcting a
+      // card would flip the card behind the dialog, and a "2" would rate it.
       if (
         e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
       )
         return;
+
+      // The dialog also carries buttons and a type picker, which take focus
+      // without being editable.
+      if (editOpen) return;
 
       // Quiz cards are answered in their own surface, so the flip and
       // self-rate shortcuts would either do nothing or record a rating the
@@ -329,7 +343,7 @@ export function StudySession({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [reveal, goPrev, rate, finished, revealed, interactive]);
+  }, [reveal, goPrev, rate, finished, revealed, interactive, editOpen]);
 
   if (finished) {
     const scorePercent =
@@ -554,6 +568,15 @@ export function StudySession({
               {soundOn ? "Mute timer chimes" : "Unmute timer chimes"}
             </span>
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setEditOpen(true)}
+            title="Edit this card"
+          >
+            <Pencil className="size-3.5" />
+            Edit
+          </Button>
           <Button variant="ghost" size="sm" onClick={shuffleCurrent}>
             <Shuffle className="size-3.5" />
             Shuffle
@@ -700,6 +723,23 @@ export function StudySession({
             to go back
           </p>
         </div>
+      )}
+
+      {/* Correcting a card mid-session. The session keeps its own working list,
+          so the saved card is written back into it — otherwise the fix would be
+          stored but the card in front of you would still show the mistake.
+          Position, ratings, times and the shuffled order are all untouched. */}
+      {current && (
+        <EditCardDialog
+          card={current}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSaved={(saved) =>
+            setStudyCards((list) =>
+              list.map((c) => (c.id === saved.id ? saved : c)),
+            )
+          }
+        />
       )}
     </div>
   );

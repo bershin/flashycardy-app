@@ -30,6 +30,12 @@ interface EditCardDialogProps {
    * card you asked to clone reads like the clone didn't work.
    */
   mode?: "edit" | "clone";
+  /**
+   * The saved card, for callers holding their own copy of it. The study session
+   * keeps its own working list, so without this a correction made mid-session
+   * wouldn't show up on the card in front of you.
+   */
+  onSaved?: (card: CardRow) => void;
 }
 
 export function EditCardDialog({
@@ -37,6 +43,7 @@ export function EditCardDialog({
   open,
   onOpenChange,
   mode = "edit",
+  onSaved,
 }: EditCardDialogProps) {
   const [draft, setDraft] = useState<CardDraft>(() => draftFromCard(card));
   const [isPending, startTransition] = useTransition();
@@ -64,7 +71,11 @@ export function EditCardDialog({
 
     startTransition(async () => {
       try {
-        await updateCardAction({ cardId: card.id, ...draftToInput(draft) });
+        const updated = await updateCardAction({
+          cardId: card.id,
+          ...draftToInput(draft),
+        });
+        if (updated) onSaved?.(updated);
         onOpenChange(false);
       } catch (error) {
         // See `add-card-dialog.tsx`: the real message matters, because the
