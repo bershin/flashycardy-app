@@ -3,7 +3,11 @@
 import { useCallback, useState } from "react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
-import { dueCutoff, selectDecksWithCardsByUser } from "@/lib/store/selectors";
+import {
+  dueCutoff,
+  tomorrowCutoff,
+  selectDecksWithCardsByUser,
+} from "@/lib/store/selectors";
 import type { DbDoc } from "@/lib/store/types";
 import { CreateDeckButton } from "./create-deck-button";
 import { DeckSearchControl } from "./deck-search-control";
@@ -26,12 +30,19 @@ export default function DashboardPage() {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const cutoff = dueCutoff();
+    const nextCutoff = tomorrowCutoff();
     const totalCards = deck.cards.length;
     // Archived cards are retired: they stay browsable and can be studied
     // deliberately, but they must never nag from the dashboard.
     const dueCount = deck.isArchive
       ? 0
       : deck.cards.filter((c) => c.nextReviewAt < cutoff).length;
+    // What lands tomorrow, so a quiet evening isn't mistaken for a quiet week.
+    const tomorrowCount = deck.isArchive
+      ? 0
+      : deck.cards.filter(
+          (c) => c.nextReviewAt >= cutoff && c.nextReviewAt < nextCutoff,
+        ).length;
     const studiedToday =
       !deck.isArchive &&
       deck.lastStudiedAt !== null &&
@@ -42,6 +53,7 @@ export default function DashboardPage() {
       updatedAtFormatted: deck.updatedAt.toLocaleDateString("en-US"),
       totalCards,
       dueCount,
+      tomorrowCount,
       studiedToday,
       childCount: deck.childCount,
     };

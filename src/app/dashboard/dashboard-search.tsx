@@ -80,6 +80,7 @@ interface DeckWithCards {
   cards: CardData[];
   totalCards: number;
   dueCount: number;
+  tomorrowCount: number;
   studiedToday: boolean;
   childCount: number;
   isArchive: boolean;
@@ -266,6 +267,7 @@ export function DashboardSearch({ decks, query }: DashboardSearchProps) {
                   updatedAtFormatted: deck.updatedAtFormatted,
                   totalCards: deck.totalCards,
                   dueCount: deck.dueCount,
+                  tomorrowCount: deck.tomorrowCount,
                   studiedToday: deck.studiedToday,
                   childCount: deck.childCount,
                   isArchive: deck.isArchive,
@@ -308,6 +310,7 @@ export function DashboardSearch({ decks, query }: DashboardSearchProps) {
                       updatedAtFormatted: deck.updatedAtFormatted,
                       totalCards: deck.totalCards,
                       dueCount: deck.dueCount,
+                      tomorrowCount: deck.tomorrowCount,
                       studiedToday: deck.studiedToday,
                       childCount: deck.childCount,
                       isArchive: deck.isArchive,

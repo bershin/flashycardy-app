@@ -7,6 +7,7 @@ import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import {
   dueCutoff,
+  tomorrowCutoff,
   isArchiveDeck,
   selectCardsByDeckForUser,
   selectChildDecksWithCards,
@@ -104,11 +105,17 @@ function DeckPageContent() {
             const startOfToday = new Date();
             startOfToday.setHours(0, 0, 0, 0);
             const cutoff = dueCutoff();
+            const nextCutoff = tomorrowCutoff();
             const totalCards = child.cards.length;
             // Archived cards are retired — no due prompts here either.
             const dueCount = isArchive
               ? 0
               : child.cards.filter((c) => c.nextReviewAt < cutoff).length;
+            const tomorrowCount = isArchive
+              ? 0
+              : child.cards.filter(
+                  (c) => c.nextReviewAt >= cutoff && c.nextReviewAt < nextCutoff,
+                ).length;
             const studiedToday =
               !isArchive &&
               child.lastStudiedAt !== null &&
@@ -121,6 +128,7 @@ function DeckPageContent() {
               updatedAtFormatted: child.updatedAt.toLocaleDateString("en-US"),
               totalCards,
               dueCount,
+              tomorrowCount,
               studiedToday,
               isArchive,
             };

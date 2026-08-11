@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Archive, BookOpen, CheckCircle, CircleCheckBig, Pencil, Trash2 } from "lucide-react";
+import { Archive, BookOpen, CalendarClock, CheckCircle, CircleCheckBig, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,6 +34,7 @@ interface ChildDeckCardProps {
     updatedAtFormatted: string;
     totalCards: number;
     dueCount: number;
+    tomorrowCount: number;
     studiedToday: boolean;
     isArchive?: boolean;
   };
@@ -107,6 +108,13 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                   All caught up
                 </span>
               ))}
+            {/* Tomorrow's load, same as on the dashboard. */}
+            {!deck.isArchive && deck.tomorrowCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300">
+                <CalendarClock className="size-3" />
+                {deck.tomorrowCount} tomorrow
+              </span>
+            )}
           </div>
         </CardFooter>
       </Card>

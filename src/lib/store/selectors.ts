@@ -355,6 +355,18 @@ export function dueCutoff(): Date {
   return cutoff;
 }
 
+/**
+ * The far edge of "due tomorrow" — the start of the day after next.
+ *
+ * A card counts as tomorrow's when it falls between {@link dueCutoff} and this,
+ * so tomorrow's number never double-counts anything already due today.
+ */
+export function tomorrowCutoff(): Date {
+  const cutoff = startOfDay(new Date());
+  cutoff.setDate(cutoff.getDate() + 2);
+  return cutoff;
+}
+
 /** Cards whose next review falls today or earlier. */
 export function selectDueCardsByDeckForUser(
   db: DbDoc,

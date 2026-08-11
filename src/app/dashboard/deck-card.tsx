@@ -3,7 +3,16 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, BookOpen, CheckCircle, CircleCheckBig, Layers, Pencil, Trash2 } from "lucide-react";
+import {
+  Archive,
+  BookOpen,
+  CalendarClock,
+  CheckCircle,
+  CircleCheckBig,
+  Layers,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,6 +44,7 @@ interface DeckCardProps {
     updatedAtFormatted: string;
     totalCards: number;
     dueCount: number;
+    tomorrowCount: number;
     studiedToday: boolean;
     childCount: number;
     isArchive: boolean;
@@ -142,6 +152,17 @@ export function DeckCard({ deck }: DeckCardProps) {
                 </span>
               )
               )
+            )}
+            {/* Tomorrow's workload, stated quietly beside today's. Deliberately
+                not a button: it is a heads-up, not something to act on yet. */}
+            {!deck.isArchive && deck.tomorrowCount > 0 && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300"
+                title={`${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow`}
+              >
+                <CalendarClock className="size-3" />
+                {deck.tomorrowCount} tomorrow
+              </span>
             )}
           </div>
         </CardFooter>

@@ -27,6 +27,7 @@ interface ChildDeck {
   updatedAtFormatted: string;
   totalCards: number;
   dueCount: number;
+  tomorrowCount: number;
   studiedToday: boolean;
   isArchive?: boolean;
 }
