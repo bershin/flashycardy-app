@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  CalendarDays,
   Check,
   CloudOff,
   Moon,
@@ -58,6 +59,20 @@ export function AppChrome() {
       <TabNotice />
       <header className="flex items-center justify-end gap-2 p-4">
         <SyncIndicator />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Link
+                href="/calendar"
+                aria-label="Review calendar"
+                className={buttonVariants({ variant: "ghost", size: "icon" })}
+              >
+                <CalendarDays className="size-4" />
+              </Link>
+            }
+          />
+          <TooltipContent>Review calendar</TooltipContent>
+        </Tooltip>
         <ThemeToggle />
         <Tooltip>
           <TooltipTrigger
