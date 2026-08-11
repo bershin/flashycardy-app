@@ -24,7 +24,6 @@ interface ChildDeck {
   id: number;
   title: string;
   description: string | null;
-  updatedAtFormatted: string;
   totalCards: number;
   dueCount: number;
   tomorrowCount: number;

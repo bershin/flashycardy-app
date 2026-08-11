@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
 import { ProgressRing } from "@/components/progress-ring";
+import { badgeClass } from "@/components/deck-badge";
 import { accentStyle } from "@/lib/deck-accent";
 import { deleteDeckAction } from "./actions";
 
@@ -41,7 +42,6 @@ interface DeckCardProps {
     id: number;
     title: string;
     description: string | null;
-    updatedAtFormatted: string;
     totalCards: number;
     dueCount: number;
     tomorrowCount: number;
@@ -104,30 +104,37 @@ export function DeckCard({ deck }: DeckCardProps) {
             </div>
           </CardHeader>
         </Link>
-        <CardFooter className="relative flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-muted-foreground">
-              Updated {deck.updatedAtFormatted}
-            </p>
+        <CardFooter className="relative flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             {deck.childCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
-                <Layers className="size-3" />
-                {deck.childCount} sub-deck{deck.childCount === 1 ? "" : "s"}
+              <span className={badgeClass("muted")}>
+                <Layers className="size-3.5" />
+                <span>
+                  <span className="font-semibold tabular-nums">
+                    {deck.childCount}
+                  </span>{" "}
+                  sub-deck{deck.childCount === 1 ? "" : "s"}
+                </span>
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             {deck.studiedToday && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-600 dark:text-violet-400">
-                <CircleCheckBig className="size-3" />
+              <span className={badgeClass("studied")}>
+                <CircleCheckBig className="size-3.5" />
                 Studied today
               </span>
             )}
             {deck.isArchive ? (
               deck.totalCards > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
-                  <Archive className="size-3" />
-                  {deck.totalCards} learned
+                <span className={badgeClass("muted")}>
+                  <Archive className="size-3.5" />
+                  <span>
+                    <span className="font-semibold tabular-nums">
+                      {deck.totalCards}
+                    </span>{" "}
+                    learned
+                  </span>
                 </span>
               )
             ) : (
@@ -140,14 +147,22 @@ export function DeckCard({ deck }: DeckCardProps) {
                       ? router.push(`/deck?id=${deck.id}`)
                       : router.push(`/deck/study?id=${deck.id}`)
                   }
-                  className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                  className={badgeClass(
+                    "due",
+                    "cursor-pointer transition-colors hover:bg-amber-500/25 dark:hover:bg-amber-400/25",
+                  )}
                 >
-                  <BookOpen className="size-3" />
-                  {deck.dueCount} due
+                  <BookOpen className="size-3.5" />
+                  <span>
+                    <span className="font-semibold tabular-nums">
+                      {deck.dueCount}
+                    </span>{" "}
+                    due
+                  </span>
                 </button>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle className="size-3" />
+                <span className={badgeClass("done")}>
+                  <CheckCircle className="size-3.5" />
                   All caught up
                 </span>
               )
@@ -157,11 +172,16 @@ export function DeckCard({ deck }: DeckCardProps) {
                 not a button: it is a heads-up, not something to act on yet. */}
             {!deck.isArchive && deck.tomorrowCount > 0 && (
               <span
-                className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300"
+                className={badgeClass("tomorrow")}
                 title={`${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow`}
               >
-                <CalendarClock className="size-3" />
-                {deck.tomorrowCount} tomorrow
+                <CalendarClock className="size-3.5" />
+                <span>
+                  <span className="font-semibold tabular-nums">
+                    {deck.tomorrowCount}
+                  </span>{" "}
+                  tomorrow
+                </span>
               </span>
             )}
           </div>

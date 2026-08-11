@@ -125,7 +125,6 @@ function DeckPageContent() {
               id: child.id,
               title: child.title,
               description: child.description,
-              updatedAtFormatted: child.updatedAt.toLocaleDateString("en-US"),
               totalCards,
               dueCount,
               tomorrowCount,

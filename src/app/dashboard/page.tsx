@@ -50,7 +50,6 @@ export default function DashboardPage() {
 
     return {
       ...deck,
-      updatedAtFormatted: deck.updatedAt.toLocaleDateString("en-US"),
       totalCards,
       dueCount,
       tomorrowCount,

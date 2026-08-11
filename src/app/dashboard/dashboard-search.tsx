@@ -76,7 +76,6 @@ interface DeckWithCards {
   id: number;
   title: string;
   description: string | null;
-  updatedAtFormatted: string;
   cards: CardData[];
   totalCards: number;
   dueCount: number;
@@ -264,7 +263,6 @@ export function DashboardSearch({ decks, query }: DashboardSearchProps) {
                   id: deck.id,
                   title: deck.title,
                   description: deck.description,
-                  updatedAtFormatted: deck.updatedAtFormatted,
                   totalCards: deck.totalCards,
                   dueCount: deck.dueCount,
                   tomorrowCount: deck.tomorrowCount,
@@ -307,8 +305,7 @@ export function DashboardSearch({ decks, query }: DashboardSearchProps) {
                       id: deck.id,
                       title: deck.title,
                       description: deck.description,
-                      updatedAtFormatted: deck.updatedAtFormatted,
-                      totalCards: deck.totalCards,
+                          totalCards: deck.totalCards,
                       dueCount: deck.dueCount,
                       tomorrowCount: deck.tomorrowCount,
                       studiedToday: deck.studiedToday,

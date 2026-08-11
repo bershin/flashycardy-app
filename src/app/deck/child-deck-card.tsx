@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Archive, BookOpen, CalendarClock, CheckCircle, CircleCheckBig, Pencil, Trash2 } from "lucide-react";
+import { badgeClass } from "@/components/deck-badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,7 +32,6 @@ interface ChildDeckCardProps {
     id: number;
     title: string;
     description: string | null;
-    updatedAtFormatted: string;
     totalCards: number;
     dueCount: number;
     tomorrowCount: number;
@@ -74,22 +74,24 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
             )}
           </CardHeader>
         </Link>
-        <CardFooter className="relative flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            Updated {deck.updatedAtFormatted}
-          </p>
-          <div className="flex items-center gap-2">
+        <CardFooter className="relative flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             {deck.studiedToday && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-600 dark:text-violet-400">
-                <CircleCheckBig className="size-3" />
+              <span className={badgeClass("studied")}>
+                <CircleCheckBig className="size-3.5" />
                 Studied today
               </span>
             )}
             {deck.isArchive
               ? deck.totalCards > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
-                    <Archive className="size-3" />
-                    {deck.totalCards} learned
+                  <span className={badgeClass("muted")}>
+                    <Archive className="size-3.5" />
+                    <span>
+                      <span className="font-semibold tabular-nums">
+                        {deck.totalCards}
+                      </span>{" "}
+                      learned
+                    </span>
                   </span>
                 )
               : deck.totalCards > 0 &&
@@ -97,22 +99,35 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                 <button
                   type="button"
                   onClick={() => router.push(`/deck/study?id=${deck.id}`)}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                  className={badgeClass(
+                    "due",
+                    "cursor-pointer transition-colors hover:bg-amber-500/25 dark:hover:bg-amber-400/25",
+                  )}
                 >
-                  <BookOpen className="size-3" />
-                  {deck.dueCount} due
+                  <BookOpen className="size-3.5" />
+                  <span>
+                    <span className="font-semibold tabular-nums">
+                      {deck.dueCount}
+                    </span>{" "}
+                    due
+                  </span>
                 </button>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle className="size-3" />
+                <span className={badgeClass("done")}>
+                  <CheckCircle className="size-3.5" />
                   All caught up
                 </span>
               ))}
             {/* Tomorrow's load, same as on the dashboard. */}
             {!deck.isArchive && deck.tomorrowCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300">
-                <CalendarClock className="size-3" />
-                {deck.tomorrowCount} tomorrow
+              <span className={badgeClass("tomorrow")}>
+                <CalendarClock className="size-3.5" />
+                <span>
+                  <span className="font-semibold tabular-nums">
+                    {deck.tomorrowCount}
+                  </span>{" "}
+                  tomorrow
+                </span>
               </span>
             )}
           </div>
