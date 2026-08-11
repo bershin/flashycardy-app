@@ -11,6 +11,7 @@ import {
 } from "./local-store";
 import type { DbDoc } from "./types";
 import { startSync } from "./github-sync";
+import { requestPersistenceOnce } from "@/lib/storage-persistence";
 
 /**
  * Boot the local store and the GitHub sync loop. Mounted once, from the root
@@ -22,6 +23,10 @@ export function useStoreBootstrap() {
     let disposeSync: (() => void) | undefined;
     void init().then(() => {
       disposeSync = startSync();
+      // Asked after the database is open, not before: by then the visit looks
+      // like real use rather than a drive-by, which is what the browser weighs
+      // when deciding whether to honour the request.
+      void requestPersistenceOnce();
     });
     return () => disposeSync?.();
   }, []);

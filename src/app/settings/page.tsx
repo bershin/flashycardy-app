@@ -2,8 +2,14 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { Download, Upload } from "lucide-react";
+import { Download, ShieldAlert, ShieldCheck, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  readStorageStatus,
+  readStorageUsage,
+  requestPersistentStorage,
+  type StorageStatus,
+} from "@/lib/storage-persistence";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -76,6 +82,8 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const [storage, setStorage] = useState<StorageStatus>("unsupported");
+  const [usageMb, setUsageMb] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // localStorage is browser-only, so everything is read after mount.
@@ -84,6 +92,10 @@ export default function SettingsPage() {
     setKey(getOpenAIKey() ?? "");
     setModel(getOpenAIModel());
     setLastSynced(getLastSyncedAt());
+    void readStorageStatus().then(setStorage);
+    void readStorageUsage().then((bytes) =>
+      setUsageMb(bytes === null ? null : bytes / 1024 / 1024),
+    );
   }, []);
 
   const serialized = JSON.stringify(serializeDoc(doc));
@@ -344,6 +356,57 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold">Storage on this device</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Your decks are read from this browser and only synced to GitHub. A
+          browser may clear a site&apos;s storage to reclaim space, or after a
+          stretch without a visit — which would take your sync token with it.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {storage === "persistent" ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/25 ring-inset dark:text-emerald-300">
+              <ShieldCheck className="size-3.5" />
+              Kept — this browser won&apos;t clear it on its own
+            </span>
+          ) : storage === "evictable" ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-500/25 ring-inset dark:text-amber-300">
+                <ShieldAlert className="size-3.5" />
+                Treated as temporary
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  const next = await requestPersistentStorage();
+                  setStorage(next);
+                  setMessage(
+                    next === "persistent"
+                      ? "This browser will now keep your decks."
+                      : "The browser declined for now. Adding Cue to your home screen usually changes its mind.",
+                  );
+                  setBusy(false);
+                }}
+              >
+                Ask the browser to keep it
+              </Button>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              This browser doesn&apos;t report a storage policy.
+            </span>
+          )}
+          {usageMb !== null && (
+            <span className="text-xs text-muted-foreground">
+              {usageMb.toFixed(1)} MB used on this device
+            </span>
+          )}
+        </div>
       </section>
 
       <section className="mt-8">
