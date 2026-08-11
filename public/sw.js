@@ -27,8 +27,20 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+/**
+ * Development builds serve assets under stable filenames, so caching them
+ * first would pin the app to whatever was built when the worker installed —
+ * every edit afterwards appears to have no effect. Production filenames are
+ * content-hashed, so there the cache is safe and useful.
+ */
+const IS_DEV =
+  self.location.hostname === "localhost" ||
+  self.location.hostname === "127.0.0.1";
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
+
+  if (IS_DEV) return;
 
   // Only GETs are cacheable, and only our own origin. In particular this must
   // never touch api.github.com or api.openai.com — a stale sync response would
@@ -43,7 +55,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       (async () => {
         try {
-          const response = await fetch(request);
+          // `no-cache` revalidates with the server rather than accepting the
+          // browser's copy. The host serves this HTML with max-age=600, so
+          // without it a deploy stayed invisible for ten minutes: the stale
+          // page named the old chunks, and those were cached too. This is a
+          // conditional request, so an unchanged page still costs almost
+          // nothing.
+          const response = await fetch(request, { cache: "no-cache" });
           const cache = await caches.open(CACHE);
           cache.put(request, response.clone());
           return response;

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Archive, BookOpen, CalendarClock, CheckCircle, CircleCheckBig, Pencil, Trash2 } from "lucide-react";
+import { Archive, BookOpen, CalendarClock, ChevronRight, CheckCircle, CircleCheckBig, Pencil, Trash2 } from "lucide-react";
 import { badgeClass } from "@/components/deck-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -101,8 +101,13 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                   onClick={() => router.push(`/deck/study?id=${deck.id}`)}
                   className={badgeClass(
                     "due",
-                    "cursor-pointer transition-colors hover:bg-amber-500/25 dark:hover:bg-amber-400/25",
+                    // Reads as a control rather than a label: it lifts on hover,
+                    // presses on click, and the chevron nudges toward where it
+                    // goes. Keyboard users get an outline rather than a ring,
+                    // since the pill's own ring is inset and would be hidden.
+                    "group/due cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-amber-500/25 hover:shadow-md hover:shadow-amber-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:hover:bg-amber-400/25",
                   )}
+                  aria-label={`Study ${deck.dueCount} cards due in ${deck.title}`}
                 >
                   <BookOpen className="size-3.5" />
                   <span>
@@ -111,6 +116,7 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                     </span>{" "}
                     due
                   </span>
+                  <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/due:translate-x-0.5 group-hover/due:opacity-100" />
                 </button>
               ) : (
                 <span className={badgeClass("done")}>
