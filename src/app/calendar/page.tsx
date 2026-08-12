@@ -585,7 +585,7 @@ export default function CalendarPage() {
                       onClick={() =>
                         selectDay(active ? null : day.key, band.id)
                       }
-                      className={`flex flex-1 items-center justify-center gap-1 leading-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
+                      className={`group/band flex min-w-0 flex-1 items-center justify-center gap-1 px-1 leading-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
                         index > 0 ? "border-t border-current/15" : ""
                       } ${
                         band.count === 0
@@ -598,22 +598,39 @@ export default function CalendarPage() {
                       {/* The letter carries the deck's own colour, so a band is
                           identifiable before the letter is even read. Drawn at
                           the same size as the count: it names which of the two
-                          numbers this is, which is as much of the message. */}
+                          numbers this is, which is as much of the message.
+                          Hovering swaps it for the deck's name — the letter is
+                          a shorthand, and the long form should never be more
+                          than a hover away while it is still being learned. */}
                       <span
-                        className="text-lg font-bold text-[var(--band)] sm:text-2xl"
+                        aria-hidden
+                        // Shrinkable, so a long deck name truncates rather than
+                        // shouldering the count out of the square.
+                        className="min-w-0 shrink font-bold text-[var(--band)]"
                         style={{
                           // Kept legible on the darkest cells, where the accent
                           // alone would sink into the background.
                           textShadow: "0 0 3px rgb(0 0 0 / 0.28)",
                         }}
                       >
-                        {initialFor(band)}
+                        <span className="text-lg group-hover/band:hidden group-focus-visible/band:hidden sm:text-2xl">
+                          {initialFor(band)}
+                        </span>
+                        <span className="hidden max-w-full truncate text-[0.55rem] leading-tight tracking-tight group-hover/band:block group-focus-visible/band:block sm:text-[0.65rem]">
+                          {band.title}
+                        </span>
                       </span>
                       <span className="sr-only">{band.title} </span>
-                      <span aria-hidden className="text-lg opacity-50 sm:text-2xl">
+                      {/* The hyphen stands down while the name is showing: the
+                          square is only so wide, and the name earns the room
+                          more than the separator does. */}
+                      <span
+                        aria-hidden
+                        className="shrink-0 text-lg opacity-50 group-hover/band:hidden group-focus-visible/band:hidden sm:text-2xl"
+                      >
                         -
                       </span>
-                      <span className="text-lg font-bold sm:text-2xl">
+                      <span className="shrink-0 text-lg font-bold sm:text-2xl">
                         {band.count}
                       </span>
                     </button>
