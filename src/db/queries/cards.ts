@@ -398,6 +398,42 @@ export async function moveCards(
   });
 }
 
+/**
+ * Move a batch of cards to a different review day.
+ *
+ * Only `nextReviewAt` moves. The streak, the schedule and the deck are all left
+ * alone, so a rescheduled card resumes its ladder from wherever it was — this
+ * is load-levelling, not a correction to how well the card is known.
+ *
+ * The date is normalised to the start of the day because every count in the app
+ * buckets by day; keeping the original time of day would put a card in the
+ * right cell but sort it oddly within a study session.
+ */
+export async function rescheduleCards(
+  cardIds: number[],
+  userId: string,
+  nextReviewAt: Date,
+) {
+  if (cardIds.length === 0) return [];
+
+  return mutate((draft) => {
+    const day = startOfDay(nextReviewAt);
+    const now = new Date();
+    const wanted = new Set(cardIds);
+    const moved: CardRow[] = [];
+
+    draft.cards = draft.cards.map((card) => {
+      if (!wanted.has(card.id)) return card;
+      if (!ownsCard(draft, card, userId)) return card;
+      const next: CardRow = { ...card, nextReviewAt: day, updatedAt: now };
+      moved.push(next);
+      return next;
+    });
+
+    return moved;
+  });
+}
+
 export async function moveCard(
   cardId: number,
   userId: string,

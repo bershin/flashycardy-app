@@ -16,6 +16,7 @@ import {
   updateCard,
   deleteCard,
   moveCards,
+  rescheduleCards,
   bulkInsertCards,
 } from "@/db/queries/cards";
 
@@ -176,6 +177,34 @@ export async function moveCardsAction(data: MoveCardsInput) {
 
   const moved = await moveCards(parsed.cardIds, userId, parsed.targetDeckId);
   if (moved.length === 0) throw new Error("That deck can't hold cards.");
+  return moved;
+}
+
+const rescheduleCardsSchema = z.object({
+  cardIds: z.array(z.number()).min(1),
+  /** `YYYY-MM-DD`, read as a local day rather than a UTC instant. */
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+type RescheduleCardsInput = z.infer<typeof rescheduleCardsSchema>;
+
+/**
+ * Push a batch of cards onto a different review day.
+ *
+ * The date arrives as `YYYY-MM-DD` and is built with the local-time `Date`
+ * constructor: `new Date("2026-08-21")` parses as midnight UTC, which lands on
+ * the 20th for anyone behind it, silently moving cards to the wrong day.
+ */
+export async function rescheduleCardsAction(data: RescheduleCardsInput) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = rescheduleCardsSchema.parse(data);
+  const [year, month, day] = parsed.date.split("-").map(Number);
+  const target = new Date(year, month - 1, day);
+
+  const moved = await rescheduleCards(parsed.cardIds, userId, target);
+  if (moved.length === 0) throw new Error("Those cards couldn't be moved.");
   return moved;
 }
 

@@ -2,12 +2,21 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import {
+  CalendarArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import { isArchiveDeck, startOfDay } from "@/lib/store/selectors";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
+import {
+  MoveDueCardsDialog,
+  type MovableCard,
+} from "./move-due-cards-dialog";
 
 /** Monday-first, matching how a week is read here. */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -42,10 +51,16 @@ type DeckRef = {
   parentTitle: string | null;
 };
 
-/** One deck's share of a single day. */
+/**
+ * One deck's share of a single day.
+ *
+ * The cards themselves ride along, not just a tally, because the move control
+ * has to name the exact ids it is rescheduling and pick them by streak.
+ */
 type DeckCount = DeckRef & {
   count: number;
   overdue: number;
+  cards: MovableCard[];
 };
 
 function ymd(date: Date): string {
@@ -102,8 +117,16 @@ export default function CalendarPage() {
     setExpanded(false);
   }
 
-  const { days, monthLabel, monthTotal, busiest, max, overdueTotal, byDeck } =
-    useMemo(() => {
+  const {
+    days,
+    monthLabel,
+    monthTotal,
+    busiest,
+    max,
+    overdueTotal,
+    byDeck,
+    counts,
+  } = useMemo(() => {
       const today = startOfDay(new Date());
 
       // Everything already past shows on today, which is where the app will
@@ -128,9 +151,15 @@ export default function CalendarPage() {
           decks = new Map();
           byDeck.set(key, decks);
         }
-        const entry = decks.get(deck.id) ?? { ...deck, count: 0, overdue: 0 };
+        const entry = decks.get(deck.id) ?? {
+          ...deck,
+          count: 0,
+          overdue: 0,
+          cards: [],
+        };
         entry.count += 1;
         if (overdue) entry.overdue += 1;
+        entry.cards.push({ id: card.id, streak: card.consecutiveCorrect });
         decks.set(deck.id, entry);
       }
 
@@ -168,8 +197,26 @@ export default function CalendarPage() {
         null,
       );
 
-      return { days, monthLabel, monthTotal, busiest, max, overdueTotal, byDeck };
+      return {
+        days,
+        monthLabel,
+        monthTotal,
+        busiest,
+        max,
+        overdueTotal,
+        byDeck,
+        counts,
+      };
     }, [cards, deckOf, monthOffset]);
+
+  /**
+   * How many cards a day holds, for any date — including ones off this grid,
+   * which the move dialog can reach with its date field.
+   */
+  const countOn = useCallback(
+    (key: string) => counts.get(key) ?? 0,
+    [counts],
+  );
 
   const selected = selectedKey
     ? (days.find((d) => d.key === selectedKey) ?? null)
@@ -186,6 +233,31 @@ export default function CalendarPage() {
   const visibleDecks = expanded
     ? selectedDecks
     : selectedDecks.slice(0, DECK_LIMIT);
+
+  /**
+   * Where the move dialog opens pointing: the lightest of the next two weeks,
+   * ties going to the earliest. Levelling the load is the reason for the
+   * feature, so the default should be the day that most needs the work.
+   */
+  const suggestedKey = useMemo(() => {
+    if (!selected) return "";
+    let best = "";
+    let bestCount = Infinity;
+    for (let i = 1; i <= 14; i++) {
+      const date = new Date(selected.date);
+      date.setDate(date.getDate() + i);
+      const key = ymd(date);
+      const count = counts.get(key) ?? 0;
+      if (count < bestCount) {
+        best = key;
+        bestCount = count;
+      }
+    }
+    return best;
+  }, [selected, counts]);
+
+  /** The deck row whose Move control is open, or null. */
+  const [moving, setMoving] = useState<DeckCount | null>(null);
 
   /** Moving month keeps no selection: the picked day is no longer on screen. */
   function goToMonth(next: (m: number) => number) {
@@ -374,10 +446,16 @@ export default function CalendarPage() {
 
           <ul className="mt-3 space-y-1">
             {visibleDecks.map((deck) => (
-              <li key={deck.id}>
+              // The Move control is a sibling of the link rather than inside
+              // it: a button nested in an anchor is invalid, and clicking it
+              // would navigate away from the day being rebalanced.
+              <li
+                key={deck.id}
+                className="group flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted"
+              >
                 <Link
                   href={`/deck?id=${deck.id}`}
-                  className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted"
+                  className="flex min-w-0 flex-1 items-center gap-3"
                 >
                   {/* Proportional to the heaviest deck of this day, so the
                       split is legible before the numbers are read. */}
@@ -405,6 +483,15 @@ export default function CalendarPage() {
                     {deck.count}
                   </span>
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => setMoving(deck)}
+                  aria-label={`Move ${deck.title} cards to another day`}
+                  className="shrink-0 cursor-pointer rounded-md border border-border/60 px-2 py-0.5 text-xs font-medium text-muted-foreground hover:border-violet-500 hover:text-foreground"
+                >
+                  <CalendarArrowUp className="mr-1 inline size-3.5" />
+                  Move
+                </button>
               </li>
             ))}
           </ul>
@@ -421,6 +508,30 @@ export default function CalendarPage() {
             </button>
           )}
         </div>
+      )}
+
+      {moving && selected && (
+        <MoveDueCardsDialog
+          // Remounted per deck and day, so the count and destination always
+          // start from this row rather than the last one opened.
+          key={`${selected.key}:${moving.id}`}
+          open={moving !== null}
+          onOpenChange={(open) => !open && setMoving(null)}
+          deckLabel={
+            moving.parentTitle
+              ? `${moving.parentTitle} · ${moving.title}`
+              : moving.title
+          }
+          fromKey={selected.key}
+          fromLabel={selected.date.toLocaleDateString(undefined, {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          })}
+          cards={moving.cards}
+          suggestedKey={suggestedKey}
+          countOn={countOn}
+        />
       )}
 
       <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
