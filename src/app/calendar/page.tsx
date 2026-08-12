@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from "react";
 import Link from "next/link";
 import {
   CalendarArrowUp,
@@ -524,8 +530,7 @@ export default function CalendarPage() {
           // Every deck on this month's grid gets a band, whether or not it has
           // cards today: the bands are how a deck is identified at a glance, so
           // they cannot move about from square to square. A deck with nothing
-          // due shows a dash rather than a nought — nothing to do reads faster
-          // than a zero to interpret.
+          // due reads 0 and is not clickable — there is no list behind it.
           const bands = clickable
             ? monthParents.map((parent) => ({
                 ...parent,
@@ -576,10 +581,11 @@ export default function CalendarPage() {
                           ? `${band.title} — nothing due`
                           : `${band.title} — ${band.count} due. Click for its sub-decks`
                       }
+                      style={{ "--band": accentVar(band.id) } as CSSProperties}
                       onClick={() =>
                         selectDay(active ? null : day.key, band.id)
                       }
-                      className={`flex flex-1 items-center justify-center gap-1.5 leading-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
+                      className={`flex flex-1 items-center justify-center gap-1 leading-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
                         index > 0 ? "border-t border-current/15" : ""
                       } ${
                         band.count === 0
@@ -589,12 +595,26 @@ export default function CalendarPage() {
                             : "cursor-pointer hover:bg-current/5"
                       }`}
                     >
-                      <span className="text-sm font-semibold opacity-60 sm:text-base">
+                      {/* The letter carries the deck's own colour, so a band is
+                          identifiable before the letter is even read. Drawn at
+                          the same size as the count: it names which of the two
+                          numbers this is, which is as much of the message. */}
+                      <span
+                        className="text-lg font-bold text-[var(--band)] sm:text-2xl"
+                        style={{
+                          // Kept legible on the darkest cells, where the accent
+                          // alone would sink into the background.
+                          textShadow: "0 0 3px rgb(0 0 0 / 0.28)",
+                        }}
+                      >
                         {initialFor(band)}
                       </span>
                       <span className="sr-only">{band.title} </span>
+                      <span aria-hidden className="text-lg opacity-50 sm:text-2xl">
+                        -
+                      </span>
                       <span className="text-lg font-bold sm:text-2xl">
-                        {band.count === 0 ? "–" : band.count}
+                        {band.count}
                       </span>
                     </button>
                   );
