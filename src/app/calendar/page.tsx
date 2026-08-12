@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import { isArchiveDeck, startOfDay } from "@/lib/store/selectors";
@@ -35,28 +35,53 @@ type Day = {
   overdue: number;
 };
 
+/** One deck's share of a single day. */
+type DeckCount = {
+  id: number;
+  title: string;
+  count: number;
+  overdue: number;
+};
+
 function ymd(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+type ActiveCards = {
+  cards: CardRow[];
+  /**
+   * The deck a card is attributed to, keyed by the deck it actually sits in.
+   * Sub-decks resolve to their parent so the breakdown names the same decks the
+   * dashboard does, rather than splitting a deck across its children.
+   */
+  deckOf: Map<number, { id: number; title: string }>;
+};
+
 /** Cards that are actually in rotation — archived decks are retired. */
-function selectActiveCards(db: DbDoc): CardRow[] {
-  const archived = new Set(
-    db.decks.filter((d) => isArchiveDeck(db, d)).map((d) => d.id),
-  );
-  return db.cards.filter(
-    (c) =>
-      !archived.has(c.deckId) &&
-      db.decks.some((d) => d.id === c.deckId && d.userId === LOCAL_USER_ID),
-  );
+function selectActiveCards(db: DbDoc): ActiveCards {
+  const owned = db.decks.filter((d) => d.userId === LOCAL_USER_ID);
+  const byId = new Map(owned.map((d) => [d.id, d]));
+
+  const deckOf = new Map<number, { id: number; title: string }>();
+  for (const deck of owned) {
+    if (isArchiveDeck(db, deck)) continue;
+    const parent = deck.parentId === null ? undefined : byId.get(deck.parentId);
+    const root = parent ?? deck;
+    deckOf.set(deck.id, { id: root.id, title: root.title });
+  }
+
+  return { cards: db.cards.filter((c) => deckOf.has(c.deckId)), deckOf };
 }
 
 export default function CalendarPage() {
   const ready = useStoreReady();
-  const cards = useStore(useCallback((db: DbDoc) => selectActiveCards(db), []));
+  const { cards, deckOf } = useStore(
+    useCallback((db: DbDoc) => selectActiveCards(db), []),
+  );
   const [monthOffset, setMonthOffset] = useState(0);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  const { days, monthLabel, monthTotal, busiest, max, overdueTotal } =
+  const { days, monthLabel, monthTotal, busiest, max, overdueTotal, byDeck } =
     useMemo(() => {
       const today = startOfDay(new Date());
 
@@ -64,13 +89,28 @@ export default function CalendarPage() {
       // actually present it — dotting it across previous days would describe a
       // backlog that no longer exists as separate days of work.
       const counts = new Map<string, number>();
+      // The same tally split by deck, so a heavy day can be read as "which
+      // decks is this?" without opening each one.
+      const byDeck = new Map<string, Map<number, DeckCount>>();
       let overdueTotal = 0;
       for (const card of cards) {
         const due = startOfDay(new Date(card.nextReviewAt));
-        const day = due < today ? today : due;
-        if (due < today) overdueTotal += 1;
-        const key = ymd(day);
+        const overdue = due < today;
+        if (overdue) overdueTotal += 1;
+        const key = ymd(overdue ? today : due);
         counts.set(key, (counts.get(key) ?? 0) + 1);
+
+        const deck = deckOf.get(card.deckId);
+        if (!deck) continue;
+        let decks = byDeck.get(key);
+        if (!decks) {
+          decks = new Map();
+          byDeck.set(key, decks);
+        }
+        const entry = decks.get(deck.id) ?? { ...deck, count: 0, overdue: 0 };
+        entry.count += 1;
+        if (overdue) entry.overdue += 1;
+        decks.set(deck.id, entry);
       }
 
       const anchor = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
@@ -107,8 +147,26 @@ export default function CalendarPage() {
         null,
       );
 
-      return { days, monthLabel, monthTotal, busiest, max, overdueTotal };
-    }, [cards, monthOffset]);
+      return { days, monthLabel, monthTotal, busiest, max, overdueTotal, byDeck };
+    }, [cards, deckOf, monthOffset]);
+
+  const selected = selectedKey
+    ? (days.find((d) => d.key === selectedKey) ?? null)
+    : null;
+
+  /** The picked day's decks, heaviest first. */
+  const selectedDecks = useMemo(() => {
+    if (!selected) return [];
+    return [...(byDeck.get(selected.key)?.values() ?? [])].sort(
+      (a, b) => b.count - a.count || a.title.localeCompare(b.title),
+    );
+  }, [byDeck, selected]);
+
+  /** Moving month keeps no selection: the picked day is no longer on screen. */
+  function goToMonth(next: (m: number) => number) {
+    setMonthOffset(next);
+    setSelectedKey(null);
+  }
 
   function shade(count: number): string {
     if (count === 0) return "bg-transparent text-muted-foreground";
@@ -169,14 +227,14 @@ export default function CalendarPage() {
             variant="ghost"
             size="icon"
             aria-label="Previous month"
-            onClick={() => setMonthOffset((m) => m - 1)}
+            onClick={() => goToMonth((m) => m - 1)}
           >
             <ChevronLeft className="size-4" />
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setMonthOffset(0)}
+            onClick={() => goToMonth(() => 0)}
             disabled={monthOffset === 0}
           >
             Today
@@ -185,7 +243,7 @@ export default function CalendarPage() {
             variant="ghost"
             size="icon"
             aria-label="Next month"
-            onClick={() => setMonthOffset((m) => m + 1)}
+            onClick={() => goToMonth((m) => m + 1)}
           >
             <ChevronRight className="size-4" />
           </Button>
@@ -202,31 +260,128 @@ export default function CalendarPage() {
           </div>
         ))}
 
-        {days.map((day) => (
-          <div
-            key={day.key}
-            className={`relative flex aspect-square flex-col items-center justify-center rounded-lg border transition-colors ${
-              day.isToday
-                ? "border-primary ring-2 ring-primary/40"
-                : "border-border/60"
-            } ${day.inMonth ? shade(day.count) : "border-transparent bg-transparent text-muted-foreground/40"}`}
-            title={
-              day.count > 0
-                ? `${day.date.toLocaleDateString()} — ${day.count} due${day.overdue > 0 ? `, including ${day.overdue} overdue` : ""}`
-                : day.date.toLocaleDateString()
-            }
-          >
-            <span className="absolute top-1 left-1.5 text-[0.65rem] opacity-70">
-              {day.date.getDate()}
-            </span>
-            {day.inMonth && day.count > 0 && (
-              <span className="text-base font-semibold tabular-nums sm:text-lg">
-                {day.count}
+        {days.map((day) => {
+          const isSelected = day.key === selected?.key;
+          // Days with nothing on them have no breakdown to open, so they stay
+          // plain cells rather than buttons that would do nothing.
+          const clickable = day.inMonth && day.count > 0;
+          const title =
+            day.count > 0
+              ? `${day.date.toLocaleDateString()} — ${day.count} due${day.overdue > 0 ? `, including ${day.overdue} overdue` : ""}${clickable ? ". Click for the deck breakdown" : ""}`
+              : day.date.toLocaleDateString();
+          // Ring and border are chosen once rather than layered, so the
+          // selected and today states can't fight over the same properties.
+          const outline = isSelected
+            ? "border-violet-600 ring-2 ring-violet-500 ring-offset-2 ring-offset-background dark:border-violet-400"
+            : day.isToday
+              ? "border-primary ring-2 ring-primary/40"
+              : "border-border/60";
+          const className = `relative flex aspect-square flex-col items-center justify-center rounded-lg border transition-colors ${outline} ${
+            day.inMonth
+              ? shade(day.count)
+              : "border-transparent bg-transparent text-muted-foreground/40"
+          }`;
+          const body = (
+            <>
+              <span className="absolute top-1 left-1.5 text-[0.65rem] opacity-70">
+                {day.date.getDate()}
               </span>
-            )}
-          </div>
-        ))}
+              {day.inMonth && day.count > 0 && (
+                <span className="text-base font-semibold tabular-nums sm:text-lg">
+                  {day.count}
+                </span>
+              )}
+            </>
+          );
+
+          if (!clickable) {
+            return (
+              <div key={day.key} className={className} title={title}>
+                {body}
+              </div>
+            );
+          }
+
+          return (
+            <button
+              key={day.key}
+              type="button"
+              aria-pressed={isSelected}
+              title={title}
+              onClick={() =>
+                setSelectedKey((current) =>
+                  current === day.key ? null : day.key,
+                )
+              }
+              className={`${className} cursor-pointer hover:border-violet-500 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none`}
+            >
+              {body}
+            </button>
+          );
+        })}
       </div>
+
+      {selected && (
+        <div className="mt-4 rounded-lg border border-border/60 bg-card/60 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold">
+                {selected.date.toLocaleDateString(undefined, {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })}
+              </h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {selected.count} card{selected.count === 1 ? "" : "s"} across{" "}
+                {selectedDecks.length} deck
+                {selectedDecks.length === 1 ? "" : "s"}
+                {selected.overdue > 0 && `, including ${selected.overdue} overdue`}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Close breakdown"
+              onClick={() => setSelectedKey(null)}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+
+          <ul className="mt-3 space-y-1">
+            {selectedDecks.map((deck) => (
+              <li key={deck.id}>
+                <Link
+                  href={`/deck?id=${deck.id}`}
+                  className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted"
+                >
+                  {/* Proportional to the heaviest deck of this day, so the
+                      split is legible before the numbers are read. */}
+                  <span
+                    aria-hidden
+                    className="h-1.5 shrink-0 rounded-full bg-violet-500/70"
+                    style={{
+                      width: `${Math.max(8, (deck.count / selectedDecks[0].count) * 96)}px`,
+                    }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {deck.title}
+                  </span>
+                  {deck.overdue > 0 && (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {deck.overdue} overdue
+                    </span>
+                  )}
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">
+                    {deck.count}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
@@ -241,6 +396,7 @@ export default function CalendarPage() {
           </div>
           <span>heavier{max > 0 && ` (up to ${max})`}</span>
         </div>
+        {max > 0 && <span>Click a day for its deck breakdown</span>}
         {overdueTotal > 0 && (
           <span>
             {overdueTotal} overdue card{overdueTotal === 1 ? "" : "s"} shown on
