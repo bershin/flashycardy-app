@@ -534,7 +534,7 @@ export default function CalendarPage() {
                 className="group flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted"
               >
                 <Link
-                  href={`/deck?id=${deck.id}`}
+                  href={`/deck/?id=${deck.id}`}
                   className="flex min-w-0 flex-1 items-center gap-3"
                 >
                   {/* Proportional to the heaviest deck of this day, so the

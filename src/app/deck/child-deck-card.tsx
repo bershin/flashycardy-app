@@ -66,7 +66,7 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
           aria-hidden
           className="absolute inset-x-0 top-0 h-1.5 bg-[var(--deck-accent)]"
         />
-        <Link href={`/deck?id=${deck.id}`} className="relative flex-1">
+        <Link href={`/deck/?id=${deck.id}`} className="relative flex-1">
           <CardHeader>
             <CardTitle>{deck.title}</CardTitle>
             {deck.description && (
@@ -98,7 +98,7 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
               (deck.dueCount > 0 ? (
                 <button
                   type="button"
-                  onClick={() => router.push(`/deck/study?id=${deck.id}`)}
+                  onClick={() => router.push(`/deck/study/?id=${deck.id}`)}
                   className={badgeClass(
                     "due",
                     // Reads as a control rather than a label: it lifts on hover,

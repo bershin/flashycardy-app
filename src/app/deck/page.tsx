@@ -19,7 +19,7 @@ import { CardGrid } from "./card-grid";
 import { SortableChildDecks } from "./sortable-child-decks";
 
 /**
- * Deck detail, reached as `/deck?id=123`.
+ * Deck detail, reached as `/deck/?id=123`.
  *
  * This was `/deck/[deck_id]`. A static export has to know every route at build
  * time, and deck ids live in the user's browser, so there is nothing for
@@ -79,7 +79,7 @@ function DeckPageContent() {
   const hasChildren = childDecks.length > 0;
   const isTopLevel = deck.parentId === null;
 
-  const backHref = deck.parentId ? `/deck?id=${deck.parentId}` : "/dashboard";
+  const backHref = deck.parentId ? `/deck/?id=${deck.parentId}` : "/dashboard";
   const backLabel = deck.parentId ? "Back to parent deck" : "Back to decks";
 
   return (

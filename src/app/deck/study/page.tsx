@@ -71,7 +71,7 @@ function restore(db: DbDoc, saved: SavedSession): Decision | null {
   return { kind: "resume", deckId: saved.deckId, saved, order, source };
 }
 
-/** Study a deck, reached as `/deck/study?id=123`. */
+/** Study a deck, reached as `/deck/study/?id=123`. */
 function StudyPageContent() {
   const searchParams = useSearchParams();
   const ready = useStoreReady();
@@ -117,7 +117,7 @@ function StudyPageContent() {
   const active = decision?.deckId === deckId ? decision : null;
   const dueCards = active?.kind === "study" ? active.cards : null;
 
-  const backHref = `/deck?id=${deckId}`;
+  const backHref = `/deck/?id=${deckId}`;
 
   if (!ready || (deck && active === null)) {
     return (

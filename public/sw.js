@@ -9,7 +9,9 @@
  * app is served from /<repo>/, and hardcoding "/" would break every path.
  */
 
-const CACHE = "flashycardy-v1";
+// Bumped to v2 to drop entries written by the previous worker: it stored
+// redirected responses, which cannot be replayed into a navigation.
+const CACHE = "flashycardy-v2";
 const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, "");
 
 self.addEventListener("install", () => {
@@ -62,12 +64,31 @@ self.addEventListener("fetch", (event) => {
           // conditional request, so an unchanged page still costs almost
           // nothing.
           const response = await fetch(request, { cache: "no-cache" });
+
+          // A redirected response cannot satisfy a navigation: the browser
+          // refuses it and shows its own "this page couldn't load" instead of
+          // the app. Pages redirects every extensionless path to its trailing
+          // slash form — /deck?id=1 becomes /deck/?id=1 — so any link opened in
+          // a new tab, bookmarked, or typed lands here. Copying the body into a
+          // fresh response drops the redirect flag; the content is unchanged.
+          const usable = response.redirected
+            ? new Response(response.body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: response.headers,
+              })
+            : response;
+
           const cache = await caches.open(CACHE);
-          cache.put(request, response.clone());
-          return response;
+          cache.put(request, usable.clone());
+          return usable;
         } catch {
+          // `ignoreSearch` because the query is the app's own routing: every
+          // deck lives at /deck/ and differs only by ?id=. Matching on the full
+          // URL would mean an offline visit to a deck other than the last one
+          // cached found nothing and failed outright.
           return (
-            (await caches.match(request)) ??
+            (await caches.match(request, { ignoreSearch: true })) ??
             (await caches.match(`${BASE_PATH}/dashboard/`)) ??
             (await caches.match(`${BASE_PATH}/`)) ??
             Response.error()

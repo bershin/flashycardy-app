@@ -158,7 +158,7 @@ export function DeckHeader({
             )}
             {cardCount > 0 && (
               <Link
-                href={`/deck/study?id=${deck.id}`}
+                href={`/deck/study/?id=${deck.id}`}
                 className={buttonVariants({ size: "sm", variant: "secondary" })}
               >
                 <BookOpen className="size-3.5" />

@@ -85,7 +85,7 @@ export function DeckCard({ deck }: DeckCardProps) {
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--deck-accent-soft)] to-transparent opacity-60 transition-opacity duration-200 group-hover/deck:opacity-100"
         />
-        <Link href={`/deck?id=${deck.id}`} className="relative flex-1">
+        <Link href={`/deck/?id=${deck.id}`} className="relative flex-1">
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -145,8 +145,8 @@ export function DeckCard({ deck }: DeckCardProps) {
                   type="button"
                   onClick={() =>
                     deck.childCount > 0
-                      ? router.push(`/deck?id=${deck.id}`)
-                      : router.push(`/deck/study?id=${deck.id}`)
+                      ? router.push(`/deck/?id=${deck.id}`)
+                      : router.push(`/deck/study/?id=${deck.id}`)
                   }
                   className={badgeClass(
                     "due",
