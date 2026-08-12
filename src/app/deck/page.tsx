@@ -111,11 +111,11 @@ function DeckPageContent() {
             const dueCount = isArchive
               ? 0
               : child.cards.filter((c) => c.nextReviewAt < cutoff).length;
+            // Cumulative, like the dashboard: today's cards are still there
+            // tomorrow unless they are studied.
             const tomorrowCount = isArchive
               ? 0
-              : child.cards.filter(
-                  (c) => c.nextReviewAt >= cutoff && c.nextReviewAt < nextCutoff,
-                ).length;
+              : child.cards.filter((c) => c.nextReviewAt < nextCutoff).length;
             const studiedToday =
               !isArchive &&
               child.lastStudiedAt !== null &&

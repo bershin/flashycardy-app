@@ -358,8 +358,10 @@ export function dueCutoff(): Date {
 /**
  * The far edge of "due tomorrow" — the start of the day after next.
  *
- * A card counts as tomorrow's when it falls between {@link dueCutoff} and this,
- * so tomorrow's number never double-counts anything already due today.
+ * Everything before this is tomorrow's workload, today's cards included: a card
+ * due today that isn't studied is still waiting tomorrow, on top of whatever
+ * tomorrow brings. Counting only the cards dated tomorrow described a morning
+ * that only happens if today is cleared first.
  */
 export function tomorrowCutoff(): Date {
   const cutoff = startOfDay(new Date());

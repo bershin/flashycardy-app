@@ -126,7 +126,14 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
               ))}
             {/* Tomorrow's load, same as on the dashboard. */}
             {!deck.isArchive && deck.tomorrowCount > 0 && (
-              <span className={badgeClass("tomorrow")}>
+              <span
+                className={badgeClass("tomorrow")}
+                title={
+                  deck.dueCount > 0
+                    ? `${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow, including the ${deck.dueCount} still due today`
+                    : `${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow`
+                }
+              >
                 <CalendarClock className="size-3.5" />
                 <span>
                   <span className="font-semibold tabular-nums">

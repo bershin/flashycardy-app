@@ -184,7 +184,13 @@ export function DeckCard({ deck }: DeckCardProps) {
             {!deck.isArchive && deck.tomorrowCount > 0 && (
               <span
                 className={badgeClass("tomorrow")}
-                title={`${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow`}
+                // Says where the number comes from, since it includes today's
+                // cards and so can exceed what tomorrow's date alone holds.
+                title={
+                  deck.dueCount > 0
+                    ? `${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow, including the ${deck.dueCount} still due today`
+                    : `${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow`
+                }
               >
                 <CalendarClock className="size-3.5" />
                 <span>

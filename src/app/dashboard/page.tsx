@@ -37,12 +37,12 @@ export default function DashboardPage() {
     const dueCount = deck.isArchive
       ? 0
       : deck.cards.filter((c) => c.nextReviewAt < cutoff).length;
-    // What lands tomorrow, so a quiet evening isn't mistaken for a quiet week.
+    // What tomorrow actually looks like: today's cards carry over unless they
+    // are studied, so this counts everything due by the end of tomorrow rather
+    // than only the cards dated tomorrow. Clearing today lowers it.
     const tomorrowCount = deck.isArchive
       ? 0
-      : deck.cards.filter(
-          (c) => c.nextReviewAt >= cutoff && c.nextReviewAt < nextCutoff,
-        ).length;
+      : deck.cards.filter((c) => c.nextReviewAt < nextCutoff).length;
     const studiedToday =
       !deck.isArchive &&
       deck.lastStudiedAt !== null &&
