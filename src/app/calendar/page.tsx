@@ -322,33 +322,6 @@ export default function CalendarPage() {
     );
   }, [days, byParent]);
 
-  /**
-   * The one-letter tag each deck goes by in the grid — S for ShawnBerchin, B
-   * for BerchinJohn. A cell has room for a name or a number, not both, and the
-   * number is the part being read; the key under the grid says what the letters
-   * stand for.
-   */
-  const initials = useMemo(() => {
-    const map = new Map<number, string>();
-    const taken = new Set<string>();
-    for (const parent of monthParents) {
-      const letters = parent.title.replace(/[^\p{L}\p{N}]/gu, "");
-      let tag = (letters[0] ?? "?").toUpperCase();
-      // Two decks starting with the same letter would be indistinguishable, so
-      // the tag grows until it isn't.
-      for (let i = 1; taken.has(tag) && i < letters.length; i++) {
-        tag = letters.slice(0, i + 1).toUpperCase();
-      }
-      taken.add(tag);
-      map.set(parent.id, tag);
-    }
-    return map;
-  }, [monthParents]);
-
-  function initialFor(parent: ParentCount): string {
-    return initials.get(parent.id) ?? parent.title.slice(0, 1).toUpperCase();
-  }
-
   /** The name of the deck being narrowed to, for the panel's own heading. */
   const selectedParentTitle =
     selectedParent === null
@@ -413,17 +386,39 @@ export default function CalendarPage() {
     selectDay(null);
   }
 
-  function shade(count: number): string {
-    if (count === 0) return "bg-transparent text-muted-foreground";
-    // Square-rooted, not linear. One heavy day is typically several times any
-    // other, and against a linear scale every ordinary day collapses into the
-    // same pale tint — the shape of a normal week disappears behind the spike.
+  /**
+   * Which of the five tints a day's count falls on.
+   *
+   * Square-rooted, not linear. One heavy day is typically several times any
+   * other, and against a linear scale every ordinary day collapses into the
+   * same pale tint — the shape of a normal week disappears behind the spike.
+   */
+  function shadeIndex(count: number): number {
     const ratio = max === 0 ? 0 : Math.sqrt(count / max);
-    const index = Math.min(
+    return Math.min(
       STEPS.length - 1,
       Math.floor(ratio * (STEPS.length - 1) + 0.5),
     );
-    return STEPS[index];
+  }
+
+  function shade(count: number): string {
+    if (count === 0) return "bg-transparent text-muted-foreground";
+    return STEPS[shadeIndex(count)];
+  }
+
+  /**
+   * A deck's colour, lightened on the tints dark enough to swallow it.
+   *
+   * The band's text is the deck's accent, and the heaviest cells are deep
+   * violet — a mid-tone blue on that is technically present and practically
+   * unreadable. Mixing towards white keeps the hue, which is what identifies
+   * the deck, while restoring the contrast.
+   */
+  function bandColour(deckId: number, count: number): string {
+    const accent = accentVar(deckId);
+    return shadeIndex(count) >= 3
+      ? `color-mix(in oklab, ${accent} 50%, white)`
+      : accent;
   }
 
   if (!ready) {
@@ -581,12 +576,19 @@ export default function CalendarPage() {
                           ? `${band.title} — nothing due`
                           : `${band.title} — ${band.count} due. Click for its sub-decks`
                       }
-                      style={{ "--band": accentVar(band.id) } as CSSProperties}
+                      style={
+                        {
+                          "--band": bandColour(band.id, day.count),
+                        } as CSSProperties
+                      }
                       onClick={() =>
                         selectDay(active ? null : day.key, band.id)
                       }
-                      className={`group/band flex min-w-0 flex-1 items-center justify-center gap-1 px-1 leading-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
-                        index > 0 ? "border-t border-current/15" : ""
+                      // The first band starts below the date in the corner
+                      // rather than under it, so the deck name is never read
+                      // through the day number.
+                      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 leading-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
+                        index > 0 ? "border-t border-current/15" : "pt-4"
                       } ${
                         band.count === 0
                           ? "opacity-35"
@@ -595,42 +597,22 @@ export default function CalendarPage() {
                             : "cursor-pointer hover:bg-current/5"
                       }`}
                     >
-                      {/* The letter carries the deck's own colour, so a band is
-                          identifiable before the letter is even read. Drawn at
-                          the same size as the count: it names which of the two
-                          numbers this is, which is as much of the message.
-                          Hovering swaps it for the deck's name — the letter is
-                          a shorthand, and the long form should never be more
-                          than a hover away while it is still being learned. */}
+                      {/* Name above count, both in the deck's own colour, so
+                          the pair reads as one statement about one deck. Stacked
+                          rather than set on a line: a name and a large number
+                          side by side do not fit a square this size, and the
+                          number is the part that must stay big. A faint shadow
+                          keeps the accent legible on the darkest cells. */}
                       <span
-                        aria-hidden
-                        // Shrinkable, so a long deck name truncates rather than
-                        // shouldering the count out of the square.
-                        className="min-w-0 shrink font-bold text-[var(--band)]"
-                        style={{
-                          // Kept legible on the darkest cells, where the accent
-                          // alone would sink into the background.
-                          textShadow: "0 0 3px rgb(0 0 0 / 0.28)",
-                        }}
+                        className="max-w-full truncate text-[0.55rem] leading-tight font-semibold tracking-tight text-[var(--band)] sm:text-[0.7rem]"
+                        style={{ textShadow: "0 0 3px rgb(0 0 0 / 0.28)" }}
                       >
-                        <span className="text-lg group-hover/band:hidden group-focus-visible/band:hidden sm:text-2xl">
-                          {initialFor(band)}
-                        </span>
-                        <span className="hidden max-w-full truncate text-[0.55rem] leading-tight tracking-tight group-hover/band:block group-focus-visible/band:block sm:text-[0.65rem]">
-                          {band.title}
-                        </span>
+                        {band.title}
                       </span>
-                      <span className="sr-only">{band.title} </span>
-                      {/* The hyphen stands down while the name is showing: the
-                          square is only so wide, and the name earns the room
-                          more than the separator does. */}
                       <span
-                        aria-hidden
-                        className="shrink-0 text-lg opacity-50 group-hover/band:hidden group-focus-visible/band:hidden sm:text-2xl"
+                        className="text-lg font-bold text-[var(--band)] sm:text-2xl"
+                        style={{ textShadow: "0 0 3px rgb(0 0 0 / 0.28)" }}
                       >
-                        -
-                      </span>
-                      <span className="shrink-0 text-lg font-bold sm:text-2xl">
                         {band.count}
                       </span>
                     </button>
@@ -852,26 +834,8 @@ export default function CalendarPage() {
           </div>
           <span>heavier{max > 0 && ` (up to ${max})`}</span>
         </div>
-        {/* Decodes the letters in the cells. Only the decks actually appearing
-            this month are listed, so the key never explains a tag that isn't on
-            screen. */}
-        {monthParents.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {monthParents.map((parent) => (
-              <span key={parent.id} className="flex items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className="size-2 rounded-full"
-                  style={{ background: accentVar(parent.id) }}
-                />
-                <strong className="font-semibold text-foreground">
-                  {initialFor(parent)}
-                </strong>
-                {parent.title}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* No key for the colours: every cell names its own decks now, so a
+            legend would only repeat what is already on screen. */}
         {max > 0 && (
           <span>Click a count for its sub-decks, or the date for the day</span>
         )}
