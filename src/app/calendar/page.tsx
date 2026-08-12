@@ -58,12 +58,15 @@ type DeckRef = {
   /** The top-level deck this rolls up into — itself, for a deck with no parent. */
   rootId: number;
   rootTitle: string;
+  rootPosition: number;
 };
 
 /** A top-level deck's share of one day, as shown in the grid cell. */
 type ParentCount = {
   id: number;
   title: string;
+  /** Dashboard ordering, so the same deck keeps the same half of every cell. */
+  position: number;
   count: number;
 };
 
@@ -124,6 +127,7 @@ function selectActiveCards(db: DbDoc): ActiveCards {
       // deck to be counted under whether or not sub-decks are being used.
       rootId: parent?.id ?? deck.id,
       rootTitle: parent?.title ?? deck.title,
+      rootPosition: parent?.position ?? deck.position,
     });
   }
 
@@ -214,6 +218,7 @@ export default function CalendarPage() {
         const parent = parents.get(deck.rootId) ?? {
           id: deck.rootId,
           title: deck.rootTitle,
+          position: deck.rootPosition,
           count: 0,
         };
         parent.count += 1;
@@ -288,7 +293,14 @@ export default function CalendarPage() {
       .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title));
   }, [byDeck, selected, selectedParent]);
 
-  /** The top-level decks with anything on this month's grid, for the key. */
+  /**
+   * The top-level decks with anything on this month's grid.
+   *
+   * Every cell is divided between these in this order, so a deck keeps the same
+   * half of every square all month — the position becomes as good a label as
+   * the letter, and a row of cells can be scanned without reading either.
+   * Dashboard order, so the two screens agree on which deck comes first.
+   */
   const monthParents = useMemo(() => {
     const seen = new Map<number, ParentCount>();
     for (const day of days) {
@@ -300,7 +312,7 @@ export default function CalendarPage() {
       }
     }
     return [...seen.values()].sort(
-      (a, b) => b.count - a.count || a.title.localeCompare(b.title),
+      (a, b) => a.position - b.position || a.title.localeCompare(b.title),
     );
   }, [days, byParent]);
 
@@ -503,16 +515,22 @@ export default function CalendarPage() {
             : day.isToday
               ? "border-primary ring-2 ring-primary/40"
               : "border-border/60";
-          const className = `relative flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border p-1 transition-colors ${outline} ${
+          const className = `relative flex aspect-square flex-col overflow-hidden rounded-lg border transition-colors ${outline} ${
             day.inMonth
               ? shade(day.count)
               : "border-transparent bg-transparent text-muted-foreground/40"
           }`;
 
-          const parents = clickable
-            ? [...(byParent.get(day.key)?.values() ?? [])].sort(
-                (a, b) => b.count - a.count || a.title.localeCompare(b.title),
-              )
+          // Every deck on this month's grid gets a band, whether or not it has
+          // cards today: the bands are how a deck is identified at a glance, so
+          // they cannot move about from square to square. A deck with nothing
+          // due shows a dash rather than a nought — nothing to do reads faster
+          // than a zero to interpret.
+          const bands = clickable
+            ? monthParents.map((parent) => ({
+                ...parent,
+                count: byParent.get(day.key)?.get(parent.id)?.count ?? 0,
+              }))
             : [];
 
           return (
@@ -529,7 +547,7 @@ export default function CalendarPage() {
                       isSelected && selectedParent === null ? null : day.key,
                     )
                   }
-                  className="absolute top-0.5 left-0.5 cursor-pointer rounded px-1 text-[0.65rem] opacity-70 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
+                  className="absolute top-0.5 left-0.5 z-10 cursor-pointer rounded px-1 text-[0.65rem] opacity-70 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
                 >
                   {day.date.getDate()}
                   <span className="sr-only"> — every deck</span>
@@ -540,43 +558,47 @@ export default function CalendarPage() {
                 </span>
               )}
 
-              {/* One line per top-level deck, initial then count. The day's
-                  total is deliberately not shown: it was the sum of two
-                  collections studied separately, so it was never a number to
-                  act on — the deck lines are. */}
-              {clickable && (
-                <div className="flex w-full flex-col items-center justify-center gap-0.5">
-                  {parents.map((parent) => (
+              {/* The square is divided between the decks, one band each,
+                  separated by a hairline. The day's total is deliberately gone:
+                  it was the sum of two collections studied separately, so it
+                  was never a number to act on — these are. */}
+              {clickable &&
+                bands.map((band, index) => {
+                  const active = isSelected && selectedParent === band.id;
+                  return (
                     <button
-                      key={parent.id}
+                      key={band.id}
                       type="button"
-                      aria-pressed={isSelected && selectedParent === parent.id}
-                      title={`${parent.title} — ${parent.count} due. Click for its sub-decks`}
-                      onClick={() =>
-                        selectDay(
-                          isSelected && selectedParent === parent.id
-                            ? null
-                            : day.key,
-                          parent.id,
-                        )
+                      disabled={band.count === 0}
+                      aria-pressed={active}
+                      title={
+                        band.count === 0
+                          ? `${band.title} — nothing due`
+                          : `${band.title} — ${band.count} due. Click for its sub-decks`
                       }
-                      className={`flex cursor-pointer items-baseline gap-1 rounded px-1 leading-none tabular-nums transition-opacity focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none ${
-                        isSelected && selectedParent === parent.id
-                          ? "underline"
-                          : "hover:opacity-80"
+                      onClick={() =>
+                        selectDay(active ? null : day.key, band.id)
+                      }
+                      className={`flex flex-1 items-center justify-center gap-1.5 leading-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
+                        index > 0 ? "border-t border-current/15" : ""
+                      } ${
+                        band.count === 0
+                          ? "opacity-35"
+                          : active
+                            ? "cursor-pointer bg-current/10"
+                            : "cursor-pointer hover:bg-current/5"
                       }`}
                     >
-                      <span className="text-[0.7rem] font-medium opacity-70">
-                        {initialFor(parent)}
+                      <span className="text-sm font-semibold opacity-60 sm:text-base">
+                        {initialFor(band)}
                       </span>
-                      <span className="sr-only">{parent.title} </span>
-                      <span className="text-base font-semibold sm:text-lg">
-                        {parent.count}
+                      <span className="sr-only">{band.title} </span>
+                      <span className="text-lg font-bold sm:text-2xl">
+                        {band.count === 0 ? "–" : band.count}
                       </span>
                     </button>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
             </div>
           );
         })}
