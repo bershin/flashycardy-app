@@ -83,6 +83,16 @@ export type CardRow = {
    * `recordStudyResult`.
    */
   lastCorrectAt: Date | null;
+  /**
+   * How many times this card has ever been answered wrong.
+   *
+   * Cumulative and never reset — the streak already says how it is going now,
+   * so this is the counterweight: the card you keep getting wrong reads as
+   * difficult even on the day you finally get it right. Cards written before
+   * this existed read as 0, which understates them, but inventing a history for
+   * them would be worse than starting the count from here.
+   */
+  timesMissed: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -130,6 +140,7 @@ export type SerializedDbDoc = {
       | "schedule"
       | "nextReviewAt"
       | "lastCorrectAt"
+      | "timesMissed"
       | "createdAt"
       | "updatedAt"
     > & {
@@ -143,6 +154,8 @@ export type SerializedDbDoc = {
       nextReviewAt: string;
       /** Absent in documents written before the streak was capped per day. */
       lastCorrectAt?: string | null;
+      /** Absent in documents written before misses were counted; reads as 0. */
+      timesMissed?: number;
       createdAt: string;
       updatedAt: string;
     }
@@ -230,6 +243,9 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       // correct answer counts — the cap only ever costs a card one step, and
       // only on a day it has already had one.
       lastCorrectAt: c.lastCorrectAt ? toDate(c.lastCorrectAt) : null,
+      // A missing or nonsense count reads as none rather than NaN, which would
+      // render as "NaN missed" on the card and poison any arithmetic on it.
+      timesMissed: Number.isFinite(c.timesMissed) ? Number(c.timesMissed) : 0,
       createdAt: toDate(c.createdAt),
       updatedAt: toDate(c.updatedAt),
     })),

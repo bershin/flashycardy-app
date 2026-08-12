@@ -69,6 +69,7 @@ export async function insertCard(data: {
       nextReviewAt: now,
       consecutiveCorrect: 0,
       lastCorrectAt: null,
+      timesMissed: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -95,6 +96,7 @@ export async function bulkInsertCards(
         nextReviewAt: now,
         consecutiveCorrect: 0,
         lastCorrectAt: null,
+        timesMissed: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -348,6 +350,11 @@ export async function recordStudyResult(
       // and fourth answer today are held back by the same rule as the second.
       lastCorrectAt:
         rating === "got_it" ? now : draft.cards[index].lastCorrectAt,
+      // Counted on every miss, including repeat misses in the same sitting: a
+      // card that took four attempts tonight really was missed four times, and
+      // that is exactly the card worth spotting later.
+      timesMissed:
+        draft.cards[index].timesMissed + (rating === "missed" ? 1 : 0),
       updatedAt: now,
     };
     draft.cards[index] = updated;
