@@ -6,6 +6,7 @@ import {
   CalendarArrowUp,
   ChevronLeft,
   ChevronRight,
+  Undo2,
   X,
 } from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
@@ -15,8 +16,10 @@ import type { CardRow, DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import {
   MoveDueCardsDialog,
+  type CompletedMove,
   type MovableCard,
 } from "./move-due-cards-dialog";
+import { undoRescheduleAction } from "@/app/deck/actions";
 
 /** Monday-first, matching how a week is read here. */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -65,6 +68,16 @@ type DeckCount = DeckRef & {
 
 function ymd(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** Reads a `YYYY-MM-DD` key back as a local date, never a UTC instant. */
+function keyLabel(key: string): string {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 }
 
 type ActiveCards = {
@@ -259,6 +272,31 @@ export default function CalendarPage() {
   /** The deck row whose Move control is open, or null. */
   const [moving, setMoving] = useState<DeckCount | null>(null);
 
+  /**
+   * The last completed move, kept until it is undone or dismissed.
+   *
+   * Deliberately not on a timer: a move can shift a hundred cards, and the
+   * moment to reconsider is after looking at the new shape of the month, which
+   * takes longer than any toast would stay up.
+   */
+  const [lastMove, setLastMove] = useState<CompletedMove | null>(null);
+  const [undoing, setUndoing] = useState(false);
+  const [undoError, setUndoError] = useState(false);
+
+  async function undoLastMove() {
+    if (!lastMove) return;
+    setUndoing(true);
+    setUndoError(false);
+    try {
+      await undoRescheduleAction({ entries: lastMove.entries });
+      setLastMove(null);
+    } catch {
+      setUndoError(true);
+    } finally {
+      setUndoing(false);
+    }
+  }
+
   /** Moving month keeps no selection: the picked day is no longer on screen. */
   function goToMonth(next: (m: number) => number) {
     setMonthOffset(next);
@@ -416,6 +454,40 @@ export default function CalendarPage() {
         })}
       </div>
 
+      {lastMove && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-4 py-3 text-sm">
+          <span className="flex-1">
+            Moved {lastMove.entries.length} {lastMove.deckLabel} card
+            {lastMove.entries.length === 1 ? "" : "s"} to{" "}
+            <strong>{keyLabel(lastMove.toKey)}</strong>.
+            {undoError && (
+              <span className="text-destructive">
+                {" "}
+                Couldn&apos;t undo that — try again.
+              </span>
+            )}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={undoing}
+            onClick={undoLastMove}
+          >
+            <Undo2 className="mr-1 size-3.5" />
+            {undoing ? "Undoing…" : "Undo"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Dismiss"
+            disabled={undoing}
+            onClick={() => setLastMove(null)}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+      )}
+
       {selected && (
         <div className="mt-4 rounded-lg border border-border/60 bg-card/60 p-4">
           <div className="flex items-start justify-between gap-4">
@@ -531,6 +603,10 @@ export default function CalendarPage() {
           cards={moving.cards}
           suggestedKey={suggestedKey}
           countOn={countOn}
+          onMoved={(move) => {
+            setLastMove(move);
+            setUndoError(false);
+          }}
         />
       )}
 

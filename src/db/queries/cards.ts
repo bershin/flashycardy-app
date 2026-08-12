@@ -408,29 +408,69 @@ export async function moveCards(
  * The date is normalised to the start of the day because every count in the app
  * buckets by day; keeping the original time of day would put a card in the
  * right cell but sort it oddly within a study session.
+ *
+ * Each card's previous date comes back with it, which is what makes the move
+ * undoable: restoring the day the cards came from is not enough, because a card
+ * folded into today's cell for being overdue was really sitting further back.
  */
+export type RescheduledCard = {
+  cardId: number;
+  previousReviewAt: Date;
+};
+
 export async function rescheduleCards(
   cardIds: number[],
   userId: string,
   nextReviewAt: Date,
-) {
+): Promise<RescheduledCard[]> {
   if (cardIds.length === 0) return [];
 
   return mutate((draft) => {
     const day = startOfDay(nextReviewAt);
     const now = new Date();
     const wanted = new Set(cardIds);
-    const moved: CardRow[] = [];
+    const moved: RescheduledCard[] = [];
 
     draft.cards = draft.cards.map((card) => {
       if (!wanted.has(card.id)) return card;
       if (!ownsCard(draft, card, userId)) return card;
-      const next: CardRow = { ...card, nextReviewAt: day, updatedAt: now };
-      moved.push(next);
-      return next;
+      moved.push({ cardId: card.id, previousReviewAt: card.nextReviewAt });
+      return { ...card, nextReviewAt: day, updatedAt: now };
     });
 
     return moved;
+  });
+}
+
+/**
+ * Put a batch of cards back on the exact dates they came off.
+ *
+ * The undo half of {@link rescheduleCards}, and deliberately not the same
+ * function called with yesterday's date: the dates are restored verbatim,
+ * without the start-of-day normalisation, so undoing a move is a true reversal
+ * rather than another approximate one.
+ */
+export async function restoreCardDates(
+  entries: RescheduledCard[],
+  userId: string,
+) {
+  if (entries.length === 0) return [];
+
+  return mutate((draft) => {
+    const dates = new Map(entries.map((e) => [e.cardId, e.previousReviewAt]));
+    const now = new Date();
+    const restored: CardRow[] = [];
+
+    draft.cards = draft.cards.map((card) => {
+      const date = dates.get(card.id);
+      if (!date) return card;
+      if (!ownsCard(draft, card, userId)) return card;
+      const next: CardRow = { ...card, nextReviewAt: date, updatedAt: now };
+      restored.push(next);
+      return next;
+    });
+
+    return restored;
   });
 }
 

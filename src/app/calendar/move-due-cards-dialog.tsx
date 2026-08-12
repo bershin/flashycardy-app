@@ -20,6 +20,13 @@ export type MovableCard = {
   streak: number;
 };
 
+/** Everything needed to put a completed move back the way it was. */
+export type CompletedMove = {
+  entries: Array<{ cardId: number; previousReviewAt: string }>;
+  deckLabel: string;
+  toKey: string;
+};
+
 interface MoveDueCardsDialogProps {
   /** What the cards are, for the dialog's own description. */
   deckLabel: string;
@@ -33,7 +40,7 @@ interface MoveDueCardsDialogProps {
   countOn: (key: string) => number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onMoved?: () => void;
+  onMoved?: (move: CompletedMove) => void;
 }
 
 function ymd(date: Date): string {
@@ -101,8 +108,11 @@ export function MoveDueCardsDialog({
 
     startTransition(async () => {
       try {
-        await rescheduleCardsAction({ cardIds: ids, date: target });
-        onMoved?.();
+        const entries = await rescheduleCardsAction({
+          cardIds: ids,
+          date: target,
+        });
+        onMoved?.({ entries, deckLabel, toKey: target });
         onOpenChange(false);
       } catch {
         setError("Couldn't move those cards. Please try again.");

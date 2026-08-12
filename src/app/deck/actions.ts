@@ -17,6 +17,7 @@ import {
   deleteCard,
   moveCards,
   rescheduleCards,
+  restoreCardDates,
   bulkInsertCards,
 } from "@/db/queries/cards";
 
@@ -205,7 +206,45 @@ export async function rescheduleCardsAction(data: RescheduleCardsInput) {
 
   const moved = await rescheduleCards(parsed.cardIds, userId, target);
   if (moved.length === 0) throw new Error("Those cards couldn't be moved.");
-  return moved;
+
+  // Serialised for the caller to hold onto: the undo payload crosses back
+  // through this boundary later, and dates travel as ISO strings everywhere
+  // else in this layer.
+  return moved.map((m) => ({
+    cardId: m.cardId,
+    previousReviewAt: m.previousReviewAt.toISOString(),
+  }));
+}
+
+const undoRescheduleSchema = z.object({
+  entries: z
+    .array(
+      z.object({
+        cardId: z.number(),
+        previousReviewAt: z.string().datetime(),
+      }),
+    )
+    .min(1),
+});
+
+type UndoRescheduleInput = z.infer<typeof undoRescheduleSchema>;
+
+/** Put the cards from the last move back on the dates they came off. */
+export async function undoRescheduleAction(data: UndoRescheduleInput) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = undoRescheduleSchema.parse(data);
+
+  const restored = await restoreCardDates(
+    parsed.entries.map((e) => ({
+      cardId: e.cardId,
+      previousReviewAt: new Date(e.previousReviewAt),
+    })),
+    userId,
+  );
+  if (restored.length === 0) throw new Error("Those cards couldn't be moved.");
+  return restored;
 }
 
 const AI_CARD_COUNT = 20;
