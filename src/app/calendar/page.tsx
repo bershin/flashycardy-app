@@ -304,6 +304,33 @@ export default function CalendarPage() {
     );
   }, [days, byParent]);
 
+  /**
+   * The one-letter tag each deck goes by in the grid — S for ShawnBerchin, B
+   * for BerchinJohn. A cell has room for a name or a number, not both, and the
+   * number is the part being read; the key under the grid says what the letters
+   * stand for.
+   */
+  const initials = useMemo(() => {
+    const map = new Map<number, string>();
+    const taken = new Set<string>();
+    for (const parent of monthParents) {
+      const letters = parent.title.replace(/[^\p{L}\p{N}]/gu, "");
+      let tag = (letters[0] ?? "?").toUpperCase();
+      // Two decks starting with the same letter would be indistinguishable, so
+      // the tag grows until it isn't.
+      for (let i = 1; taken.has(tag) && i < letters.length; i++) {
+        tag = letters.slice(0, i + 1).toUpperCase();
+      }
+      taken.add(tag);
+      map.set(parent.id, tag);
+    }
+    return map;
+  }, [monthParents]);
+
+  function initialFor(parent: ParentCount): string {
+    return initials.get(parent.id) ?? parent.title.slice(0, 1).toUpperCase();
+  }
+
   /** The name of the deck being narrowed to, for the panel's own heading. */
   const selectedParentTitle =
     selectedParent === null
@@ -489,79 +516,67 @@ export default function CalendarPage() {
             : [];
 
           return (
-            // The cell holds several controls now, so it is a container rather
-            // than one button: the total opens the whole day, each parent's
-            // count opens just that collection.
+            // A container of buttons rather than one button: each deck's count
+            // opens that deck, and the date opens the day whole.
             <div key={day.key} className={className} title={title}>
-              <span className="absolute top-1 left-1.5 text-[0.65rem] opacity-70">
-                {day.date.getDate()}
-              </span>
+              {clickable ? (
+                <button
+                  type="button"
+                  aria-pressed={isSelected && selectedParent === null}
+                  title={`${day.count} due — every deck`}
+                  onClick={() =>
+                    selectDay(
+                      isSelected && selectedParent === null ? null : day.key,
+                    )
+                  }
+                  className="absolute top-0.5 left-0.5 cursor-pointer rounded px-1 text-[0.65rem] opacity-70 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
+                >
+                  {day.date.getDate()}
+                  <span className="sr-only"> — every deck</span>
+                </button>
+              ) : (
+                <span className="absolute top-1 left-1.5 text-[0.65rem] opacity-70">
+                  {day.date.getDate()}
+                </span>
+              )}
 
-              {!clickable
-                ? day.inMonth &&
-                  day.count > 0 && (
-                    <span className="text-base font-semibold tabular-nums sm:text-lg">
-                      {day.count}
-                    </span>
-                  )
-                : (
-                    <>
-                      <button
-                        type="button"
-                        aria-pressed={isSelected && selectedParent === null}
-                        title={`${day.count} due — every deck`}
-                        onClick={() =>
-                          selectDay(
-                            isSelected && selectedParent === null
-                              ? null
-                              : day.key,
-                          )
-                        }
-                        className="cursor-pointer rounded px-1 text-base font-semibold tabular-nums focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none sm:text-lg"
-                      >
-                        {day.count}
-                      </button>
-
-                      {/* One chip per top-level deck, in the deck's own colour
-                          so the same collection reads the same here as on the
-                          dashboard. Only shown when there is a split to see. */}
-                      {parents.length > 1 && (
-                        <div className="flex max-w-full flex-wrap items-center justify-center gap-x-1 gap-y-0.5">
-                          {parents.map((parent) => (
-                            <button
-                              key={parent.id}
-                              type="button"
-                              aria-pressed={
-                                isSelected && selectedParent === parent.id
-                              }
-                              title={`${parent.title} — ${parent.count} due. Click for its sub-decks`}
-                              onClick={() =>
-                                selectDay(
-                                  isSelected && selectedParent === parent.id
-                                    ? null
-                                    : day.key,
-                                  parent.id,
-                                )
-                              }
-                              className={`flex cursor-pointer items-center gap-0.5 rounded px-0.5 text-[0.6rem] font-medium tabular-nums transition-opacity focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none ${
-                                isSelected && selectedParent === parent.id
-                                  ? "opacity-100 underline"
-                                  : "opacity-80 hover:opacity-100"
-                              }`}
-                            >
-                              <span
-                                aria-hidden
-                                className="size-1.5 shrink-0 rounded-full"
-                                style={{ background: accentVar(parent.id) }}
-                              />
-                              <span className="sr-only">{parent.title} </span>
-                              {parent.count}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
+              {/* One line per top-level deck, initial then count. The day's
+                  total is deliberately not shown: it was the sum of two
+                  collections studied separately, so it was never a number to
+                  act on — the deck lines are. */}
+              {clickable && (
+                <div className="flex w-full flex-col items-center justify-center gap-0.5">
+                  {parents.map((parent) => (
+                    <button
+                      key={parent.id}
+                      type="button"
+                      aria-pressed={isSelected && selectedParent === parent.id}
+                      title={`${parent.title} — ${parent.count} due. Click for its sub-decks`}
+                      onClick={() =>
+                        selectDay(
+                          isSelected && selectedParent === parent.id
+                            ? null
+                            : day.key,
+                          parent.id,
+                        )
+                      }
+                      className={`flex cursor-pointer items-baseline gap-1 rounded px-1 leading-none tabular-nums transition-opacity focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none ${
+                        isSelected && selectedParent === parent.id
+                          ? "underline"
+                          : "hover:opacity-80"
+                      }`}
+                    >
+                      <span className="text-[0.7rem] font-medium opacity-70">
+                        {initialFor(parent)}
+                      </span>
+                      <span className="sr-only">{parent.title} </span>
+                      <span className="text-base font-semibold sm:text-lg">
+                        {parent.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -778,10 +793,10 @@ export default function CalendarPage() {
           </div>
           <span>heavier{max > 0 && ` (up to ${max})`}</span>
         </div>
-        {/* Names the dots in the cells. Only the decks actually appearing this
-            month are listed, so the key never describes colours that aren't on
+        {/* Decodes the letters in the cells. Only the decks actually appearing
+            this month are listed, so the key never explains a tag that isn't on
             screen. */}
-        {monthParents.length > 1 && (
+        {monthParents.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {monthParents.map((parent) => (
               <span key={parent.id} className="flex items-center gap-1.5">
@@ -790,12 +805,17 @@ export default function CalendarPage() {
                   className="size-2 rounded-full"
                   style={{ background: accentVar(parent.id) }}
                 />
+                <strong className="font-semibold text-foreground">
+                  {initialFor(parent)}
+                </strong>
                 {parent.title}
               </span>
             ))}
           </div>
         )}
-        {max > 0 && <span>Click any count for its decks</span>}
+        {max > 0 && (
+          <span>Click a count for its sub-decks, or the date for the day</span>
+        )}
         {overdueTotal > 0 && (
           <span>
             {overdueTotal} overdue card{overdueTotal === 1 ? "" : "s"} shown on
