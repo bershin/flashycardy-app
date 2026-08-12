@@ -249,28 +249,6 @@ export default function CalendarPage() {
     ? selectedDecks
     : selectedDecks.slice(0, DECK_LIMIT);
 
-  /**
-   * Where the move dialog opens pointing: the lightest of the next two weeks,
-   * ties going to the earliest. Levelling the load is the reason for the
-   * feature, so the default should be the day that most needs the work.
-   */
-  const suggestedKey = useMemo(() => {
-    if (!selected) return "";
-    let best = "";
-    let bestCount = Infinity;
-    for (let i = 1; i <= 14; i++) {
-      const date = new Date(selected.date);
-      date.setDate(date.getDate() + i);
-      const key = ymd(date);
-      const count = counts.get(key) ?? 0;
-      if (count < bestCount) {
-        best = key;
-        bestCount = count;
-      }
-    }
-    return best;
-  }, [selected, counts]);
-
   /** The deck row whose Move control is open, or null. */
   const [moving, setMoving] = useState<DeckCount | null>(null);
 
@@ -631,7 +609,6 @@ export default function CalendarPage() {
             month: "long",
           })}
           cards={moving.cards}
-          suggestedKey={suggestedKey}
           countOn={countOn}
           onMoved={(move) => {
             setLastMove(move);

@@ -34,8 +34,6 @@ interface MoveDueCardsDialogProps {
   fromKey: string;
   fromLabel: string;
   cards: MovableCard[];
-  /** Pre-filled destination — the lightest day soon after `fromKey`. */
-  suggestedKey: string;
   /** How many cards a day already holds, for the before/after line. */
   countOn: (key: string) => number;
   open: boolean;
@@ -71,7 +69,6 @@ export function MoveDueCardsDialog({
   fromKey,
   fromLabel,
   cards,
-  suggestedKey,
   countOn,
   open,
   onOpenChange,
@@ -81,7 +78,9 @@ export function MoveDueCardsDialog({
   // Half is the useful default: this is load-levelling, and moving everything
   // just relocates the spike rather than flattening it.
   const [count, setCount] = useState(Math.ceil(total / 2));
-  const [target, setTarget] = useState(suggestedKey);
+  // Opens on the day being moved off, so the two step buttons read as "one day
+  // either side of here" rather than as adjustments to a day already chosen.
+  const [target, setTarget] = useState(fromKey);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -155,7 +154,19 @@ export function MoveDueCardsDialog({
 
             <div className="grid gap-2">
               <Label htmlFor="move-date">Move to</Label>
+              {/* A day either side of the field, in the order they read:
+                  earlier on the left, later on the right. */}
               <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  aria-label="One day earlier"
+                  disabled={isPending}
+                  onClick={() => setTarget((t) => shift(t, -1))}
+                >
+                  −1d
+                </Button>
                 <Input
                   id="move-date"
                   type="date"
@@ -168,35 +179,35 @@ export function MoveDueCardsDialog({
                   type="button"
                   variant="secondary"
                   size="sm"
+                  aria-label="One day later"
                   disabled={isPending}
                   onClick={() => setTarget((t) => shift(t, 1))}
                 >
                   +1d
                 </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => setTarget((t) => shift(t, 7))}
-                >
-                  +1w
-                </Button>
               </div>
             </div>
 
             {/* The whole point of the move is the resulting shape of the two
-                days, so it is stated rather than left to be discovered. */}
-            {!movingToItself && target && (
+                days, so it is stated rather than left to be discovered. The
+                dialog opens on the day it came from, where there is no move to
+                describe yet — that says so rather than showing a blank space. */}
+            {movingToItself ? (
               <p className="text-sm text-muted-foreground">
-                {label(fromKey)}: {countOn(fromKey)} →{" "}
-                <strong className="text-foreground">
-                  {countOn(fromKey) - clamped}
-                </strong>
-                {" · "}
-                {label(target)}: {before} →{" "}
-                <strong className="text-foreground">{before + clamped}</strong>
+                Pick a day to move them to.
               </p>
+            ) : (
+              target && (
+                <p className="text-sm text-muted-foreground">
+                  {label(fromKey)}: {countOn(fromKey)} →{" "}
+                  <strong className="text-foreground">
+                    {countOn(fromKey) - clamped}
+                  </strong>
+                  {" · "}
+                  {label(target)}: {before} →{" "}
+                  <strong className="text-foreground">{before + clamped}</strong>
+                </p>
+              )
             )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
