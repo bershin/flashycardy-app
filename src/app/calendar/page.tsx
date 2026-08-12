@@ -35,10 +35,15 @@ type Day = {
   overdue: number;
 };
 
-/** One deck's share of a single day. */
-type DeckCount = {
+type DeckRef = {
   id: number;
   title: string;
+  /** Set for a sub-deck, shown as context so two same-named children differ. */
+  parentTitle: string | null;
+};
+
+/** One deck's share of a single day. */
+type DeckCount = DeckRef & {
   count: number;
   overdue: number;
 };
@@ -50,11 +55,15 @@ function ymd(date: Date): string {
 type ActiveCards = {
   cards: CardRow[];
   /**
-   * The deck a card is attributed to, keyed by the deck it actually sits in.
-   * Sub-decks resolve to their parent so the breakdown names the same decks the
-   * dashboard does, rather than splitting a deck across its children.
+   * The deck a card is counted under, keyed by deck id.
+   *
+   * Cards are attributed to the deck they actually sit in rather than rolled up
+   * into a top-level parent: a collection kept as one parent with many
+   * sub-decks would otherwise report every day as a single deck, which is the
+   * one answer the breakdown exists to avoid. The parent's name rides along as
+   * context instead.
    */
-  deckOf: Map<number, { id: number; title: string }>;
+  deckOf: Map<number, DeckRef>;
 };
 
 /** Cards that are actually in rotation — archived decks are retired. */
@@ -62,12 +71,15 @@ function selectActiveCards(db: DbDoc): ActiveCards {
   const owned = db.decks.filter((d) => d.userId === LOCAL_USER_ID);
   const byId = new Map(owned.map((d) => [d.id, d]));
 
-  const deckOf = new Map<number, { id: number; title: string }>();
+  const deckOf = new Map<number, DeckRef>();
   for (const deck of owned) {
     if (isArchiveDeck(db, deck)) continue;
-    const parent = deck.parentId === null ? undefined : byId.get(deck.parentId);
-    const root = parent ?? deck;
-    deckOf.set(deck.id, { id: root.id, title: root.title });
+    const parent = deck.parentId === null ? null : byId.get(deck.parentId);
+    deckOf.set(deck.id, {
+      id: deck.id,
+      title: deck.title,
+      parentTitle: parent?.title ?? null,
+    });
   }
 
   return { cards: db.cards.filter((c) => deckOf.has(c.deckId)), deckOf };
@@ -80,6 +92,15 @@ export default function CalendarPage() {
   );
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  /** A day's breakdown opens short; a long tail is a click away. */
+  const DECK_LIMIT = 8;
+
+  function selectDay(key: string | null) {
+    setSelectedKey(key);
+    setExpanded(false);
+  }
 
   const { days, monthLabel, monthTotal, busiest, max, overdueTotal, byDeck } =
     useMemo(() => {
@@ -162,10 +183,14 @@ export default function CalendarPage() {
     );
   }, [byDeck, selected]);
 
+  const visibleDecks = expanded
+    ? selectedDecks
+    : selectedDecks.slice(0, DECK_LIMIT);
+
   /** Moving month keeps no selection: the picked day is no longer on screen. */
   function goToMonth(next: (m: number) => number) {
     setMonthOffset(next);
-    setSelectedKey(null);
+    selectDay(null);
   }
 
   function shade(count: number): string {
@@ -309,9 +334,7 @@ export default function CalendarPage() {
               aria-pressed={isSelected}
               title={title}
               onClick={() =>
-                setSelectedKey((current) =>
-                  current === day.key ? null : day.key,
-                )
+                selectDay(day.key === selectedKey ? null : day.key)
               }
               className={`${className} cursor-pointer hover:border-violet-500 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none`}
             >
@@ -343,14 +366,14 @@ export default function CalendarPage() {
               variant="ghost"
               size="icon"
               aria-label="Close breakdown"
-              onClick={() => setSelectedKey(null)}
+              onClick={() => selectDay(null)}
             >
               <X className="size-4" />
             </Button>
           </div>
 
           <ul className="mt-3 space-y-1">
-            {selectedDecks.map((deck) => (
+            {visibleDecks.map((deck) => (
               <li key={deck.id}>
                 <Link
                   href={`/deck?id=${deck.id}`}
@@ -366,6 +389,11 @@ export default function CalendarPage() {
                     }}
                   />
                   <span className="min-w-0 flex-1 truncate text-sm">
+                    {deck.parentTitle && (
+                      <span className="text-muted-foreground">
+                        {deck.parentTitle} ·{" "}
+                      </span>
+                    )}
                     {deck.title}
                   </span>
                   {deck.overdue > 0 && (
@@ -380,6 +408,18 @@ export default function CalendarPage() {
               </li>
             ))}
           </ul>
+
+          {selectedDecks.length > DECK_LIMIT && (
+            <button
+              type="button"
+              onClick={() => setExpanded((open) => !open)}
+              className="mt-2 cursor-pointer px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              {expanded
+                ? "Show fewer"
+                : `Show all ${selectedDecks.length} decks`}
+            </button>
+          )}
         </div>
       )}
 
