@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type CSSProperties,
-} from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   CalendarArrowUp,
@@ -32,19 +26,6 @@ import { undoRescheduleAction } from "@/app/deck/actions";
 
 /** Monday-first, matching how a week is read here. */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-/**
- * A single hue, light to dark, because the quantity being shown is a magnitude.
- * The count is printed in every cell as well, so the shade is reinforcement
- * rather than the only way to read it.
- */
-const STEPS = [
-  "bg-violet-500/12 text-foreground",
-  "bg-violet-500/28 text-foreground",
-  "bg-violet-500/45 text-violet-950 dark:text-violet-50",
-  "bg-violet-500/65 text-white",
-  "bg-violet-600/85 text-white",
-];
 
 type Day = {
   date: Date;
@@ -387,38 +368,49 @@ export default function CalendarPage() {
   }
 
   /**
-   * Which of the five tints a day's count falls on.
+   * The heaviest single deck-day on the grid, which the tints are scaled to.
+   *
+   * Per band rather than per day: the bands are what carry the colour now, and
+   * scaling them against a day's combined total would leave the smaller deck
+   * permanently pale however busy its own week was.
+   */
+  const bandMax = useMemo(() => {
+    let most = 0;
+    for (const day of days) {
+      if (!day.inMonth) continue;
+      for (const parent of byParent.get(day.key)?.values() ?? []) {
+        most = Math.max(most, parent.count);
+      }
+    }
+    return most;
+  }, [days, byParent]);
+
+  /**
+   * How strongly a band is tinted, 0 to 1.
    *
    * Square-rooted, not linear. One heavy day is typically several times any
    * other, and against a linear scale every ordinary day collapses into the
-   * same pale tint — the shape of a normal week disappears behind the spike.
+   * same pale wash — the shape of a normal week disappears behind the spike.
    */
-  function shadeIndex(count: number): number {
-    const ratio = max === 0 ? 0 : Math.sqrt(count / max);
-    return Math.min(
-      STEPS.length - 1,
-      Math.floor(ratio * (STEPS.length - 1) + 0.5),
-    );
-  }
-
-  function shade(count: number): string {
-    if (count === 0) return "bg-transparent text-muted-foreground";
-    return STEPS[shadeIndex(count)];
+  function intensity(count: number): number {
+    if (count === 0 || bandMax === 0) return 0;
+    return Math.sqrt(count / bandMax);
   }
 
   /**
-   * A deck's colour, lightened on the tints dark enough to swallow it.
+   * A band's fill: its deck's colour, deepening with its own count.
    *
-   * The band's text is the deck's accent, and the heaviest cells are deep
-   * violet — a mid-tone blue on that is technically present and practically
-   * unreadable. Mixing towards white keeps the hue, which is what identifies
-   * the deck, while restoring the contrast.
+   * Hue says which deck, depth says how much — one swatch answering both, which
+   * is what a square this small has room for.
    */
-  function bandColour(deckId: number, count: number): string {
-    const accent = accentVar(deckId);
-    return shadeIndex(count) >= 3
-      ? `color-mix(in oklab, ${accent} 50%, white)`
-      : accent;
+  function bandFill(deckId: number, count: number): string {
+    const strength = 10 + intensity(count) * 80;
+    return `color-mix(in oklab, ${accentVar(deckId)} ${strength}%, transparent)`;
+  }
+
+  /** White once the fill is deep enough to swallow ordinary text. */
+  function bandText(count: number): string {
+    return intensity(count) > 0.62 ? "text-white" : "text-foreground";
   }
 
   if (!ready) {
@@ -516,9 +508,11 @@ export default function CalendarPage() {
             : day.isToday
               ? "border-primary ring-2 ring-primary/40"
               : "border-border/60";
+          // The cell itself is plain now: the colour lives in the bands, where
+          // it can say whose cards these are as well as how many.
           const className = `relative flex aspect-square flex-col overflow-hidden rounded-lg border transition-colors ${outline} ${
             day.inMonth
-              ? shade(day.count)
+              ? "bg-transparent"
               : "border-transparent bg-transparent text-muted-foreground/40"
           }`;
 
@@ -576,43 +570,31 @@ export default function CalendarPage() {
                           ? `${band.title} — nothing due`
                           : `${band.title} — ${band.count} due. Click for its sub-decks`
                       }
-                      style={
-                        {
-                          "--band": bandColour(band.id, day.count),
-                        } as CSSProperties
-                      }
+                      style={{ background: bandFill(band.id, band.count) }}
                       onClick={() =>
                         selectDay(active ? null : day.key, band.id)
                       }
                       // The first band starts below the date in the corner
-                      // rather than under it, so the deck name is never read
-                      // through the day number.
-                      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 leading-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
-                        index > 0 ? "border-t border-current/15" : "pt-4"
-                      } ${
+                      // rather than under it, so nothing is read through the
+                      // day number.
+                      className={`group/band relative flex min-w-0 flex-1 flex-col items-center justify-center px-1 leading-none tabular-nums transition-[filter] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
+                        index > 0 ? "border-t border-black/10" : "pt-3"
+                      } ${bandText(band.count)} ${
                         band.count === 0
-                          ? "opacity-35"
+                          ? "opacity-60"
                           : active
-                            ? "cursor-pointer bg-current/10"
-                            : "cursor-pointer hover:bg-current/5"
+                            ? "cursor-pointer brightness-90"
+                            : "cursor-pointer hover:brightness-95"
                       }`}
                     >
-                      {/* Name above count, both in the deck's own colour, so
-                          the pair reads as one statement about one deck. Stacked
-                          rather than set on a line: a name and a large number
-                          side by side do not fit a square this size, and the
-                          number is the part that must stay big. A faint shadow
-                          keeps the accent legible on the darkest cells. */}
-                      <span
-                        className="max-w-full truncate text-[0.55rem] leading-tight font-semibold tracking-tight text-[var(--band)] sm:text-[0.7rem]"
-                        style={{ textShadow: "0 0 3px rgb(0 0 0 / 0.28)" }}
-                      >
+                      {/* The name is a hover away rather than always present:
+                          the fill already says which deck this is, and at rest
+                          the number should have the band to itself. */}
+                      <span className="pointer-events-none absolute inset-x-1 top-0.5 hidden truncate text-center text-[0.55rem] leading-tight font-semibold tracking-tight opacity-80 group-hover/band:block group-focus-visible/band:block sm:text-[0.65rem]">
                         {band.title}
                       </span>
-                      <span
-                        className="text-lg font-bold text-[var(--band)] sm:text-2xl"
-                        style={{ textShadow: "0 0 3px rgb(0 0 0 / 0.28)" }}
-                      >
+                      <span className="sr-only">{band.title} </span>
+                      <span className="text-lg font-bold sm:text-2xl">
                         {band.count}
                       </span>
                     </button>
@@ -822,20 +804,25 @@ export default function CalendarPage() {
       )}
 
       <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <span>Lighter</span>
-          <div className="flex gap-0.5">
-            {STEPS.map((step) => (
-              <span
-                key={step}
-                className={`size-4 rounded-sm ${step.split(" ")[0]}`}
-              />
-            ))}
+        {/* The names are behind a hover now, so the key carries them: each
+            deck's colour, and the scale that colour is read on. */}
+        {monthParents.map((parent) => (
+          <div key={parent.id} className="flex items-center gap-2">
+            <span className="font-medium text-foreground">{parent.title}</span>
+            <span className="flex gap-0.5">
+              {[0.15, 0.4, 0.7, 1].map((step) => (
+                <span
+                  key={step}
+                  className="size-4 rounded-sm"
+                  style={{
+                    background: `color-mix(in oklab, ${accentVar(parent.id)} ${10 + step * 80}%, transparent)`,
+                  }}
+                />
+              ))}
+            </span>
           </div>
-          <span>heavier{max > 0 && ` (up to ${max})`}</span>
-        </div>
-        {/* No key for the colours: every cell names its own decks now, so a
-            legend would only repeat what is already on screen. */}
+        ))}
+        {bandMax > 0 && <span>Deeper is heavier, up to {bandMax} in a day</span>}
         {max > 0 && (
           <span>Click a count for its sub-decks, or the date for the day</span>
         )}
