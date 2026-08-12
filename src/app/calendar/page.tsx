@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
+import { accentVar } from "@/lib/deck-accent";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import { isArchiveDeck, startOfDay } from "@/lib/store/selectors";
 import type { CardRow, DbDoc } from "@/lib/store/types";
@@ -54,6 +55,16 @@ type DeckRef = {
   title: string;
   /** Set for a sub-deck, shown as context so two same-named children differ. */
   parentTitle: string | null;
+  /** The top-level deck this rolls up into — itself, for a deck with no parent. */
+  rootId: number;
+  rootTitle: string;
+};
+
+/** A top-level deck's share of one day, as shown in the grid cell. */
+type ParentCount = {
+  id: number;
+  title: string;
+  count: number;
 };
 
 /**
@@ -109,6 +120,10 @@ function selectActiveCards(db: DbDoc): ActiveCards {
       id: deck.id,
       title: deck.title,
       parentTitle: parent?.title ?? null,
+      // A deck with no parent is its own root, so every card has a top-level
+      // deck to be counted under whether or not sub-decks are being used.
+      rootId: parent?.id ?? deck.id,
+      rootTitle: parent?.title ?? deck.title,
     });
   }
 
@@ -127,8 +142,17 @@ export default function CalendarPage() {
   /** A day's breakdown opens short; a long tail is a click away. */
   const DECK_LIMIT = 8;
 
-  function selectDay(key: string | null) {
+  /**
+   * Which top-level deck the open breakdown is narrowed to, or null for all.
+   *
+   * Set by clicking a parent's count in a cell, which is the whole point of
+   * splitting the cell: the number you pressed is the list you get.
+   */
+  const [selectedParent, setSelectedParent] = useState<number | null>(null);
+
+  function selectDay(key: string | null, parentId: number | null = null) {
     setSelectedKey(key);
+    setSelectedParent(key === null ? null : parentId);
     setExpanded(false);
   }
 
@@ -140,6 +164,7 @@ export default function CalendarPage() {
     max,
     overdueTotal,
     byDeck,
+    byParent,
     counts,
   } = useMemo(() => {
       const today = startOfDay(new Date());
@@ -151,6 +176,10 @@ export default function CalendarPage() {
       // The same tally split by deck, so a heavy day can be read as "which
       // decks is this?" without opening each one.
       const byDeck = new Map<string, Map<number, DeckCount>>();
+      // And rolled up again to top level, which is what a cell has room to
+      // show: a day of 67 is legible as 60 of one collection and 7 of another
+      // without opening anything at all.
+      const byParent = new Map<string, Map<number, ParentCount>>();
       let overdueTotal = 0;
       for (const card of cards) {
         const due = startOfDay(new Date(card.nextReviewAt));
@@ -176,6 +205,19 @@ export default function CalendarPage() {
         if (overdue) entry.overdue += 1;
         entry.cards.push({ id: card.id, streak: card.consecutiveCorrect });
         decks.set(deck.id, entry);
+
+        let parents = byParent.get(key);
+        if (!parents) {
+          parents = new Map();
+          byParent.set(key, parents);
+        }
+        const parent = parents.get(deck.rootId) ?? {
+          id: deck.rootId,
+          title: deck.rootTitle,
+          count: 0,
+        };
+        parent.count += 1;
+        parents.set(deck.rootId, parent);
       }
 
       const anchor = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
@@ -220,6 +262,7 @@ export default function CalendarPage() {
         max,
         overdueTotal,
         byDeck,
+        byParent,
         counts,
       };
     }, [cards, deckOf, monthOffset]);
@@ -237,13 +280,35 @@ export default function CalendarPage() {
     ? (days.find((d) => d.key === selectedKey) ?? null)
     : null;
 
-  /** The picked day's decks, heaviest first. */
+  /** The picked day's decks, heaviest first, narrowed to one parent if asked. */
   const selectedDecks = useMemo(() => {
     if (!selected) return [];
-    return [...(byDeck.get(selected.key)?.values() ?? [])].sort(
+    return [...(byDeck.get(selected.key)?.values() ?? [])]
+      .filter((d) => selectedParent === null || d.rootId === selectedParent)
+      .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title));
+  }, [byDeck, selected, selectedParent]);
+
+  /** The top-level decks with anything on this month's grid, for the key. */
+  const monthParents = useMemo(() => {
+    const seen = new Map<number, ParentCount>();
+    for (const day of days) {
+      if (!day.inMonth) continue;
+      for (const parent of byParent.get(day.key)?.values() ?? []) {
+        const entry = seen.get(parent.id) ?? { ...parent, count: 0 };
+        entry.count += parent.count;
+        seen.set(parent.id, entry);
+      }
+    }
+    return [...seen.values()].sort(
       (a, b) => b.count - a.count || a.title.localeCompare(b.title),
     );
-  }, [byDeck, selected]);
+  }, [days, byParent]);
+
+  /** The name of the deck being narrowed to, for the panel's own heading. */
+  const selectedParentTitle =
+    selectedParent === null
+      ? null
+      : (byParent.get(selected?.key ?? "")?.get(selectedParent)?.title ?? null);
 
   const visibleDecks = expanded
     ? selectedDecks
@@ -411,45 +476,93 @@ export default function CalendarPage() {
             : day.isToday
               ? "border-primary ring-2 ring-primary/40"
               : "border-border/60";
-          const className = `relative flex aspect-square flex-col items-center justify-center rounded-lg border transition-colors ${outline} ${
+          const className = `relative flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border p-1 transition-colors ${outline} ${
             day.inMonth
               ? shade(day.count)
               : "border-transparent bg-transparent text-muted-foreground/40"
           }`;
-          const body = (
-            <>
+
+          const parents = clickable
+            ? [...(byParent.get(day.key)?.values() ?? [])].sort(
+                (a, b) => b.count - a.count || a.title.localeCompare(b.title),
+              )
+            : [];
+
+          return (
+            // The cell holds several controls now, so it is a container rather
+            // than one button: the total opens the whole day, each parent's
+            // count opens just that collection.
+            <div key={day.key} className={className} title={title}>
               <span className="absolute top-1 left-1.5 text-[0.65rem] opacity-70">
                 {day.date.getDate()}
               </span>
-              {day.inMonth && day.count > 0 && (
-                <span className="text-base font-semibold tabular-nums sm:text-lg">
-                  {day.count}
-                </span>
-              )}
-            </>
-          );
 
-          if (!clickable) {
-            return (
-              <div key={day.key} className={className} title={title}>
-                {body}
-              </div>
-            );
-          }
+              {!clickable
+                ? day.inMonth &&
+                  day.count > 0 && (
+                    <span className="text-base font-semibold tabular-nums sm:text-lg">
+                      {day.count}
+                    </span>
+                  )
+                : (
+                    <>
+                      <button
+                        type="button"
+                        aria-pressed={isSelected && selectedParent === null}
+                        title={`${day.count} due — every deck`}
+                        onClick={() =>
+                          selectDay(
+                            isSelected && selectedParent === null
+                              ? null
+                              : day.key,
+                          )
+                        }
+                        className="cursor-pointer rounded px-1 text-base font-semibold tabular-nums focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none sm:text-lg"
+                      >
+                        {day.count}
+                      </button>
 
-          return (
-            <button
-              key={day.key}
-              type="button"
-              aria-pressed={isSelected}
-              title={title}
-              onClick={() =>
-                selectDay(day.key === selectedKey ? null : day.key)
-              }
-              className={`${className} cursor-pointer hover:border-violet-500 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none`}
-            >
-              {body}
-            </button>
+                      {/* One chip per top-level deck, in the deck's own colour
+                          so the same collection reads the same here as on the
+                          dashboard. Only shown when there is a split to see. */}
+                      {parents.length > 1 && (
+                        <div className="flex max-w-full flex-wrap items-center justify-center gap-x-1 gap-y-0.5">
+                          {parents.map((parent) => (
+                            <button
+                              key={parent.id}
+                              type="button"
+                              aria-pressed={
+                                isSelected && selectedParent === parent.id
+                              }
+                              title={`${parent.title} — ${parent.count} due. Click for its sub-decks`}
+                              onClick={() =>
+                                selectDay(
+                                  isSelected && selectedParent === parent.id
+                                    ? null
+                                    : day.key,
+                                  parent.id,
+                                )
+                              }
+                              className={`flex cursor-pointer items-center gap-0.5 rounded px-0.5 text-[0.6rem] font-medium tabular-nums transition-opacity focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none ${
+                                isSelected && selectedParent === parent.id
+                                  ? "opacity-100 underline"
+                                  : "opacity-80 hover:opacity-100"
+                              }`}
+                            >
+                              <span
+                                aria-hidden
+                                className="size-1.5 shrink-0 rounded-full"
+                                style={{ background: accentVar(parent.id) }}
+                              />
+                              <span className="sr-only">{parent.title} </span>
+                              {parent.count}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+            </div>
           );
         })}
       </div>
@@ -506,13 +619,48 @@ export default function CalendarPage() {
                   day: "numeric",
                   month: "long",
                 })}
+                {selectedParentTitle && (
+                  <>
+                    <span className="text-muted-foreground"> · </span>
+                    <span
+                      aria-hidden
+                      className="mr-1.5 inline-block size-2 rounded-full align-middle"
+                      style={{
+                        background: accentVar(selectedParent ?? 0),
+                      }}
+                    />
+                    {selectedParentTitle}
+                  </>
+                )}
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {selected.count} card{selected.count === 1 ? "" : "s"} across{" "}
-                {selectedDecks.length} deck
+                {/* When narrowed, the totals are that deck's — quoting the
+                    day's full count next to one deck's sub-decks would not
+                    add up. */}
+                {selectedParent === null
+                  ? selected.count
+                  : selectedDecks.reduce((sum, d) => sum + d.count, 0)}{" "}
+                card
+                {(selectedParent === null
+                  ? selected.count
+                  : selectedDecks.reduce((sum, d) => sum + d.count, 0)) === 1
+                  ? ""
+                  : "s"}{" "}
+                across {selectedDecks.length} deck
                 {selectedDecks.length === 1 ? "" : "s"}
-                {selected.overdue > 0 && `, including ${selected.overdue} overdue`}
+                {selectedParent === null &&
+                  selected.overdue > 0 &&
+                  `, including ${selected.overdue} overdue`}
               </p>
+              {selectedParent !== null && (
+                <button
+                  type="button"
+                  onClick={() => selectDay(selected.key)}
+                  className="mt-1 cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  Show every deck for this day
+                </button>
+              )}
             </div>
             <Button
               variant="ghost"
@@ -630,7 +778,24 @@ export default function CalendarPage() {
           </div>
           <span>heavier{max > 0 && ` (up to ${max})`}</span>
         </div>
-        {max > 0 && <span>Click a day for its deck breakdown</span>}
+        {/* Names the dots in the cells. Only the decks actually appearing this
+            month are listed, so the key never describes colours that aren't on
+            screen. */}
+        {monthParents.length > 1 && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {monthParents.map((parent) => (
+              <span key={parent.id} className="flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="size-2 rounded-full"
+                  style={{ background: accentVar(parent.id) }}
+                />
+                {parent.title}
+              </span>
+            ))}
+          </div>
+        )}
+        {max > 0 && <span>Click any count for its decks</span>}
         {overdueTotal > 0 && (
           <span>
             {overdueTotal} overdue card{overdueTotal === 1 ? "" : "s"} shown on
