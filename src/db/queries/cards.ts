@@ -449,15 +449,24 @@ export async function rescheduleCards(
  * function called with yesterday's date: the dates are restored verbatim,
  * without the start-of-day normalisation, so undoing a move is a true reversal
  * rather than another approximate one.
+ *
+ * `stillOn` guards a stale undo. The offer outlives a reload, so by the time it
+ * is taken a card may have been studied — which gives it a new date of its own,
+ * further out than anything this move chose. Restoring that card would throw
+ * away a real review result to correct a scheduling decision it has already
+ * moved past, so cards that are no longer where the move left them are skipped
+ * and reported by their absence from the result.
  */
 export async function restoreCardDates(
   entries: RescheduledCard[],
   userId: string,
+  stillOn?: Date,
 ) {
   if (entries.length === 0) return [];
 
   return mutate((draft) => {
     const dates = new Map(entries.map((e) => [e.cardId, e.previousReviewAt]));
+    const expected = stillOn ? startOfDay(stillOn).getTime() : null;
     const now = new Date();
     const restored: CardRow[] = [];
 
@@ -465,6 +474,12 @@ export async function restoreCardDates(
       const date = dates.get(card.id);
       if (!date) return card;
       if (!ownsCard(draft, card, userId)) return card;
+      if (
+        expected !== null &&
+        startOfDay(card.nextReviewAt).getTime() !== expected
+      ) {
+        return card;
+      }
       const next: CardRow = { ...card, nextReviewAt: date, updatedAt: now };
       restored.push(next);
       return next;

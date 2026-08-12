@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   CalendarArrowUp,
@@ -14,11 +14,13 @@ import { useStore, useStoreReady } from "@/lib/store/use-store";
 import { isArchiveDeck, startOfDay } from "@/lib/store/selectors";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
+import { MoveDueCardsDialog, type MovableCard } from "./move-due-cards-dialog";
 import {
-  MoveDueCardsDialog,
-  type CompletedMove,
-  type MovableCard,
-} from "./move-due-cards-dialog";
+  getLastMove,
+  lastMoveServerSnapshot,
+  setLastMove,
+  subscribeLastMove,
+} from "./last-move";
 import { undoRescheduleAction } from "@/app/deck/actions";
 
 /** Monday-first, matching how a week is read here. */
@@ -277,21 +279,41 @@ export default function CalendarPage() {
    *
    * Deliberately not on a timer: a move can shift a hundred cards, and the
    * moment to reconsider is after looking at the new shape of the month, which
-   * takes longer than any toast would stay up.
+   * takes longer than any toast would stay up. It is held in localStorage
+   * rather than component state so closing the tab isn't the same as accepting
+   * the move.
    */
-  const [lastMove, setLastMove] = useState<CompletedMove | null>(null);
+  const lastMove = useSyncExternalStore(
+    subscribeLastMove,
+    getLastMove,
+    lastMoveServerSnapshot,
+  );
   const [undoing, setUndoing] = useState(false);
-  const [undoError, setUndoError] = useState(false);
+  const [undoNote, setUndoNote] = useState<string | null>(null);
 
   async function undoLastMove() {
     if (!lastMove) return;
     setUndoing(true);
-    setUndoError(false);
+    setUndoNote(null);
     try {
-      await undoRescheduleAction({ entries: lastMove.entries });
-      setLastMove(null);
+      const { restored, requested } = await undoRescheduleAction({
+        entries: lastMove.entries,
+        stillOn: lastMove.toKey,
+      });
+      if (restored === 0) {
+        setUndoNote("Those cards have moved on since — nothing to undo.");
+      } else if (restored < requested) {
+        // Said plainly rather than silently: the day's count won't match what
+        // undoing appeared to promise, and that needs a reason.
+        setUndoNote(
+          `Put back ${restored} of ${requested}. The rest have been studied since.`,
+        );
+        setLastMove(null);
+      } else {
+        setLastMove(null);
+      }
     } catch {
-      setUndoError(true);
+      setUndoNote("Couldn't undo that — try again.");
     } finally {
       setUndoing(false);
     }
@@ -454,34 +476,42 @@ export default function CalendarPage() {
         })}
       </div>
 
-      {lastMove && (
+      {/* Outlives the move it describes: once an undo comes back partial, the
+          bar has to stay long enough to say so. */}
+      {(lastMove || undoNote) && (
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-4 py-3 text-sm">
           <span className="flex-1">
-            Moved {lastMove.entries.length} {lastMove.deckLabel} card
-            {lastMove.entries.length === 1 ? "" : "s"} to{" "}
-            <strong>{keyLabel(lastMove.toKey)}</strong>.
-            {undoError && (
-              <span className="text-destructive">
-                {" "}
-                Couldn&apos;t undo that — try again.
-              </span>
+            {lastMove && (
+              <>
+                Moved {lastMove.entries.length} {lastMove.deckLabel} card
+                {lastMove.entries.length === 1 ? "" : "s"} to{" "}
+                <strong>{keyLabel(lastMove.toKey)}</strong>.{" "}
+              </>
+            )}
+            {undoNote && (
+              <span className="text-muted-foreground">{undoNote}</span>
             )}
           </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={undoing}
-            onClick={undoLastMove}
-          >
-            <Undo2 className="mr-1 size-3.5" />
-            {undoing ? "Undoing…" : "Undo"}
-          </Button>
+          {lastMove && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={undoing}
+              onClick={undoLastMove}
+            >
+              <Undo2 className="mr-1 size-3.5" />
+              {undoing ? "Undoing…" : "Undo"}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
             aria-label="Dismiss"
             disabled={undoing}
-            onClick={() => setLastMove(null)}
+            onClick={() => {
+              setLastMove(null);
+              setUndoNote(null);
+            }}
           >
             <X className="size-4" />
           </Button>
@@ -605,7 +635,7 @@ export default function CalendarPage() {
           countOn={countOn}
           onMoved={(move) => {
             setLastMove(move);
-            setUndoError(false);
+            setUndoNote(null);
           }}
         />
       )}

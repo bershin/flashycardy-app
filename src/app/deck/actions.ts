@@ -225,16 +225,27 @@ const undoRescheduleSchema = z.object({
       }),
     )
     .min(1),
+  /**
+   * The day the move put the cards on, `YYYY-MM-DD`. Cards that have since
+   * been studied onto a different day are left alone.
+   */
+  stillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
 type UndoRescheduleInput = z.infer<typeof undoRescheduleSchema>;
 
-/** Put the cards from the last move back on the dates they came off. */
+/**
+ * Put the cards from the last move back on the dates they came off.
+ *
+ * Returns how many were restored against how many were asked for, so a stale
+ * undo can say what it managed rather than claiming a clean reversal.
+ */
 export async function undoRescheduleAction(data: UndoRescheduleInput) {
   const { userId } = auth();
   if (!userId) throw new Error("Unauthorized");
 
   const parsed = undoRescheduleSchema.parse(data);
+  const [year, month, day] = parsed.stillOn.split("-").map(Number);
 
   const restored = await restoreCardDates(
     parsed.entries.map((e) => ({
@@ -242,9 +253,10 @@ export async function undoRescheduleAction(data: UndoRescheduleInput) {
       previousReviewAt: new Date(e.previousReviewAt),
     })),
     userId,
+    new Date(year, month - 1, day),
   );
-  if (restored.length === 0) throw new Error("Those cards couldn't be moved.");
-  return restored;
+
+  return { restored: restored.length, requested: parsed.entries.length };
 }
 
 const AI_CARD_COUNT = 20;
