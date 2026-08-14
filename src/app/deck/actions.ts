@@ -368,3 +368,86 @@ export async function generateCardsWithAIAction(deckId: number) {
     parsed.data.cards.map((c) => ({ deckId, front: c.front, back: c.back })),
   );
 }
+
+/**
+ * Read the words out of a picture of words.
+ *
+ * For the images that are only text — a screenshot of a question, a photograph
+ * of a page — where the picture is carrying prose that the card could hold
+ * directly and be searchable, editable and a great deal smaller for it.
+ *
+ * Deliberately transcription and nothing more: no summarising, no answering,
+ * no describing. A diagram put through this comes back as whatever text is
+ * printed on it, which is the honest answer — an NVR shape sequence has no
+ * text, and the model is told to say so rather than narrate the picture.
+ *
+ * Runs in the browser against the user's own key, like the card generator; see
+ * the note there for why that is acceptable.
+ */
+export async function transcribeImageAction(dataUrl: string) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  if (!dataUrl.startsWith("data:image/")) {
+    throw new Error("That doesn't look like an image.");
+  }
+
+  const apiKey = getOpenAIKey();
+  if (!apiKey) {
+    throw new Error("Add an OpenAI API key in Settings to read images.");
+  }
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: getOpenAIModel(),
+      messages: [
+        {
+          role: "system",
+          content:
+            "You transcribe images for a flashcard app. Return exactly the text " +
+            "that appears in the image, preserving line breaks, lists and " +
+            "numbering. Do not summarise, translate, answer questions, or " +
+            "describe anything that is not written text. If the image contains " +
+            "no readable text, reply with exactly: NO_TEXT",
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Transcribe this image." },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = (await response.json()) as { error?: { message?: string } };
+      detail = body.error?.message ? `: ${body.error.message}` : "";
+    } catch {
+      /* non-JSON error body */
+    }
+    if (response.status === 401) {
+      throw new Error(`OpenAI rejected the API key${detail}`);
+    }
+    throw new Error(`OpenAI returned ${response.status}${detail}`);
+  }
+
+  const body = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const text = body.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error("No reply from OpenAI. Please try again.");
+  // The sentinel is the model reporting a picture with nothing to read, which
+  // is a real answer rather than a failure — the caller says so and leaves the
+  // image alone.
+  if (text === "NO_TEXT") return null;
+  return text;
+}

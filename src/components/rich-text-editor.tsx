@@ -1,6 +1,11 @@
 "use client";
 
-import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import {
+  useEditor,
+  useEditorState,
+  EditorContent,
+  type Editor,
+} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -16,10 +21,12 @@ import {
   SquareCode,
   Heading2,
   ImagePlus,
+  ScanText,
   Undo,
   Redo,
 } from "lucide-react";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
+import { transcribeImageAction } from "@/app/deck/actions";
 
 interface RichTextEditorProps {
   content: string;
@@ -168,6 +175,86 @@ function insertImageFile(editor: Editor, file: File) {
   });
 }
 
+/**
+ * Turn the selected image into the text printed on it.
+ *
+ * Only offered while an image is selected, because that is the only time it
+ * means anything — and it replaces that image alone, leaving the rest of the
+ * card untouched. A picture with nothing to read says so and stays put: a
+ * shape puzzle is the picture, and swapping it for a description would destroy
+ * the card rather than convert it.
+ */
+function ConvertImageButton({ editor }: { editor: Editor }) {
+  const [pending, setPending] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  // Subscribed rather than read: selecting an image changes the selection but
+  // not the document, and the toolbar only re-renders for document changes on
+  // its own. Without this the button would never appear.
+  const selectedImage = useEditorState({
+    editor,
+    selector: ({ editor: e }) =>
+      e.isActive("image")
+        ? (e.getAttributes("image").src as string | undefined)
+        : undefined,
+  });
+
+  async function convert() {
+    if (!selectedImage) return;
+    setPending(true);
+    setNote(null);
+    try {
+      const text = await transcribeImageAction(selectedImage);
+      if (text === null) {
+        setNote("No text found in that image — leaving it as it is.");
+        return;
+      }
+      // Paragraph per line, so a transcribed list keeps its shape instead of
+      // collapsing into one run-on block.
+      const html = text
+        .split(/\n{2,}|\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => `<p>${escapeHtml(line)}</p>`)
+        .join("");
+      editor.chain().focus().deleteSelection().insertContent(html).run();
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "Couldn't read that image.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (!selectedImage) return null;
+
+  return (
+    <>
+      <div className="mx-1 h-4 w-px bg-border" />
+      <button
+        type="button"
+        onClick={convert}
+        disabled={pending}
+        title="Replace this image with the text printed on it"
+        className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+      >
+        <ScanText className="size-3.5" />
+        {pending ? "Reading…" : "Image to text"}
+      </button>
+      {note && (
+        <span className="ml-1 text-xs text-muted-foreground">{note}</span>
+      )}
+    </>
+  );
+}
+
+/** Transcribed text is content, not markup — it goes in as characters. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function Toolbar({ editor }: { editor: Editor }) {
   const handleImageUpload = useCallback(() => {
     const input = document.createElement("input");
@@ -253,6 +340,8 @@ function Toolbar({ editor }: { editor: Editor }) {
       >
         <ImagePlus className="size-3.5" />
       </ToolbarButton>
+
+      <ConvertImageButton editor={editor} />
 
       <div className="mx-1 h-4 w-px bg-border" />
 
