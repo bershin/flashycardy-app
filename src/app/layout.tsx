@@ -39,11 +39,24 @@ export default function RootLayout({
         {/* Stamps the theme before first paint — see THEME_INIT_SCRIPT. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body className="min-h-full flex flex-col" suppressHydrationWarning>
+      {/*
+        The window is the frame, not the floor: `h-full` with the scrolling
+        moved inside means a page that wants to fill the screen actually can.
+        Under `min-h-full` the body grew to whatever it held, so a screen asking
+        for the height it had been given was handed the height of its own
+        contents — which is how the study card ran off the bottom instead of
+        scrolling within itself.
+      */}
+      <body
+        className="flex h-full flex-col overflow-hidden"
+        suppressHydrationWarning
+      >
         <TooltipProvider>
           {/* Boots the local database and the sync loop, and renders the header. */}
           <AppChrome />
-          {children}
+          <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            {children}
+          </main>
         </TooltipProvider>
       </body>
     </html>

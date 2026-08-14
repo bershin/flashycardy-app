@@ -688,23 +688,29 @@ export function StudySession({
             timesMissed={history.timesMissed}
             streak={history.streak}
           />
-          <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Question
-            </p>
-            <div
-              className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
-              dangerouslySetInnerHTML={{ __html: current.front }}
-            />
-            {!revealed && !interactive && (
-              <p className="mt-4 text-xs text-muted-foreground">
-                Click or press{" "}
-                <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
-                  Space
-                </kbd>{" "}
-                to reveal answer
+          <CardContent className="flex h-full flex-col items-center overflow-y-auto p-6">
+            {/* Centred by auto margins rather than `justify-center`: a
+                centred flex box clips the top of anything taller than it, so a
+                long answer opened halfway down itself and could not be
+                scrolled back to its first line. */}
+            <div className="m-auto w-full">
+              <p className="mb-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Question
               </p>
-            )}
+              <div
+                className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
+                dangerouslySetInnerHTML={{ __html: current.front }}
+              />
+              {!revealed && !interactive && (
+                <p className="mt-4 text-center text-xs text-muted-foreground">
+                  Click or press{" "}
+                  <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
+                    Space
+                  </kbd>{" "}
+                  to reveal answer
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -720,14 +726,17 @@ export function StudySession({
         )}
         {current.type === "basic" && revealed && (
           <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
-            <CardContent className="flex h-full flex-col items-center justify-center overflow-y-auto p-6">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Answer
-              </p>
-              <div
-                className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
-                dangerouslySetInnerHTML={{ __html: current.back }}
-              />
+            <CardContent className="flex h-full flex-col items-center overflow-y-auto p-6">
+              {/* Same auto-margin centring as the question. */}
+              <div className="m-auto w-full">
+                <p className="mb-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Answer
+                </p>
+                <div
+                  className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
+                  dangerouslySetInnerHTML={{ __html: current.back }}
+                />
+              </div>
             </CardContent>
           </Card>
         )}

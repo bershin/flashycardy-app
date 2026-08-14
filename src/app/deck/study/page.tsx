@@ -258,7 +258,11 @@ function StudyPageContent() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col overflow-hidden px-4 py-4">
+    // `h-full` rather than `flex-1`: the studying screen takes the window it is
+    // given and does its own scrolling inside the cards, so the rating buttons
+    // are always where they were a card ago. Wider than the rest of the app too
+    // — a long answer is only long because the column is narrow.
+    <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden px-4 py-4">
       <div className="flex items-center justify-between">
         <Link
           href={backHref}
