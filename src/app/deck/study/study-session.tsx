@@ -149,6 +149,18 @@ export function StudySession({
   );
   const [round, setRound] = useState(initialRound);
   const [editOpen, setEditOpen] = useState(false);
+  /**
+   * A scan being examined at full size, or null.
+   *
+   * The card is fitted to the window, which is what keeps the question, the
+   * picture and the rating buttons on one screen — but it also means browser
+   * zoom cannot make the picture bigger: zooming shrinks the window in CSS
+   * pixels, and the picture is sized from the window. So the picture gets a
+   * view of its own, where the whole screen is the frame.
+   */
+  const [zoomed, setZoomed] = useState<string | null>(null);
+  /** Whether that view is showing the scan at its own resolution. */
+  const [actualSize, setActualSize] = useState(false);
   const [isPending, startTransition] = useTransition();
   /** Read straight from localStorage — it is browser state, not session state. */
   const soundOn = useSyncExternalStore(
@@ -182,6 +194,23 @@ export function StudySession({
   );
   /** Answered in its own surface rather than by flipping and self-rating. */
   const interactive = current?.type === "quiz";
+
+  /**
+   * A click on a picture opens the picture, not the card behind it.
+   *
+   * Caught on the way down so it beats the card's own reveal handler: a scan is
+   * something to look at closely before answering, and turning the card over
+   * while trying to read it is the opposite of what was asked for.
+   */
+  const openImageOnClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName !== "IMG") return;
+    e.preventDefault();
+    e.stopPropagation();
+    setZoomed((target as HTMLImageElement).src);
+    // Always opens fitted, whatever the last scan was left on.
+    setActualSize(false);
+  }, []);
 
   // A quiz card puts its options up straight away, so it is two columns from
   // the moment it appears; a basic card only becomes two when it is turned over.
@@ -389,6 +418,16 @@ export function StudySession({
       // without being editable.
       if (editOpen) return;
 
+      // While a scan is being examined the shortcuts belong to it: Escape puts
+      // it away, and nothing else should flip or rate the card behind it.
+      if (zoomed !== null) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setZoomed(null);
+        }
+        return;
+      }
+
       // Quiz cards are answered in their own surface, so the flip and
       // self-rate shortcuts would either do nothing or record a rating the
       // user didn't intend.
@@ -420,7 +459,7 @@ export function StudySession({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [reveal, goPrev, rate, finished, revealed, interactive, editOpen]);
+  }, [reveal, goPrev, rate, finished, revealed, interactive, editOpen, zoomed]);
 
   if (finished) {
     const scorePercent =
@@ -701,7 +740,10 @@ export function StudySession({
             timesMissed={history.timesMissed}
             streak={history.streak}
           />
-          <CardContent className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3">
+          <CardContent
+            className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3"
+            onClickCapture={openImageOnClick}
+          >
             {/* Centred by auto margins rather than `justify-center`: a
                 centred flex box clips the top of anything taller than it, so a
                 long answer opened halfway down itself and could not be
@@ -739,7 +781,10 @@ export function StudySession({
         )}
         {current.type === "basic" && revealed && (
           <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
-            <CardContent className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3">
+            <CardContent
+            className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3"
+            onClickCapture={openImageOnClick}
+          >
               {/* Same auto-margin centring as the question. */}
               <div className="m-auto w-full">
                 <p className="mb-1 text-center text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
@@ -830,6 +875,54 @@ export function StudySession({
             )
           }
         />
+      )}
+
+      {/* The picture with the screen as its frame. Rendered here rather than in
+          a dialog component because it wants no chrome at all: the scan, a way
+          out, and nothing else competing for the space.
+
+          Clicking the scan again takes it to its own full resolution and lets
+          the frame scroll — browser zoom cannot help with any of this, because
+          zooming shrinks the window in CSS pixels and every picture here is
+          sized from the window, so the two cancel out. Magnification has to
+          come from the picture's own size instead. */}
+      {zoomed && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Card image"
+          onClick={() => setZoomed(null)}
+          className="fixed inset-0 z-50 overflow-auto bg-black/85 p-4 animate-in fade-in duration-150"
+        >
+          <div
+            className={`flex min-h-full ${actualSize ? "" : "items-center justify-center"}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={zoomed}
+              alt="Card image at full size"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActualSize((full) => !full);
+              }}
+              title={actualSize ? "Fit to screen" : "See it at full resolution"}
+              className={`m-auto rounded-md bg-white shadow-2xl ${
+                actualSize
+                  ? "max-w-none cursor-zoom-out"
+                  : "max-h-[calc(100dvh-2rem)] max-w-full cursor-zoom-in object-contain"
+              }`}
+            />
+          </div>
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Close image"
+            onClick={() => setZoomed(null)}
+            className="fixed top-4 right-4"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
       )}
     </div>
   );

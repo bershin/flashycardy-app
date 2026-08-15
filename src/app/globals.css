@@ -348,6 +348,10 @@
 .study-media .rich-content img:only-child {
   max-height: 90cqh;
 }
+/* Clicking one opens it full size, so it says so on approach. */
+.study-media .rich-content img {
+  cursor: zoom-in;
+}
 .study-media .rich-content p:has(> img:only-child) {
   margin-bottom: 0;
 }
