@@ -332,10 +332,24 @@
   container-type: size;
 }
 .study-media .rich-content img {
-  max-height: 78cqh;
+  /*
+   * Most of the card, not most of what is left over. A scan is the question on
+   * these cards, so it gets the room, and the label and hint around it are set
+   * tight enough to leave it that room. Past this the card scrolls, which is
+   * the right trade at the point where the words are long enough to matter.
+   */
+  max-height: 86cqh;
   width: auto;
   object-fit: contain;
-  margin-inline: auto;
+  /* Tighter than the browsing view: every spare pixel here is picture. */
+  margin: 0.25rem auto;
+}
+/* The picture is the content here; the chrome around it gives way. */
+.study-media .rich-content img:only-child {
+  max-height: 90cqh;
+}
+.study-media .rich-content p:has(> img:only-child) {
+  margin-bottom: 0;
 }
 .tiptap img.ProseMirror-selectednode {
   outline: 2px solid var(--primary);
