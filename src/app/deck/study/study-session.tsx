@@ -688,7 +688,7 @@ export function StudySession({
             timesMissed={history.timesMissed}
             streak={history.streak}
           />
-          <CardContent className="flex h-full flex-col items-center overflow-y-auto p-6">
+          <CardContent className="study-media flex h-full flex-col items-center overflow-y-auto p-6">
             {/* Centred by auto margins rather than `justify-center`: a
                 centred flex box clips the top of anything taller than it, so a
                 long answer opened halfway down itself and could not be
@@ -726,7 +726,7 @@ export function StudySession({
         )}
         {current.type === "basic" && revealed && (
           <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
-            <CardContent className="flex h-full flex-col items-center overflow-y-auto p-6">
+            <CardContent className="study-media flex h-full flex-col items-center overflow-y-auto p-6">
               {/* Same auto-margin centring as the question. */}
               <div className="m-auto w-full">
                 <p className="mb-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">

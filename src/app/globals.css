@@ -315,6 +315,28 @@
   border-radius: 0.375rem;
   margin: 0.5rem 0;
 }
+
+/*
+ * On the studying screen the card is a screenful, not a scroll, so a picture
+ * has to fit the room it is given rather than push the question off the top and
+ * its own bottom edge out of sight.
+ *
+ * Measured against the card rather than the window. A percentage would have
+ * nothing definite to resolve against — every box between the image and the
+ * card sizes itself to its contents — and a viewport calculation has to guess
+ * at the height of the words above the picture, which is exactly what varies.
+ * Making the card a size container gives `cqh` a real box to work from, so the
+ * cap is a share of the space actually on offer.
+ */
+.study-media {
+  container-type: size;
+}
+.study-media .rich-content img {
+  max-height: 78cqh;
+  width: auto;
+  object-fit: contain;
+  margin-inline: auto;
+}
 .tiptap img.ProseMirror-selectednode {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
