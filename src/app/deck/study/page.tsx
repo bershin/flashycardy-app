@@ -104,6 +104,14 @@ function StudyPageContent() {
    */
   const [decision, setDecision] = useState<Decision | null>(null);
 
+  /**
+   * Whether an answer is on screen beside the question.
+   *
+   * The column widens only then. One card wants the reading width the rest of
+   * the app uses; two side by side want the room, and each gets half of it.
+   */
+  const [answerShowing, setAnswerShowing] = useState(false);
+
   // Adjusted during render rather than in an effect: the snapshot has to be
   // taken before the first paint, and doing it in an effect would both flash an
   // empty session and trigger a cascading render. The store is read directly so
@@ -260,9 +268,12 @@ function StudyPageContent() {
   return (
     // `h-full` rather than `flex-1`: the studying screen takes the window it is
     // given and does its own scrolling inside the cards, so the rating buttons
-    // are always where they were a card ago. Wider than the rest of the app too
-    // — a long answer is only long because the column is narrow.
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden px-4 py-4">
+    // are always where they were a card ago.
+    <div
+      className={`mx-auto flex h-full w-full flex-col overflow-hidden px-4 py-4 transition-[max-width] duration-200 ${
+        answerShowing ? "max-w-6xl" : "max-w-4xl"
+      }`}
+    >
       <div className="flex items-center justify-between">
         <Link
           href={backHref}
@@ -285,6 +296,7 @@ function StudyPageContent() {
           active?.kind === "study" ? active.durations : undefined
         }
         initialRound={active?.kind === "study" ? active.round : 1}
+        onAnswerShowing={setAnswerShowing}
       />
     </div>
   );

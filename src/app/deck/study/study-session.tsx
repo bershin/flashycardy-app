@@ -101,6 +101,11 @@ interface StudySessionProps {
   /** Time already spent per card, when resuming. */
   initialDurations?: Array<[number, number]>;
   initialRound?: number;
+  /**
+   * Told whenever an answer joins the question on screen, so the page can give
+   * the pair the width two columns need and take it back for a lone question.
+   */
+  onAnswerShowing?: (showing: boolean) => void;
 }
 
 type Rating = "got_it" | "missed";
@@ -127,6 +132,7 @@ export function StudySession({
   initialRatings,
   initialDurations,
   initialRound = 1,
+  onAnswerShowing,
 }: StudySessionProps) {
   const [studyCards, setStudyCards] = useState(initialOrder ?? cards);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -176,6 +182,13 @@ export function StudySession({
   );
   /** Answered in its own surface rather than by flipping and self-rating. */
   const interactive = current?.type === "quiz";
+
+  // A quiz card puts its options up straight away, so it is two columns from
+  // the moment it appears; a basic card only becomes two when it is turned over.
+  const answerShowing = !finished && current !== undefined && (revealed || interactive);
+  useEffect(() => {
+    onAnswerShowing?.(answerShowing);
+  }, [answerShowing, onAnswerShowing]);
 
   // Stopped the moment the answer is on screen: what the time is worth
   // knowing about is the recall, not how long the self-rating took afterwards.
