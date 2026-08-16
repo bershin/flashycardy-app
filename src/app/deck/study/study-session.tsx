@@ -433,22 +433,28 @@ export function StudySession({
       // user didn't intend.
       if (interactive) return;
 
+      // Down turns the card over, left and right answer it — the same shape as
+      // the buttons underneath, where Missed sits on the left of Got it. Up is
+      // the way back, which leaves the horizontal pair to mean one thing only.
       switch (e.key) {
         case " ":
+        case "ArrowDown":
           e.preventDefault();
           if (!finished && !revealed) reveal();
           break;
-        case "ArrowLeft":
+        case "ArrowUp":
           e.preventDefault();
           if (!finished && !revealed) goPrev();
           break;
         case "1":
+        case "ArrowLeft":
           if (!finished && revealed) {
             e.preventDefault();
             rate("missed");
           }
           break;
         case "2":
+        case "ArrowRight":
           if (!finished && revealed) {
             e.preventDefault();
             rate("got_it");
@@ -762,6 +768,10 @@ export function StudySession({
                   <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
                     Space
                   </kbd>{" "}
+                  or{" "}
+                  <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
+                    ↓
+                  </kbd>{" "}
                   to reveal answer
                 </p>
               )}
@@ -832,9 +842,17 @@ export function StudySession({
             <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
               1
             </kbd>{" "}
-            for Missed or{" "}
+            or{" "}
+            <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
+              &larr;
+            </kbd>{" "}
+            for Missed,{" "}
             <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
               2
+            </kbd>{" "}
+            or{" "}
+            <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
+              &rarr;
             </kbd>{" "}
             for Got it
           </p>
@@ -853,7 +871,7 @@ export function StudySession({
           <p className="text-xs text-muted-foreground">
             Use{" "}
             <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
-              &larr;
+              &uarr;
             </kbd>{" "}
             to go back
           </p>
