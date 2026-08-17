@@ -159,8 +159,10 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
  *    cleanly drops out of the way while still being checked occasionally. Eight
  *    rungs, so it graduates on the ninth correct answer, roughly two years after
  *    the card was first seen.
- *  - `weekly` holds at seven days and stops after four, since a card meant to
- *    come back at a fixed cadence has nothing to prove by running longer.
+ *  - `weekly` holds at five days and stops after four, since a card meant to
+ *    come back at a fixed cadence has nothing to prove by running longer. The
+ *    name is kept for the stored value — every card already carries it, and a
+ *    rename would be a migration for a word.
  *
  * Running off the end of a ladder means the card has been learned and is
  * archived, so adding a rung extends that schedule rather than needing a second
@@ -169,7 +171,7 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
  */
 const REVIEW_SCHEDULES: Record<ReviewSchedule, readonly number[]> = {
   incremental: [1, 7, 14, 21, 30, 90, 180, 365],
-  weekly: [1, 7, 7, 7],
+  weekly: [1, 5, 5, 5],
 };
 
 /** How soon a missed card comes back round. */
