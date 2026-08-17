@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { withLazyImages } from "@/lib/card-html";
 import {
   Card,
   CardAction,
@@ -101,7 +102,7 @@ export function FlashCard({
           <CardHeader>
             <div
               className="rich-content min-w-0 overflow-hidden text-base font-semibold"
-              dangerouslySetInnerHTML={{ __html: card.front }}
+              dangerouslySetInnerHTML={{ __html: withLazyImages(card.front) }}
             />
             <CardAction>
               <span
@@ -118,7 +119,7 @@ export function FlashCard({
           <CardContent>
             <div
               className="rich-content min-w-0 overflow-hidden text-muted-foreground"
-              dangerouslySetInnerHTML={{ __html: card.back }}
+              dangerouslySetInnerHTML={{ __html: withLazyImages(card.back) }}
             />
           </CardContent>
         </Card>
@@ -132,7 +133,7 @@ export function FlashCard({
         <CardHeader>
           <div
             className="rich-content min-w-0 overflow-hidden text-base font-semibold"
-            dangerouslySetInnerHTML={{ __html: card.front }}
+            dangerouslySetInnerHTML={{ __html: withLazyImages(card.front) }}
           />
           <CardAction>
             <DropdownMenu>
@@ -198,7 +199,7 @@ export function FlashCard({
           ) : (
             <div
               className="rich-content text-muted-foreground"
-              dangerouslySetInnerHTML={{ __html: card.back }}
+              dangerouslySetInnerHTML={{ __html: withLazyImages(card.back) }}
             />
           )}
           {card.type === "quiz" && (

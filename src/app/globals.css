@@ -352,6 +352,21 @@
 .study-media .rich-content img {
   cursor: zoom-in;
 }
+
+/*
+ * A long list of cards renders only the part of itself anyone can see.
+ *
+ * Every card carries its images inline, and the browser decodes each one to raw
+ * pixels as soon as it is in the document — a few hundred scans is hundreds of
+ * megabytes of bitmap, spent before the first card has been read. This lets the
+ * renderer skip layout and paint for anything far from the viewport; the
+ * intrinsic size keeps the scrollbar honest in the meantime, and `auto` lets
+ * each card remember its real height once it has been seen.
+ */
+.card-list > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 15rem;
+}
 .study-media .rich-content p:has(> img:only-child) {
   margin-bottom: 0;
 }

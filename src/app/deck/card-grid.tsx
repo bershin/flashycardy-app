@@ -113,7 +113,11 @@ export function CardGrid({ cards }: CardGridProps) {
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* `card-list` lets the browser skip the work for cards that are nowhere
+          near the viewport — see the rule in globals.css. A deck of a few
+          hundred image cards is otherwise laid out and painted in full before
+          the first one can be looked at. */}
+      <div className="card-list grid gap-4 sm:grid-cols-2">
         {displayCards.map((card) => (
           <FlashCard
             key={card.id}

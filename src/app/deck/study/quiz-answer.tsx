@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CardRow } from "@/lib/store/types";
+import { withLazyImages } from "@/lib/card-html";
 
 interface QuizAnswerProps {
   card: CardRow;
@@ -99,7 +100,7 @@ export function QuizAnswer({
           {card.back.replace(/<[^>]*>/g, "").trim().length > 0 && (
             <div
               className="rich-content rounded-lg border bg-muted/50 p-3 text-sm"
-              dangerouslySetInnerHTML={{ __html: card.back }}
+              dangerouslySetInnerHTML={{ __html: withLazyImages(card.back) }}
             />
           )}
           <div className="flex justify-center">
