@@ -73,11 +73,16 @@ function ToolbarButton({
  * several megabytes; a handful of them would push the file toward GitHub's
  * 100 MB ceiling.
  *
- * Downscaling on the way in keeps that in check. 1600px is well beyond what the
- * card view renders, so there is no visible loss.
+ * The dimensions matter twice over, and the second time is the expensive one: a
+ * decoded image costs width × height × 4 bytes of memory however well it
+ * compressed, so 1600px meant about 3 MB of bitmap for every scan on screen.
+ *
+ * 1200px is still more than twice what the card view renders, so the picture on
+ * the card is unchanged; only opening one at full resolution is softer, and
+ * against roughly half the memory that is the better bargain.
  */
-const MAX_IMAGE_EDGE = 1600;
-const IMAGE_QUALITY = 0.85;
+const MAX_IMAGE_EDGE = 1200;
+const IMAGE_QUALITY = 0.8;
 
 /**
  * How large a single encoded image may be, counted in characters of its base64
