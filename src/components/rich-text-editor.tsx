@@ -181,28 +181,42 @@ function insertImageFile(editor: Editor, file: File) {
 }
 
 /**
- * Turn the selected image into the text printed on it.
+ * Turn an image in this field into the text printed on it.
  *
- * Only offered while an image is selected, because that is the only time it
- * means anything — and it replaces that image alone, leaving the rest of the
- * card untouched. A picture with nothing to read says so and stays put: a
- * shape puzzle is the picture, and swapping it for a description would destroy
- * the card rather than convert it.
+ * Offered whenever the field holds a picture, and acting on the selected one
+ * where there is a selection. Selection alone was the first attempt and it was
+ * wrong: clicking a block image in this editor does not select its node, so the
+ * control never appeared however many times an image was clicked.
+ *
+ * A picture with nothing to read says so and stays put — a shape puzzle is the
+ * picture, and swapping it for a description would destroy the card rather than
+ * convert it.
  */
 function ConvertImageButton({ editor }: { editor: Editor }) {
   const [pending, setPending] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  // Subscribed rather than read: selecting an image changes the selection but
-  // not the document, and the toolbar only re-renders for document changes on
-  // its own. Without this the button would never appear.
-  const selectedImage = useEditorState({
+  // Subscribed rather than read: the toolbar only re-renders for document
+  // changes on its own, and selecting an image changes neither.
+  const images = useEditorState({
     editor,
-    selector: ({ editor: e }) =>
-      e.isActive("image")
+    selector: ({ editor: e }) => {
+      const found: string[] = [];
+      e.state.doc.descendants((node) => {
+        if (node.type.name === "image" && typeof node.attrs.src === "string") {
+          found.push(node.attrs.src);
+        }
+      });
+      const selected = e.isActive("image")
         ? (e.getAttributes("image").src as string | undefined)
-        : undefined,
+        : undefined;
+      return { count: found.length, target: selected ?? found[0] };
+    },
+    equalityFn: (a, b) =>
+      a?.count === b?.count && a?.target === b?.target,
   });
+
+  const selectedImage = images.target;
 
   async function convert() {
     if (!selectedImage) return;
@@ -222,7 +236,26 @@ function ConvertImageButton({ editor }: { editor: Editor }) {
         .filter(Boolean)
         .map((line) => `<p>${escapeHtml(line)}</p>`)
         .join("");
-      editor.chain().focus().deleteSelection().insertContent(html).run();
+      // Replace that image by finding it in the document rather than deleting
+      // "the selection" — there may not be one, and the rest of the card must
+      // not be touched.
+      let from: number | null = null;
+      let to = 0;
+      editor.state.doc.descendants((node, pos) => {
+        if (
+          from === null &&
+          node.type.name === "image" &&
+          node.attrs.src === selectedImage
+        ) {
+          from = pos;
+          to = pos + node.nodeSize;
+        }
+      });
+      if (from === null) {
+        setNote("That image is no longer in the card.");
+        return;
+      }
+      editor.chain().focus().insertContentAt({ from, to }, html).run();
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Couldn't read that image.");
     } finally {

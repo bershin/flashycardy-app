@@ -54,7 +54,7 @@ export const AI_PROVIDER_SPECS: Record<AIProvider, ProviderSpec> = {
     label: "Google Gemini",
     keyStorage: "flashycardy.geminiKey",
     modelStorage: "flashycardy.geminiModel",
-    defaultModel: "gemini-2.5-flash-lite",
+    defaultModel: "gemini-3.5-flash-lite",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     keysUrl: "https://aistudio.google.com/apikey",
     strictJsonSchema: false,
