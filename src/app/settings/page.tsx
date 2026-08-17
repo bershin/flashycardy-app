@@ -51,11 +51,15 @@ import {
   type SyncState,
 } from "@/lib/store/github-sync";
 import {
-  DEFAULT_OPENAI_MODEL,
-  getOpenAIKey,
-  getOpenAIModel,
-  setOpenAIKey,
-  setOpenAIModel,
+  AI_PROVIDERS,
+  AI_PROVIDER_SPECS,
+  getAIKey,
+  getAIModel,
+  getAIProvider,
+  setAIKey,
+  setAIModel,
+  setAIProvider,
+  type AIProvider,
 } from "@/lib/settings";
 
 const EMPTY_CONFIG: SyncConfig = {
@@ -76,8 +80,9 @@ export default function SettingsPage() {
   const syncError = useSyncExternalStore(subscribeSync, getSyncError, () => null);
 
   const [config, setConfig] = useState<SyncConfig>(EMPTY_CONFIG);
-  const [openaiKey, setKey] = useState("");
-  const [openaiModel, setModel] = useState(DEFAULT_OPENAI_MODEL);
+  const [provider, setProvider] = useState<AIProvider>("openai");
+  const [apiKey, setKey] = useState("");
+  const [model, setModel] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
@@ -89,8 +94,10 @@ export default function SettingsPage() {
   // localStorage is browser-only, so everything is read after mount.
   useEffect(() => {
     setConfig(getSyncConfig() ?? EMPTY_CONFIG);
-    setKey(getOpenAIKey() ?? "");
-    setModel(getOpenAIModel());
+    const active = getAIProvider();
+    setProvider(active);
+    setKey(getAIKey(active) ?? "");
+    setModel(getAIModel(active));
     setLastSynced(getLastSyncedAt());
     void readStorageStatus().then(setStorage);
     void readStorageUsage().then((bytes) =>
@@ -445,38 +452,79 @@ export default function SettingsPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-semibold">AI card generation</h2>
+        <h2 className="text-lg font-semibold">AI</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Optional. With a key set, decks get a &ldquo;Generate with AI&rdquo;
-          button. Requests go straight from this browser to OpenAI and are billed
-          to your own account.
+          button and a selected image can be turned into text. Requests go
+          straight from this browser to {AI_PROVIDER_SPECS[provider].label} and
+          are billed to your own account.
         </p>
         <Card className="mt-4">
           <CardContent className="grid gap-4 pt-6">
+            {/* Each provider keeps its own key and model, so trying the other
+                one and coming back does not mean typing a key in again. */}
             <div className="grid gap-1.5">
-              <Label htmlFor="openai">OpenAI API key</Label>
+              <Label>Provider</Label>
+              <div className="flex flex-wrap gap-2">
+                {AI_PROVIDERS.map((option) => (
+                  <Button
+                    key={option}
+                    type="button"
+                    variant={option === provider ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setProvider(option);
+                      setKey(getAIKey(option) ?? "");
+                      setModel(getAIModel(option));
+                    }}
+                  >
+                    {AI_PROVIDER_SPECS[option].label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="ai-key">
+                {AI_PROVIDER_SPECS[provider].label} API key
+              </Label>
               <Input
-                id="openai"
+                id="ai-key"
                 type="password"
-                value={openaiKey}
-                placeholder="sk-…"
+                value={apiKey}
+                placeholder={provider === "gemini" ? "AIza…" : "sk-…"}
                 onChange={(e) => setKey(e.target.value.trim())}
               />
+              <p className="text-xs text-muted-foreground">
+                Get one at{" "}
+                <a
+                  href={AI_PROVIDER_SPECS[provider].keysUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  {new URL(AI_PROVIDER_SPECS[provider].keysUrl).host}
+                </a>
+                . Kept on this device only — never in the synced file.
+              </p>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="model">Model</Label>
               <Input
                 id="model"
-                value={openaiModel}
+                value={model}
+                placeholder={AI_PROVIDER_SPECS[provider].defaultModel}
                 onChange={(e) => setModel(e.target.value.trim())}
               />
             </div>
             <div>
               <Button
                 onClick={() => {
-                  setOpenAIKey(openaiKey || null);
-                  setOpenAIModel(openaiModel || null);
-                  setMessage("AI settings saved.");
+                  setAIProvider(provider);
+                  setAIKey(provider, apiKey || null);
+                  setAIModel(provider, model || null);
+                  setMessage(
+                    `AI settings saved — using ${AI_PROVIDER_SPECS[provider].label}.`,
+                  );
                 }}
               >
                 Save

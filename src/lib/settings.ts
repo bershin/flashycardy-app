@@ -7,36 +7,123 @@
  * is per-device, and syncing it would commit a live API key to a git repo.
  */
 
-const OPENAI_KEY = "flashycardy.openaiKey";
-const OPENAI_MODEL = "flashycardy.openaiModel";
 const STUDY_SOUND = "flashycardy.studySound";
+const AI_PROVIDER = "flashycardy.aiProvider";
 
-export const DEFAULT_OPENAI_MODEL = "gpt-5.3-chat-latest";
+/**
+ * Who answers the AI requests — writing cards, and reading text out of a scan.
+ *
+ * Gemini is spoken to through its OpenAI-compatible endpoint rather than its
+ * own API. The two features here are an ordinary chat completion and an image
+ * in a message, which that endpoint serves exactly as OpenAI does, so one code
+ * path covers both providers instead of two that drift apart.
+ *
+ * Keys are kept per provider rather than in one slot: switching to try the
+ * other one should not throw away the key you already had.
+ */
+export const AI_PROVIDERS = ["openai", "gemini"] as const;
+export type AIProvider = (typeof AI_PROVIDERS)[number];
 
-export function getOpenAIKey(): string | null {
+type ProviderSpec = {
+  label: string;
+  keyStorage: string;
+  modelStorage: string;
+  defaultModel: string;
+  baseUrl: string;
+  /** Where the user gets a key, shown beside the field. */
+  keysUrl: string;
+  /**
+   * Whether the provider honours a strict JSON schema. OpenAI does; the Gemini
+   * compatibility layer is uneven about it, so card generation asks that one
+   * for JSON and validates the shape itself — which it does either way.
+   */
+  strictJsonSchema: boolean;
+};
+
+export const AI_PROVIDER_SPECS: Record<AIProvider, ProviderSpec> = {
+  openai: {
+    label: "OpenAI",
+    keyStorage: "flashycardy.openaiKey",
+    modelStorage: "flashycardy.openaiModel",
+    defaultModel: "gpt-5.3-chat-latest",
+    baseUrl: "https://api.openai.com/v1",
+    keysUrl: "https://platform.openai.com/api-keys",
+    strictJsonSchema: true,
+  },
+  gemini: {
+    label: "Google Gemini",
+    keyStorage: "flashycardy.geminiKey",
+    modelStorage: "flashycardy.geminiModel",
+    defaultModel: "gemini-2.5-flash-lite",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    keysUrl: "https://aistudio.google.com/apikey",
+    strictJsonSchema: false,
+  },
+};
+
+export function getAIProvider(): AIProvider {
+  if (typeof window === "undefined") return "openai";
+  const stored = window.localStorage.getItem(AI_PROVIDER);
+  return AI_PROVIDERS.includes(stored as AIProvider)
+    ? (stored as AIProvider)
+    : "openai";
+}
+
+export function setAIProvider(provider: AIProvider) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(AI_PROVIDER, provider);
+}
+
+export function getAIKey(provider: AIProvider = getAIProvider()): string | null {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(OPENAI_KEY);
+  return window.localStorage.getItem(AI_PROVIDER_SPECS[provider].keyStorage);
 }
 
-export function setOpenAIKey(key: string | null) {
+export function setAIKey(provider: AIProvider, key: string | null) {
   if (typeof window === "undefined") return;
-  if (key) window.localStorage.setItem(OPENAI_KEY, key);
-  else window.localStorage.removeItem(OPENAI_KEY);
+  const slot = AI_PROVIDER_SPECS[provider].keyStorage;
+  if (key) window.localStorage.setItem(slot, key);
+  else window.localStorage.removeItem(slot);
 }
 
-export function getOpenAIModel(): string {
-  if (typeof window === "undefined") return DEFAULT_OPENAI_MODEL;
-  return window.localStorage.getItem(OPENAI_MODEL) || DEFAULT_OPENAI_MODEL;
+export function getAIModel(provider: AIProvider = getAIProvider()): string {
+  const spec = AI_PROVIDER_SPECS[provider];
+  if (typeof window === "undefined") return spec.defaultModel;
+  return window.localStorage.getItem(spec.modelStorage) || spec.defaultModel;
 }
 
-export function setOpenAIModel(model: string | null) {
+export function setAIModel(provider: AIProvider, model: string | null) {
   if (typeof window === "undefined") return;
-  if (model) window.localStorage.setItem(OPENAI_MODEL, model);
-  else window.localStorage.removeItem(OPENAI_MODEL);
+  const slot = AI_PROVIDER_SPECS[provider].modelStorage;
+  if (model) window.localStorage.setItem(slot, model);
+  else window.localStorage.removeItem(slot);
 }
 
-export function hasOpenAIKey(): boolean {
-  return Boolean(getOpenAIKey());
+/** Everything a request needs, or null when no key has been entered. */
+export function getAIConfig(): {
+  provider: AIProvider;
+  label: string;
+  key: string;
+  model: string;
+  baseUrl: string;
+  strictJsonSchema: boolean;
+} | null {
+  const provider = getAIProvider();
+  const key = getAIKey(provider);
+  if (!key) return null;
+  const spec = AI_PROVIDER_SPECS[provider];
+  return {
+    provider,
+    label: spec.label,
+    key,
+    model: getAIModel(provider),
+    baseUrl: spec.baseUrl,
+    strictJsonSchema: spec.strictJsonSchema,
+  };
+}
+
+export function hasAIKey(): boolean {
+  return Boolean(getAIKey());
 }
 
 /**

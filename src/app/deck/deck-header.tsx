@@ -11,7 +11,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { hasOpenAIKey } from "@/lib/settings";
+import { hasAIKey } from "@/lib/settings";
 import { accentStyle } from "@/lib/deck-accent";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -63,7 +63,7 @@ export function DeckHeader({
   // mid-page, hence the no-op subscribe.
   const canGenerate = useSyncExternalStore(
     () => () => {},
-    () => hasOpenAIKey(),
+    () => hasAIKey(),
     () => false,
   );
 

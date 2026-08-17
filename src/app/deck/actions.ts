@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { getOpenAIKey, getOpenAIModel } from "@/lib/settings";
+import { getAIConfig } from "@/lib/settings";
 import { getDeckByIdForUser } from "@/db/queries/decks";
 import { NEW_CARD_SCHEDULE } from "@/lib/store/types";
 import {
@@ -282,9 +282,9 @@ export async function generateCardsWithAIAction(deckId: number) {
   const { userId } = auth();
   if (!userId) throw new Error("Unauthorized");
 
-  const apiKey = getOpenAIKey();
-  if (!apiKey) {
-    throw new Error("Add an OpenAI API key in Settings to generate cards.");
+  const ai = getAIConfig();
+  if (!ai) {
+    throw new Error("Add an API key in Settings to generate cards.");
   }
 
   const deck = await getDeckByIdForUser(deckId, userId);
@@ -294,46 +294,52 @@ export async function generateCardsWithAIAction(deckId: number) {
     ? `${deck.title} — ${deck.description}`
     : deck.title;
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(`${ai.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${ai.key}`,
     },
     body: JSON.stringify({
-      model: getOpenAIModel(),
+      model: ai.model,
       messages: [
         {
           role: "user",
-          content: `Generate ${AI_CARD_COUNT} flashcards about the following topic: ${topic}. Each card should have a concise question or term on the front and a clear, informative answer on the back.`,
+          content: `Generate ${AI_CARD_COUNT} flashcards about the following topic: ${topic}. Each card should have a concise question or term on the front and a clear, informative answer on the back.${ai.strictJsonSchema ? "" : ' Reply with JSON of the form {"cards":[{"front":"…","back":"…"}]} and nothing else.'}`,
         },
       ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "flashcards",
-          strict: true,
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["cards"],
-            properties: {
-              cards: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["front", "back"],
-                  properties: {
-                    front: { type: "string" },
-                    back: { type: "string" },
+      // A strict schema where the provider honours one, plain JSON where it
+      // does not. The reply is validated against the same zod schema either
+      // way, so the difference is how early a bad shape is caught, not
+      // whether it is.
+      response_format: ai.strictJsonSchema
+        ? {
+            type: "json_schema",
+            json_schema: {
+              name: "flashcards",
+              strict: true,
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["cards"],
+                properties: {
+                  cards: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["front", "back"],
+                      properties: {
+                        front: { type: "string" },
+                        back: { type: "string" },
+                      },
+                    },
                   },
                 },
               },
             },
-          },
-        },
-      },
+          }
+        : { type: "json_object" },
     }),
   });
 
@@ -346,9 +352,9 @@ export async function generateCardsWithAIAction(deckId: number) {
       /* non-JSON error body */
     }
     if (response.status === 401) {
-      throw new Error(`OpenAI rejected the API key${detail}`);
+      throw new Error(`${ai.label} rejected the API key${detail}`);
     }
-    throw new Error(`OpenAI returned ${response.status}${detail}`);
+    throw new Error(`${ai.label} returned ${response.status}${detail}`);
   }
 
   const body = (await response.json()) as {
@@ -392,19 +398,19 @@ export async function transcribeImageAction(dataUrl: string) {
     throw new Error("That doesn't look like an image.");
   }
 
-  const apiKey = getOpenAIKey();
-  if (!apiKey) {
-    throw new Error("Add an OpenAI API key in Settings to read images.");
+  const ai = getAIConfig();
+  if (!ai) {
+    throw new Error("Add an API key in Settings to read images.");
   }
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(`${ai.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${ai.key}`,
     },
     body: JSON.stringify({
-      model: getOpenAIModel(),
+      model: ai.model,
       messages: [
         {
           role: "system",
@@ -435,16 +441,16 @@ export async function transcribeImageAction(dataUrl: string) {
       /* non-JSON error body */
     }
     if (response.status === 401) {
-      throw new Error(`OpenAI rejected the API key${detail}`);
+      throw new Error(`${ai.label} rejected the API key${detail}`);
     }
-    throw new Error(`OpenAI returned ${response.status}${detail}`);
+    throw new Error(`${ai.label} returned ${response.status}${detail}`);
   }
 
   const body = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
   const text = body.choices?.[0]?.message?.content?.trim();
-  if (!text) throw new Error("No reply from OpenAI. Please try again.");
+  if (!text) throw new Error(`No reply from ${ai.label}. Please try again.`);
   // The sentinel is the model reporting a picture with nothing to read, which
   // is a real answer rather than a failure — the caller says so and leaves the
   // image alone.
