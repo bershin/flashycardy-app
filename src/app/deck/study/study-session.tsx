@@ -19,9 +19,8 @@ import {
   Volume2,
   VolumeX,
   Pencil,
-  Flame,
-  XCircle,
 } from "lucide-react";
+import { CardHistory } from "@/components/card-history";
 import { EditCardDialog } from "@/components/edit-card-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,46 +48,6 @@ import { rateCardAction, markDeckStudiedAction } from "./actions";
 
 /** Study needs the whole card now, since behaviour branches on its type. */
 type StudyCard = CardRow;
-
-/**
- * This card's history, in the corner of the card it belongs to.
- *
- * Two numbers rather than one because they answer different questions: the
- * streak is how it is going, the misses are how hard it has been. A card on a
- * streak of two that has been missed nine times is not the same card as one on
- * a streak of two that has never been missed, and only the pair says so.
- *
- * Both are shown even at zero. A number that appears once it is interesting
- * would make its absence ambiguous — nothing yet, or nothing to report?
- */
-function CardHistory({
-  timesMissed,
-  streak,
-}: {
-  timesMissed: number;
-  streak: number;
-}) {
-  return (
-    <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
-      <span
-        title={`Missed ${timesMissed} time${timesMissed === 1 ? "" : "s"} in total`}
-        className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-500/20 ring-inset tabular-nums dark:bg-red-400/10 dark:text-red-300 dark:ring-red-300/20"
-      >
-        <XCircle aria-hidden className="size-3" />
-        <span className="sr-only">Missed </span>
-        {timesMissed}
-      </span>
-      <span
-        title={`Answered correctly ${streak} time${streak === 1 ? "" : "s"} in a row`}
-        className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/20 ring-inset tabular-nums dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-300/20"
-      >
-        <Flame aria-hidden className="size-3" />
-        <span className="sr-only">Streak </span>
-        {streak}
-      </span>
-    </div>
-  );
-}
 
 interface StudySessionProps {
   /** The full set this session started from — drives "review missed cards". */
@@ -742,10 +701,12 @@ export function StudySession({
             aria-hidden
             className="absolute inset-x-0 top-0 h-1.5 bg-[var(--deck-accent)]"
           />
-          <CardHistory
-            timesMissed={history.timesMissed}
-            streak={history.streak}
-          />
+          <div className="absolute top-3 right-3 z-10">
+            <CardHistory
+              timesMissed={history.timesMissed}
+              streak={history.streak}
+            />
+          </div>
           <CardContent
             className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3"
             onClickCapture={openImageOnClick}

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { withLazyImages } from "@/lib/card-html";
+import { CardHistory } from "@/components/card-history";
 import {
   Card,
   CardAction,
@@ -104,7 +105,12 @@ export function FlashCard({
               className="rich-content min-w-0 overflow-hidden text-base font-semibold"
               dangerouslySetInnerHTML={{ __html: withLazyImages(card.front) }}
             />
-            <CardAction>
+            <CardAction className="flex items-center gap-2">
+              <CardHistory
+                compact
+                timesMissed={card.timesMissed}
+                streak={card.consecutiveCorrect}
+              />
               <span
                 className={`flex size-5 items-center justify-center rounded border ${
                   selected
@@ -135,7 +141,15 @@ export function FlashCard({
             className="rich-content min-w-0 overflow-hidden text-base font-semibold"
             dangerouslySetInnerHTML={{ __html: withLazyImages(card.front) }}
           />
-          <CardAction>
+          <CardAction className="flex items-center gap-2">
+            {/* Beside the menu rather than in the corner: browsing a deck is
+                where a card's record is worth scanning down a column, and it
+                should read the same here as it does mid-session. */}
+            <CardHistory
+              compact
+              timesMissed={card.timesMissed}
+              streak={card.consecutiveCorrect}
+            />
             <DropdownMenu>
               <DropdownMenuTrigger
                 className={buttonVariants({ variant: "ghost", size: "icon-xs" })}
