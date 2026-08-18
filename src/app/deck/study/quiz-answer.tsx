@@ -8,6 +8,12 @@ import { withLazyImages } from "@/lib/card-html";
 
 interface QuizAnswerProps {
   card: CardRow;
+  /**
+   * Options for a generated card, rolled by the session that owns the roll.
+   * Passed in rather than derived here so the question above and the options
+   * below are always the same instance of the card.
+   */
+  rolled?: { options: string[]; correctIndex: number; explanation: string | null };
   /** Called once the user has seen the outcome and is ready to move on. */
   onResolved: (rating: "got_it" | "missed") => void;
   /**
@@ -29,11 +35,12 @@ interface QuizAnswerProps {
  */
 export function QuizAnswer({
   card,
+  rolled,
   onResolved,
   onRevealed,
 }: QuizAnswerProps) {
-  const options = card.quiz?.options ?? [];
-  const correctIndex = card.quiz?.correctIndex ?? 0;
+  const options = rolled?.options ?? card.quiz?.options ?? [];
+  const correctIndex = rolled?.correctIndex ?? card.quiz?.correctIndex ?? 0;
 
   // Shuffled once per card so the answer is learned rather than its position.
   // Keyed on the card id: re-shuffling on every render would move options out
@@ -46,7 +53,7 @@ export function QuizAnswer({
     }
     return indices;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card.id]);
+  }, [card.id, rolled]);
 
   const [picked, setPicked] = useState<number | null>(null);
   const answered = picked !== null;
@@ -97,11 +104,19 @@ export function QuizAnswer({
 
       {answered && !wasCorrect && (
         <div className="shrink-0 space-y-3">
-          {card.back.replace(/<[^>]*>/g, "").trim().length > 0 && (
-            <div
-              className="rich-content rounded-lg border bg-muted/50 p-3 text-sm"
-              dangerouslySetInnerHTML={{ __html: withLazyImages(card.back) }}
-            />
+          {/* A generated card explains this roll's numbers; a hand-written one
+              shows whatever was typed on the back. */}
+          {rolled?.explanation ? (
+            <p className="rounded-lg border bg-muted/50 p-3 text-sm">
+              {rolled.explanation}
+            </p>
+          ) : (
+            card.back.replace(/<[^>]*>/g, "").trim().length > 0 && (
+              <div
+                className="rich-content rounded-lg border bg-muted/50 p-3 text-sm"
+                dangerouslySetInnerHTML={{ __html: withLazyImages(card.back) }}
+              />
+            )
           )}
           <div className="flex justify-center">
             <Button size="lg" onClick={() => onResolved("missed")}>

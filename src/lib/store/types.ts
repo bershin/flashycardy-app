@@ -1,3 +1,5 @@
+import type { GeneratedPayload } from "@/lib/generated-card";
+
 /**
  * Shape of the local database.
  *
@@ -26,8 +28,12 @@ export type DeckRow = {
  *  - `basic` — front, back, you rate yourself. The original card.
  *  - `quiz`  — a question with options you wrote; picking one grades it
  *              immediately, with no AI and no network.
+ *  - `generated` — the shape of a question rather than one instance of it. The
+ *              numbers are rolled fresh every time it appears, so the answer
+ *              has to be worked out rather than remembered. Graded like a quiz,
+ *              and equally offline: the template is stored, not fetched.
  */
-export const CARD_TYPES = ["basic", "quiz"] as const;
+export const CARD_TYPES = ["basic", "quiz", "generated"] as const;
 
 export type CardType = (typeof CARD_TYPES)[number];
 
@@ -73,6 +79,8 @@ export type CardRow = {
   /** The answer for `basic`; an optional explanation for `quiz`. */
   back: string;
   quiz?: QuizPayload;
+  /** Present on `generated` cards — the template the numbers are rolled from. */
+  generated?: GeneratedPayload;
   schedule: ReviewSchedule;
   nextReviewAt: Date;
   consecutiveCorrect: number;

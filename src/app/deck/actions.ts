@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getAIConfig } from "@/lib/settings";
+import { validateGenerated } from "@/lib/generated-card";
 import { getDeckByIdForUser } from "@/db/queries/decks";
 import { NEW_CARD_SCHEDULE } from "@/lib/store/types";
 import {
@@ -34,7 +35,34 @@ const MAX_FIELD = 2_000_000;
 const TOO_LARGE =
   "This side of the card is too large. Try fewer or smaller images.";
 
-const cardTypeSchema = z.enum(["basic", "quiz"]);
+const cardTypeSchema = z.enum(["basic", "quiz", "generated"]);
+
+/**
+ * A card that rolls its own numbers.
+ *
+ * Ranges and formulas only — the expressions are read by the parser in
+ * `generated-card.ts`, never by the JavaScript engine, so what arrives here is
+ * arithmetic or it is nothing.
+ */
+const generatedSchema = z.object({
+  template: z.string().min(1).max(2000),
+  variables: z
+    .array(
+      z.object({
+        name: z.string().regex(/^\w+$/),
+        min: z.number(),
+        max: z.number(),
+        step: z.number().positive().optional(),
+      }),
+    )
+    .min(1)
+    .max(6),
+  constraint: z.string().max(400).optional(),
+  answer: z.string().min(1).max(400),
+  distractors: z.array(z.string().min(1).max(400)).min(2).max(6),
+  explanation: z.string().max(2000).optional(),
+  unit: z.string().max(40).optional(),
+});
 const scheduleSchema = z.enum(["incremental", "weekly"]);
 
 const quizSchema = z.object({
@@ -53,6 +81,7 @@ const cardContentSchema = z
     type: cardTypeSchema.default("basic"),
     schedule: scheduleSchema.default(NEW_CARD_SCHEDULE),
     quiz: quizSchema.optional(),
+    generated: generatedSchema.optional(),
   })
   .refine((v) => v.type !== "basic" || v.back.trim().length > 0, {
     message: "Back is required",
@@ -62,6 +91,20 @@ const cardContentSchema = z
     message: "Quiz cards need options",
     path: ["quiz"],
   })
+  .refine((v) => v.type !== "generated" || v.generated !== undefined, {
+    message: "A generated card needs a template",
+    path: ["generated"],
+  })
+  // Checked here rather than only in the editor: a template that cannot
+  // produce a question is a card that cannot be studied, and it should never
+  // reach the document.
+  .refine(
+    (v) =>
+      v.type !== "generated" ||
+      !v.generated ||
+      validateGenerated(v.generated) === null,
+    { message: "This template can't produce a question", path: ["generated"] },
+  )
   .refine((v) => !v.quiz || v.quiz.correctIndex < v.quiz.options.length, {
     message: "The correct answer must be one of the options",
     path: ["quiz"],
@@ -90,6 +133,7 @@ export async function addCardAction(data: AddCardInput) {
     back: parsed.back,
     schedule: parsed.schedule,
     quiz: parsed.quiz,
+    generated: parsed.generated,
   });
 }
 
@@ -115,6 +159,7 @@ export async function updateCardAction(data: UpdateCardInput) {
     back: parsed.back,
     schedule: parsed.schedule,
     quiz: parsed.quiz,
+    generated: parsed.generated,
   });
 }
 
@@ -456,4 +501,113 @@ export async function transcribeImageAction(dataUrl: string) {
   // image alone.
   if (text === "NO_TEXT") return null;
   return text;
+}
+
+
+/**
+ * Ask the model to turn a fixed question into the shape of one.
+ *
+ * The card is sent as it stands — its text and any scan of it — and what comes
+ * back is a template: the sentence with its numbers pulled out, ranges for
+ * them, a formula for the answer, and formulas for the wrong options. Nothing
+ * is saved here. The proposal is shown with sample rolls first, because a
+ * template that is subtly wrong produces plausible questions with wrong answers
+ * forever, which is worse than no template at all.
+ */
+export async function proposeGeneratedCardAction(cardId: number) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const ai = getAIConfig();
+  if (!ai) throw new Error("Add an API key in Settings to build a template.");
+
+  const card = await getCardByIdForUser(cardId, userId);
+  if (!card) throw new Error("Card not found");
+
+  const text = `${card.front}\n\n${card.back}`
+    .replace(/<img[^>]*>/g, " [image] ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const images = [...`${card.front}${card.back}`.matchAll(
+    /<img[^>]+src="(data:image\/[a-z]+;base64,[^"]+)"/g,
+  )].map((m) => m[1]);
+
+  const instructions = [
+    "You turn a single maths question into a template that generates endless",
+    "variants of it. Reply with JSON only, of this shape:",
+    '{"template":"sentence with {name} placeholders","variables":[{"name":"m","min":3,"max":12}],',
+    '"constraint":"expression that must be true","answer":"expression","distractors":["expression","expression","expression"],',
+    '"explanation":"worked answer using the same {name} placeholders","unit":"days"}',
+    "",
+    "Rules:",
+    "- Expressions may use the variable names, numbers, + - * / % **, brackets,",
+    "  and the functions floor, ceil, round, abs, sqrt, min, max, gcd. Nothing else.",
+    "- The constraint must guarantee a whole-number answer for every allowed",
+    "  combination, e.g. (m*d) % n == 0.",
+    "- Each distractor must be a mistake a student would actually make — an",
+    "  inverted ratio, a forgotten division, an off-by-one — never a random number.",
+    "- Keep the sentence's wording and units as they are; only the numbers vary.",
+    "- Ranges should keep the arithmetic doable in the head or on paper.",
+  ].join("\n");
+
+  const response = await fetch(`${ai.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${ai.key}`,
+    },
+    body: JSON.stringify({
+      model: ai.model,
+      messages: [
+        { role: "system", content: instructions },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: `Here is the card:\n\n${text}` },
+            ...images.slice(0, 2).map((url) => ({
+              type: "image_url" as const,
+              image_url: { url },
+            })),
+          ],
+        },
+      ],
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = (await response.json()) as { error?: { message?: string } };
+      detail = body.error?.message ? `: ${body.error.message}` : "";
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(`${ai.label} returned ${response.status}${detail}`);
+  }
+
+  const body = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const content = body.choices?.[0]?.message?.content;
+  if (!content) throw new Error(`No reply from ${ai.label}. Please try again.`);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content.replace(/^```json\s*|```$/g, "").trim());
+  } catch {
+    throw new Error("The reply wasn't JSON. Try again.");
+  }
+
+  const shape = generatedSchema.safeParse(parsed);
+  if (!shape.success) {
+    throw new Error("The template came back in an unexpected shape. Try again.");
+  }
+  // Rolled here, not just parsed: a template can be well-formed and still
+  // incapable of producing a single valid question.
+  const problem = validateGenerated(shape.data);
+  if (problem) throw new Error(problem);
+
+  return shape.data;
 }

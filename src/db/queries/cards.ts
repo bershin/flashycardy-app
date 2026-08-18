@@ -22,6 +22,7 @@ import {
   selectDueCardsByDeckForUser,
   startOfDay,
 } from "@/lib/store/selectors";
+import type { GeneratedPayload } from "@/lib/generated-card";
 import {
   NEW_CARD_SCHEDULE,
   type CardRow,
@@ -54,6 +55,7 @@ export async function insertCard(data: {
   back: string;
   type?: CardType;
   quiz?: QuizPayload;
+  generated?: GeneratedPayload;
   schedule?: ReviewSchedule;
 }) {
   return mutate((draft) => {
@@ -66,6 +68,7 @@ export async function insertCard(data: {
       back: data.back,
       schedule: data.schedule ?? NEW_CARD_SCHEDULE,
       ...(data.quiz ? { quiz: data.quiz } : {}),
+      ...(data.generated ? { generated: data.generated } : {}),
       nextReviewAt: now,
       consecutiveCorrect: 0,
       lastCorrectAt: null,
@@ -115,6 +118,7 @@ export async function updateCard(
     back?: string;
     type?: CardType;
     quiz?: QuizPayload;
+    generated?: GeneratedPayload;
     schedule?: ReviewSchedule;
   },
 ) {
@@ -138,6 +142,8 @@ export async function updateCard(
       // The payload follows the type, so switching a card away from quiz
       // doesn't leave orphaned options behind to reappear if it switches back.
       quiz: type === "quiz" ? (data.quiz ?? current.quiz) : undefined,
+      generated:
+        type === "generated" ? (data.generated ?? current.generated) : undefined,
     };
     draft.cards[index] = updated;
     return updated;

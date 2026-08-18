@@ -9,6 +9,7 @@ import {
   ListChecks,
   Pencil,
   Trash2,
+  Wand2,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { withLazyImages } from "@/lib/card-html";
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EditCardDialog } from "@/components/edit-card-dialog";
 import { MoveCardDialog } from "@/components/move-card-dialog";
+import { VaryCardDialog } from "@/components/vary-card-dialog";
 import type { CardRow } from "@/lib/store/types";
 import { cloneCardAction, deleteCardAction } from "./actions";
 
@@ -58,6 +60,7 @@ export function FlashCard({
   const [editMode, setEditMode] = useState<"edit" | "clone">("edit");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [varyOpen, setVaryOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function handleClone() {
@@ -178,6 +181,12 @@ export function FlashCard({
                   <FolderInput />
                   Move to deck…
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setVaryOpen(true)}>
+                  <Wand2 />
+                  {card.type === "generated"
+                    ? "Rebuild the template…"
+                    : "Make it vary…"}
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={() => setDeleteOpen(true)}
@@ -224,6 +233,12 @@ export function FlashCard({
           )}
         </CardContent>
       </Card>
+
+      {/* Keyed on each opening so the dialog starts empty rather than showing
+          the last card's proposal while a new one is being read. */}
+      {varyOpen && (
+        <VaryCardDialog card={card} open onOpenChange={setVaryOpen} />
+      )}
 
       <EditCardDialog
         card={editCard}

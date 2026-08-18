@@ -28,6 +28,7 @@ import { accentStyle } from "@/lib/deck-accent";
 import { useStore } from "@/lib/store/use-store";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { QuizAnswer } from "./quiz-answer";
+import { rollGenerated, type GeneratedInstance } from "@/lib/generated-card";
 import { clearSession, saveSession } from "@/lib/study-session-store";
 import {
   isStudySoundEnabled,
@@ -151,8 +152,28 @@ export function StudySession({
       [current],
     ),
   );
+  /**
+   * A generated card's numbers for this appearance.
+   *
+   * Rolled per card, not per render — a fresh roll on every keystroke would
+   * change the question while it was being read. A template that cannot roll
+   * yields null, and the card falls back to showing what it has rather than
+   * disappearing mid-session.
+   */
+  const rolled = useMemo<GeneratedInstance | null>(() => {
+    if (current?.type !== "generated" || !current.generated) return null;
+    try {
+      return rollGenerated(current.generated);
+    } catch {
+      return null;
+    }
+    // `round` is deliberate: a card seen again in the review round gets new
+    // numbers, so that round tests the method rather than the answer just read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, round]);
+
   /** Answered in its own surface rather than by flipping and self-rating. */
-  const interactive = current?.type === "quiz";
+  const interactive = current?.type === "quiz" || current?.type === "generated";
 
   /**
    * A click on a picture opens the picture, not the card behind it.
@@ -719,10 +740,18 @@ export function StudySession({
               <p className="mb-1 text-center text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
                 Question
               </p>
-              <div
-                className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
-                dangerouslySetInnerHTML={{ __html: current.front }}
-              />
+              {/* A generated card shows this roll's sentence; every other kind
+                  shows the card as it was written. */}
+              {rolled ? (
+                <p className="w-full text-left text-lg leading-relaxed md:text-xl">
+                  {rolled.question}
+                </p>
+              ) : (
+                <div
+                  className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
+                  dangerouslySetInnerHTML={{ __html: current.front }}
+                />
+              )}
               {!revealed && !interactive && (
                 <p className="mt-2 text-center text-xs text-muted-foreground">
                   Click or press{" "}
@@ -742,10 +771,11 @@ export function StudySession({
 
         {/* Answer — self-revealed for basic cards, answered directly for the
             other two. `key` resets each answer surface between cards. */}
-        {current.type === "quiz" && (
+        {(current.type === "quiz" || current.type === "generated") && (
           <QuizAnswer
-            key={current.id}
+            key={`${current.id}:${round}`}
             card={current}
+            rolled={rolled ?? undefined}
             onResolved={rate}
             onRevealed={reveal}
           />
