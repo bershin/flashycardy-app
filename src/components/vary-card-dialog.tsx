@@ -61,6 +61,7 @@ interface VaryCardDialogProps {
 export function VaryCardDialog({ card, open, onOpenChange }: VaryCardDialogProps) {
   const [payload, setPayload] = useState<GeneratedPayload | null>(null);
   const [samples, setSamples] = useState<GeneratedInstance[]>([]);
+  const [verified, setVerified] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [saving, startSaving] = useTransition();
@@ -70,8 +71,9 @@ export function VaryCardDialog({ card, open, onOpenChange }: VaryCardDialogProps
     startTransition(async () => {
       try {
         const proposed = await proposeGeneratedCardAction(card.id);
-        setPayload(proposed);
-        setSamples(reroll(proposed));
+        setPayload(proposed.payload);
+        setVerified(proposed.verified);
+        setSamples(reroll(proposed.payload));
       } catch (e) {
         setError(readable(e, "Couldn't build a template."));
       }
@@ -152,6 +154,19 @@ export function VaryCardDialog({ card, open, onOpenChange }: VaryCardDialogProps
                 wrong = {payload.distractors.join(" , ")}
               </p>
             </div>
+
+            {verified === true && (
+              <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-800 dark:text-emerald-300">
+                Checked: fed this card&rsquo;s own numbers, the template gives
+                this card&rsquo;s own answer.
+              </p>
+            )}
+            {verified === null && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-300">
+                Not checked against the original card — read the examples
+                carefully.
+              </p>
+            )}
 
             <div className="grid gap-3">
               {samples.map((sample, index) => (

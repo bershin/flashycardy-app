@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { CheckSquare, Dices, FolderInput, Shuffle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MoveCardDialog } from "@/components/move-card-dialog";
+import { VaryDeckDialog } from "@/components/vary-deck-dialog";
 import type { CardRow } from "@/lib/store/types";
 import { FlashCard } from "./flash-card";
 
@@ -34,6 +35,7 @@ export function CardGrid({ cards }: CardGridProps) {
    * list that visibly shortens.
    */
   const [onlyFixed, setOnlyFixed] = useState(false);
+  const [varyDeckOpen, setVaryDeckOpen] = useState(false);
 
   if (cards !== prevCards) {
     setPrevCards(cards);
@@ -127,6 +129,14 @@ export function CardGrid({ cards }: CardGridProps) {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setVaryDeckOpen(true)}
+            >
+              <Dices className="size-3.5" />
+              Make all vary…
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setSelecting(true)}
             >
               <CheckSquare className="size-3.5" />
@@ -155,6 +165,10 @@ export function CardGrid({ cards }: CardGridProps) {
           />
         ))}
       </div>
+
+      {varyDeckOpen && (
+        <VaryDeckDialog cards={cards} open onOpenChange={setVaryDeckOpen} />
+      )}
 
       <MoveCardDialog
         cardIds={[...selected]}

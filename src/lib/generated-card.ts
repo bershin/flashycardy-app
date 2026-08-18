@@ -23,6 +23,15 @@ export type GeneratedVariable = {
 };
 
 export type GeneratedPayload = {
+  /**
+   * The card as it was originally written, as values and an answer.
+   *
+   * This is what makes a template checkable without a person reading it: put
+   * the original numbers into the new formula and it must produce the original
+   * answer. A formula that is subtly inverted — m*n/d where m*d/n was meant —
+   * survives every other check and fails this one immediately.
+   */
+  check?: { values: Record<string, number>; answer: number };
   /** The question, with `{name}` where each value goes. */
   template: string;
   variables: GeneratedVariable[];
@@ -380,6 +389,29 @@ export function rollGenerated(
     `This template didn't work: ${describeFailure(diagnosis)}.`,
     diagnosis,
   );
+}
+
+/**
+ * Does the template, given the original card's numbers, produce the original
+ * card's answer?
+ *
+ * Returns null when there is nothing to check against — an unverifiable
+ * template is not a wrong one, it just has to be read by a person instead.
+ */
+export function checkAgainstOriginal(
+  payload: GeneratedPayload,
+): { ok: boolean; got: number; want: number } | null {
+  if (!payload.check) return null;
+  const { values, answer } = payload.check;
+  for (const variable of payload.variables) {
+    if (!(variable.name in values)) return null;
+  }
+  try {
+    const got = evaluate(payload.answer, values);
+    return { ok: Math.abs(got - answer) < 1e-9, got, want: answer };
+  } catch {
+    return { ok: false, got: NaN, want: answer };
+  }
 }
 
 /** Checked before a template is stored, so a broken one is never saved. */

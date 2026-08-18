@@ -9,6 +9,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getAIConfig } from "@/lib/settings";
 import {
+  checkAgainstOriginal,
   describeFailure,
   diagnoseGenerated,
   validateGenerated,
@@ -66,6 +67,12 @@ const generatedSchema = z.object({
   distractors: z.array(z.string().min(1).max(400)).min(2).max(6),
   explanation: z.string().max(2000).optional(),
   unit: z.string().max(40).optional(),
+  check: z
+    .object({
+      values: z.record(z.string(), z.number()),
+      answer: z.number(),
+    })
+    .optional(),
 });
 const scheduleSchema = z.enum(["incremental", "weekly"]);
 
@@ -542,7 +549,13 @@ export async function proposeGeneratedCardAction(cardId: number) {
     "variants of it. Reply with JSON only, of this shape:",
     '{"template":"sentence with {name} placeholders","variables":[{"name":"m","min":3,"max":12}],',
     '"constraint":"expression that must be true","answer":"expression","distractors":["expression","expression","expression"],',
-    '"explanation":"worked answer using the same {name} placeholders","unit":"days"}',
+    '"explanation":"worked answer using the same {name} placeholders","unit":"days",',
+    '"check":{"values":{"m":9,"d":12,"n":4},"answer":27}}',
+    "",
+    "`check` is the card exactly as it was written: the original numbers as",
+    "values, and the answer the card itself gives. It is how the template is",
+    "verified — your formula, fed those numbers, must produce that answer — so",
+    "take both straight from the card and do not invent them.",
     "",
     "Rules:",
     "- Expressions may use the variable names, numbers, + - * / % **, brackets,",
@@ -661,6 +674,18 @@ export async function proposeGeneratedCardAction(cardId: number) {
     // incapable of producing a single question.
     const failure = diagnoseGenerated(candidate.data);
     if (!failure) {
+      // The strongest check available without a person: the template, fed the
+      // card's own numbers, must give the card's own answer.
+      const against = checkAgainstOriginal(candidate.data);
+      if (against && !against.ok) {
+        lastComplaint = `fed the card's own numbers it answered ${against.got}, but the card says ${against.want}`;
+        messages.push({ role: "assistant", content });
+        messages.push({
+          role: "user",
+          content: `That template is wrong: ${lastComplaint}. The formula does not match the question. Correct it and reply with the JSON only.`,
+        });
+        continue;
+      }
       shape = candidate;
       break;
     }
@@ -701,5 +726,13 @@ export async function proposeGeneratedCardAction(cardId: number) {
   const problem = validateGenerated(shape.data);
   if (problem) throw new Error(problem);
 
-  return shape.data;
+  return {
+    payload: shape.data,
+    /**
+     * Whether the template reproduced the card's own answer. A template that
+     * could not be checked is not wrong — it simply has to be read by a person,
+     * and a batch run should say which is which rather than treat them alike.
+     */
+    verified: checkAgainstOriginal(shape.data)?.ok ?? null,
+  };
 }
