@@ -234,11 +234,17 @@ function sample(variable: GeneratedVariable, random: () => number): number {
  * that lands on a fraction, options that collide — all mean this particular
  * draw was no good, and another draw costs nothing. After enough failures the
  * template itself is wrong, and saying so beats showing a broken question.
+ *
+ * The attempt budget is deliberately large. A tight constraint — "the volume
+ * must divide by 1000" is satisfied by about one draw in forty — will fail a
+ * few hundred attempts by luck alone, which showed up as a template that
+ * previewed three times and then refused to save. Each attempt is a handful of
+ * arithmetic, so the budget costs nothing and removes the flakiness.
  */
 export function rollGenerated(
   payload: GeneratedPayload,
   random: () => number = Math.random,
-  attempts = 200,
+  attempts = 4000,
 ): GeneratedInstance {
   let lastError = "";
   for (let attempt = 0; attempt < attempts; attempt++) {

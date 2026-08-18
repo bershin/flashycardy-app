@@ -22,6 +22,28 @@ import {
 } from "@/app/deck/actions";
 import type { CardRow } from "@/lib/store/types";
 
+/**
+ * A message a person can read.
+ *
+ * A schema rejection arrives as its own JSON — `[{"code":"custom","path":…}]` —
+ * which is a debugging artefact, not an explanation, and it was being printed
+ * into the dialog verbatim.
+ */
+function readable(error: unknown, fallback: string): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (raw.trim().startsWith("[") || raw.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw) as Array<{ message?: string }>;
+      const first = Array.isArray(parsed) ? parsed[0]?.message : undefined;
+      if (first) return first;
+    } catch {
+      /* not a schema error after all */
+    }
+    return fallback;
+  }
+  return raw || fallback;
+}
+
 interface VaryCardDialogProps {
   card: CardRow;
   open: boolean;
@@ -51,7 +73,7 @@ export function VaryCardDialog({ card, open, onOpenChange }: VaryCardDialogProps
         setPayload(proposed);
         setSamples(reroll(proposed));
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Couldn't build a template.");
+        setError(readable(e, "Couldn't build a template."));
       }
     });
   }
@@ -83,7 +105,7 @@ export function VaryCardDialog({ card, open, onOpenChange }: VaryCardDialogProps
         });
         onOpenChange(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Couldn't save the card.");
+        setError(readable(e, "Couldn't save the card."));
       }
     });
   }

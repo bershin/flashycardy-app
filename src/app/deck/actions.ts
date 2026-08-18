@@ -549,6 +549,11 @@ export async function proposeGeneratedCardAction(cardId: number) {
     "  inverted ratio, a forgotten division, an off-by-one — never a random number.",
     "- Keep the sentence's wording and units as they are; only the numbers vary.",
     "- Ranges should keep the arithmetic doable in the head or on paper.",
+    "- Constraints should not be so tight that few combinations fit.",
+    "- In the explanation, every value must be written as a {name} placeholder.",
+    "  Never write a bare variable name or a formula there: the explanation is",
+    "  read by a student as a sentence, so '{l} x {w} x {h}' is right and",
+    "  '(l * w * h)' is not.",
   ].join("\n");
 
   const response = await fetch(`${ai.baseUrl}/chat/completions`, {
@@ -603,6 +608,21 @@ export async function proposeGeneratedCardAction(cardId: number) {
   const shape = generatedSchema.safeParse(parsed);
   if (!shape.success) {
     throw new Error("The template came back in an unexpected shape. Try again.");
+  }
+
+  // Models reliably slip formulas into the explanation — "(l * w * h)" where
+  // "{l} x {w} x {h}" was asked for — which reaches the student as algebra in
+  // the middle of a worked answer. A bare variable name there can only have
+  // meant its value, so it is repaired rather than sent back.
+  if (shape.data.explanation) {
+    let explanation = shape.data.explanation;
+    for (const variable of shape.data.variables) {
+      explanation = explanation.replace(
+        new RegExp(`(?<![{\\w])${variable.name}(?![}\\w])`, "g"),
+        `{${variable.name}}`,
+      );
+    }
+    shape.data.explanation = explanation;
   }
   // Rolled here, not just parsed: a template can be well-formed and still
   // incapable of producing a single valid question.
