@@ -546,7 +546,12 @@ export async function proposeGeneratedCardAction(cardId: number) {
     "",
     "Rules:",
     "- Expressions may use the variable names, numbers, + - * / % **, brackets,",
-    "  and the functions floor, ceil, round, abs, sqrt, min, max, gcd. Nothing else.",
+    "  a ? b : c, and the functions floor, ceil, round, abs, sqrt, min, max, gcd.",
+    "  Nothing else.",
+    "- Every expression must work out to a single number. A card whose answer is",
+    "  a ratio like 3:4, a fraction in its lowest terms, an algebraic expression",
+    "  or a word cannot be templated — say so by replying",
+    '  {"unsuitable":"why"} instead of a template.',
     "- The constraint must guarantee a whole-number answer for every allowed",
     "  combination, e.g. (m*d) % n == 0.",
     "- Each distractor must be a mistake a student would actually make — an",
@@ -627,6 +632,17 @@ export async function proposeGeneratedCardAction(cardId: number) {
         content: "That was not valid JSON. Reply with the JSON object only.",
       });
       continue;
+    }
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "unsuitable" in parsed &&
+      typeof (parsed as { unsuitable: unknown }).unsuitable === "string"
+    ) {
+      throw new Error(
+        `This card isn't one where only the numbers change: ${(parsed as { unsuitable: string }).unsuitable}`,
+      );
     }
 
     const candidate = generatedSchema.safeParse(parsed);

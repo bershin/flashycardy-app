@@ -44,7 +44,10 @@ export type GeneratedPayload = {
  * named functions. Anything else is a parse error, which is the point.
  */
 
-type Token = { kind: "num" | "name" | "op" | "("| ")" | ","; text: string };
+type Token = {
+  kind: "num" | "name" | "op" | "(" | ")" | "," | "?" | ":";
+  text: string;
+};
 
 const OPERATORS = [
   "**", "==", "!=", "<=", ">=", "&&", "||", "+", "-", "*", "/", "%", "<", ">",
@@ -70,7 +73,7 @@ function tokenize(input: string): Token[] {
       i = j;
       continue;
     }
-    if (ch === "(" || ch === ")" || ch === ",") {
+    if (ch === "(" || ch === ")" || ch === "," || ch === "?" || ch === ":") {
       tokens.push({ kind: ch, text: ch });
       i++;
       continue;
@@ -129,7 +132,7 @@ export function evaluate(
     const token = eat();
     if (token.kind === "num") return Number(token.text);
     if (token.kind === "(") {
-      const value = binary(0);
+      const value = ternary();
       eat(")");
       return value;
     }
@@ -138,8 +141,8 @@ export function evaluate(
         eat("(");
         const args: number[] = [];
         if (peek()?.kind !== ")") {
-          args.push(binary(0));
-          while (peek()?.kind === ",") { eat(","); args.push(binary(0)); }
+          args.push(ternary());
+          while (peek()?.kind === ",") { eat(","); args.push(ternary()); }
         }
         eat(")");
         const fn = FUNCTIONS[token.text];
@@ -194,7 +197,24 @@ export function evaluate(
     return left;
   }
 
-  const result = binary(0);
+  /**
+   * `condition ? then : otherwise`, loosest of all and right-associative.
+   *
+   * Worth supporting because it is how a rule gets written when the arithmetic
+   * changes case — "if it divides evenly, this, otherwise that" — and rejecting
+   * it turned a sound template into a parse error about a colon.
+   */
+  function ternary(): number {
+    const condition = binary(0);
+    if (peek()?.kind !== "?") return condition;
+    eat("?");
+    const whenTrue = ternary();
+    eat(":");
+    const whenFalse = ternary();
+    return condition !== 0 ? whenTrue : whenFalse;
+  }
+
+  const result = ternary();
   if (pos !== tokens.length) throw new Error(`Trailing "${peek()?.text}"`);
   if (!Number.isFinite(result)) throw new Error("Result is not a number");
   return result;
@@ -283,6 +303,7 @@ export function rollGenerated(
   attempts = 4000,
 ): GeneratedInstance {
   let lastError = "";
+  let failing = "a formula";
   const diagnosis: RollDiagnosis = {
     attempts,
     constraintFailed: 0,
@@ -297,10 +318,12 @@ export function rollGenerated(
       values[variable.name] = sample(variable, random);
     }
     try {
+      failing = "the constraint";
       if (payload.constraint && evaluate(payload.constraint, values) === 0) {
         diagnosis.constraintFailed++;
         continue;
       }
+      failing = "the answer";
       const answer = evaluate(payload.answer, values);
       // A question whose answer is 27.333… is arithmetic gone wrong, not a
       // harder question.
@@ -311,6 +334,7 @@ export function rollGenerated(
 
       const wrong: number[] = [];
       for (const expression of payload.distractors) {
+        failing = `a wrong option ("${expression}")`;
         const value = evaluate(expression, values);
         if (!Number.isFinite(value)) continue;
         const rounded = Math.round(value * 100) / 100;
@@ -348,7 +372,7 @@ export function rollGenerated(
       };
     } catch (error) {
       diagnosis.errored++;
-      lastError = error instanceof Error ? error.message : String(error);
+      lastError = `${failing}: ${error instanceof Error ? error.message : String(error)}`;
       diagnosis.lastError = lastError;
     }
   }
