@@ -8,7 +8,11 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getAIConfig } from "@/lib/settings";
-import { validateGenerated } from "@/lib/generated-card";
+import {
+  describeFailure,
+  diagnoseGenerated,
+  validateGenerated,
+} from "@/lib/generated-card";
 import { getDeckByIdForUser } from "@/db/queries/decks";
 import { NEW_CARD_SCHEDULE } from "@/lib/store/types";
 import {
@@ -556,58 +560,112 @@ export async function proposeGeneratedCardAction(cardId: number) {
     "  '(l * w * h)' is not.",
   ].join("\n");
 
-  const response = await fetch(`${ai.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${ai.key}`,
-    },
-    body: JSON.stringify({
-      model: ai.model,
-      messages: [
-        { role: "system", content: instructions },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: `Here is the card:\n\n${text}` },
-            ...images.slice(0, 2).map((url) => ({
-              type: "image_url" as const,
-              image_url: { url },
-            })),
-          ],
-        },
+  const messages: Array<Record<string, unknown>> = [
+    { role: "system", content: instructions },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: `Here is the card:\n\n${text}` },
+        ...images.slice(0, 2).map((url) => ({
+          type: "image_url" as const,
+          image_url: { url },
+        })),
       ],
-      response_format: { type: "json_object" },
-    }),
-  });
+    },
+  ];
 
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { error?: { message?: string } };
-      detail = body.error?.message ? `: ${body.error.message}` : "";
-    } catch {
-      /* non-JSON error body */
+  /**
+   * Two attempts, the second told what was wrong with the first.
+   *
+   * The usual failure is a constraint so tight that nothing satisfies it —
+   * which the model cannot see, because it never runs what it writes. Handing
+   * back the diagnosis fixes it far more often than asking again blind, and
+   * costs one more call on the cards that need it.
+   */
+  let shape: ReturnType<typeof generatedSchema.safeParse> | null = null;
+  let lastComplaint = "";
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await fetch(`${ai.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ai.key}`,
+      },
+      body: JSON.stringify({
+        model: ai.model,
+        messages,
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const body = (await response.json()) as { error?: { message?: string } };
+        detail = body.error?.message ? `: ${body.error.message}` : "";
+      } catch {
+        /* non-JSON error body */
+      }
+      throw new Error(`${ai.label} returned ${response.status}${detail}`);
     }
-    throw new Error(`${ai.label} returned ${response.status}${detail}`);
+
+    const body = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = body.choices?.[0]?.message?.content;
+    if (!content) throw new Error(`No reply from ${ai.label}. Please try again.`);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content.replace(/^```json\s*|```$/g, "").trim());
+    } catch {
+      lastComplaint = "that wasn't JSON";
+      messages.push({ role: "assistant", content });
+      messages.push({
+        role: "user",
+        content: "That was not valid JSON. Reply with the JSON object only.",
+      });
+      continue;
+    }
+
+    const candidate = generatedSchema.safeParse(parsed);
+    if (!candidate.success) {
+      lastComplaint = "the fields were not the ones asked for";
+      messages.push({ role: "assistant", content });
+      messages.push({
+        role: "user",
+        content:
+          "That JSON did not have the required fields. Reply again with exactly the shape described.",
+      });
+      continue;
+    }
+
+    // Rolled here, not just parsed: a template can be well-formed and still
+    // incapable of producing a single question.
+    const failure = diagnoseGenerated(candidate.data);
+    if (!failure) {
+      shape = candidate;
+      break;
+    }
+
+    lastComplaint = describeFailure(failure);
+    messages.push({ role: "assistant", content });
+    messages.push({
+      role: "user",
+      content: [
+        `That template cannot produce a question: ${lastComplaint}.`,
+        "Fix it and reply with the corrected JSON only.",
+        "Widen the ranges, loosen or drop the constraint, and make sure the",
+        "answer is a whole number for every combination the ranges allow.",
+      ].join(" "),
+    });
   }
 
-  const body = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = body.choices?.[0]?.message?.content;
-  if (!content) throw new Error(`No reply from ${ai.label}. Please try again.`);
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content.replace(/^```json\s*|```$/g, "").trim());
-  } catch {
-    throw new Error("The reply wasn't JSON. Try again.");
-  }
-
-  const shape = generatedSchema.safeParse(parsed);
-  if (!shape.success) {
-    throw new Error("The template came back in an unexpected shape. Try again.");
+  if (!shape || !shape.success) {
+    throw new Error(
+      `Couldn't build a workable template for this card — ${lastComplaint || "the reply didn't hold up"}. This card may not be one where only the numbers change.`,
+    );
   }
 
   // Models reliably slip formulas into the explanation — "(l * w * h)" where
@@ -624,8 +682,6 @@ export async function proposeGeneratedCardAction(cardId: number) {
     }
     shape.data.explanation = explanation;
   }
-  // Rolled here, not just parsed: a template can be well-formed and still
-  // incapable of producing a single valid question.
   const problem = validateGenerated(shape.data);
   if (problem) throw new Error(problem);
 

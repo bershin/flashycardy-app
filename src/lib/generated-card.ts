@@ -241,12 +241,56 @@ function sample(variable: GeneratedVariable, random: () => number): number {
  * previewed three times and then refused to save. Each attempt is a handful of
  * arithmetic, so the budget costs nothing and removes the flakiness.
  */
+/** Why a template could not produce a question — enough to act on. */
+export type RollDiagnosis = {
+  attempts: number;
+  constraintFailed: number;
+  answerNotWhole: number;
+  tooFewOptions: number;
+  errored: number;
+  lastError: string;
+};
+
+export class RollFailure extends Error {
+  readonly diagnosis: RollDiagnosis;
+  constructor(message: string, diagnosis: RollDiagnosis) {
+    super(message);
+    this.name = "RollFailure";
+    this.diagnosis = diagnosis;
+  }
+}
+
+/** The failure told as a sentence, for the person and for the next prompt. */
+export function describeFailure(d: RollDiagnosis): string {
+  if (d.errored > d.attempts / 2) {
+    return `the formulas could not be worked out (${d.lastError})`;
+  }
+  if (d.constraintFailed > d.attempts / 2) {
+    return "the constraint was never satisfied — no combination of the allowed values fits it";
+  }
+  if (d.answerNotWhole > d.attempts / 4) {
+    return "the answer kept landing on a fraction rather than a whole number";
+  }
+  if (d.tooFewOptions > d.attempts / 4) {
+    return "the wrong options kept colliding with the answer or with each other";
+  }
+  return "no usable question came out of it";
+}
+
 export function rollGenerated(
   payload: GeneratedPayload,
   random: () => number = Math.random,
   attempts = 4000,
 ): GeneratedInstance {
   let lastError = "";
+  const diagnosis: RollDiagnosis = {
+    attempts,
+    constraintFailed: 0,
+    answerNotWhole: 0,
+    tooFewOptions: 0,
+    errored: 0,
+    lastError: "",
+  };
   for (let attempt = 0; attempt < attempts; attempt++) {
     const values: Record<string, number> = {};
     for (const variable of payload.variables) {
@@ -254,12 +298,16 @@ export function rollGenerated(
     }
     try {
       if (payload.constraint && evaluate(payload.constraint, values) === 0) {
+        diagnosis.constraintFailed++;
         continue;
       }
       const answer = evaluate(payload.answer, values);
       // A question whose answer is 27.333… is arithmetic gone wrong, not a
       // harder question.
-      if (!Number.isInteger(answer)) continue;
+      if (!Number.isInteger(answer)) {
+        diagnosis.answerNotWhole++;
+        continue;
+      }
 
       const wrong: number[] = [];
       for (const expression of payload.distractors) {
@@ -276,7 +324,10 @@ export function rollGenerated(
         // Five options is what these papers use, and more only pads the list.
         if (wrong.length === 4) break;
       }
-      if (wrong.length < 2) continue;
+      if (wrong.length < 2) {
+        diagnosis.tooFewOptions++;
+        continue;
+      }
 
       const unit = payload.unit ? ` ${payload.unit}` : "";
       const all = [answer, ...wrong].map((value) => `${format(value)}${unit}`);
@@ -296,13 +347,14 @@ export function rollGenerated(
         values,
       };
     } catch (error) {
+      diagnosis.errored++;
       lastError = error instanceof Error ? error.message : String(error);
+      diagnosis.lastError = lastError;
     }
   }
-  throw new Error(
-    lastError
-      ? `This card's formulas didn't work: ${lastError}`
-      : "No combination of values fits this card's rules.",
+  throw new RollFailure(
+    `This template didn't work: ${describeFailure(diagnosis)}.`,
+    diagnosis,
   );
 }
 
@@ -324,4 +376,14 @@ export function validateGenerated(payload: GeneratedPayload): string | null {
     return error instanceof Error ? error.message : String(error);
   }
   return null;
+}
+
+/** The same check, keeping the diagnosis so a retry can be told what went wrong. */
+export function diagnoseGenerated(payload: GeneratedPayload): RollDiagnosis | null {
+  try {
+    rollGenerated(payload);
+    return null;
+  } catch (error) {
+    return error instanceof RollFailure ? error.diagnosis : null;
+  }
 }

@@ -123,10 +123,14 @@ export function VaryCardDialog({ card, open, onOpenChange }: VaryCardDialogProps
         </DialogHeader>
 
         {!payload && (
-          <div className="mt-2">
+          <div className="mt-2 flex items-center gap-2">
             <Button onClick={propose} disabled={isPending}>
               <Wand2 className="size-4" />
-              {isPending ? "Reading the card…" : "Build a template"}
+              {isPending
+                ? "Reading the card…"
+                : error
+                  ? "Try again"
+                  : "Build a template"}
             </Button>
           </div>
         )}
