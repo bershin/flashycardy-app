@@ -165,6 +165,16 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
       <div className="grid gap-2">
         <Label>Card type</Label>
         <div className="grid grid-cols-2 gap-2">
+          {/* A generated card matches neither button, which reads as a bug
+              rather than a state. Saying what it is — and what picking one of
+              these would cost — is the difference. */}
+          {draft.type === "generated" && (
+            <p className="col-span-full text-xs text-muted-foreground">
+              This card varies: its numbers are rolled from a template. Choosing
+              Basic or Quiz below drops the template and returns the card to the
+              question it was written with.
+            </p>
+          )}
           {TYPES.map((option) => (
             <button
               key={option.value}

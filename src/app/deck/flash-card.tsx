@@ -9,6 +9,7 @@ import {
   ListChecks,
   Dices,
   Pencil,
+  Undo2,
   Trash2,
   Wand2,
 } from "lucide-react";
@@ -39,7 +40,11 @@ import { EditCardDialog } from "@/components/edit-card-dialog";
 import { MoveCardDialog } from "@/components/move-card-dialog";
 import { VaryCardDialog } from "@/components/vary-card-dialog";
 import type { CardRow } from "@/lib/store/types";
-import { cloneCardAction, deleteCardAction } from "./actions";
+import {
+  cloneCardAction,
+  deleteCardAction,
+  updateCardAction,
+} from "./actions";
 
 interface FlashCardProps {
   card: CardRow;
@@ -75,6 +80,30 @@ export function FlashCard({
         }
       } catch {
         // clone failed silently
+      }
+    });
+  }
+
+  /**
+   * Put a templated card back the way it was.
+   *
+   * The original question and its scan were never removed — only the type
+   * changed — so this is a switch back rather than a restoration. The template
+   * goes, since a card that is no longer generated has no use for one, and
+   * rebuilding it costs another reading of the card.
+   */
+  function handleRevert() {
+    startTransition(async () => {
+      try {
+        await updateCardAction({
+          cardId: card.id,
+          type: "basic",
+          front: card.front,
+          back: card.back,
+          schedule: card.schedule,
+        });
+      } catch {
+        // left as it was; the menu can be tried again
       }
     });
   }
@@ -188,6 +217,12 @@ export function FlashCard({
                     ? "Rebuild the template…"
                     : "Make it vary…"}
                 </DropdownMenuItem>
+                {card.type === "generated" && (
+                  <DropdownMenuItem onClick={handleRevert} disabled={isPending}>
+                    <Undo2 />
+                    Back to the original card
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={() => setDeleteOpen(true)}
