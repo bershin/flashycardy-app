@@ -7,6 +7,7 @@ import {
   Ellipsis,
   FolderInput,
   ListChecks,
+  Dices,
   Pencil,
   Trash2,
   Wand2,
@@ -229,6 +230,18 @@ export function FlashCard({
             <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
               <ListChecks className="size-3" />
               Quiz
+            </span>
+          )}
+          {/* Said plainly on the card, because the browse view shows the
+              original question either way — a templated card looks exactly like
+              the one it replaced until it is studied. */}
+          {card.type === "generated" && (
+            <span
+              title="The numbers change every time this card comes up"
+              className="mt-3 inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-400/15 dark:text-violet-300"
+            >
+              <Dices className="size-3" />
+              Varies
             </span>
           )}
         </CardContent>

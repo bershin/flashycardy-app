@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { CheckSquare, FolderInput, Shuffle, X } from "lucide-react";
+import { CheckSquare, Dices, FolderInput, Shuffle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MoveCardDialog } from "@/components/move-card-dialog";
 import type { CardRow } from "@/lib/store/types";
@@ -26,6 +26,14 @@ export function CardGrid({ cards }: CardGridProps) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [moveOpen, setMoveOpen] = useState(false);
+  /**
+   * Which cards to show: all of them, or only the ones still fixed.
+   *
+   * Converting a deck is a long job done a card at a time, and the hard part is
+   * remembering where you were. Filtering to the fixed ones turns that into a
+   * list that visibly shortens.
+   */
+  const [onlyFixed, setOnlyFixed] = useState(false);
 
   if (cards !== prevCards) {
     setPrevCards(cards);
@@ -58,7 +66,11 @@ export function CardGrid({ cards }: CardGridProps) {
 
   if (displayCards.length === 0) return null;
 
-  const allSelected = selected.size === displayCards.length;
+  const varying = cards.filter((c) => c.type === "generated").length;
+  const visibleCards = onlyFixed
+    ? displayCards.filter((c) => c.type !== "generated")
+    : displayCards;
+  const allSelected = selected.size === visibleCards.length;
 
   return (
     <div className="mt-8">
@@ -75,7 +87,7 @@ export function CardGrid({ cards }: CardGridProps) {
                 setSelected(
                   allSelected
                     ? new Set()
-                    : new Set(displayCards.map((c) => c.id)),
+                    : new Set(visibleCards.map((c) => c.id)),
                 )
               }
             >
@@ -97,6 +109,21 @@ export function CardGrid({ cards }: CardGridProps) {
           </>
         ) : (
           <>
+            {varying > 0 && (
+              <span className="mr-auto text-sm text-muted-foreground">
+                {varying} of {cards.length} vary
+              </span>
+            )}
+            {varying > 0 && varying < cards.length && (
+              <Button
+                variant={onlyFixed ? "default" : "outline"}
+                size="sm"
+                onClick={() => setOnlyFixed((only) => !only)}
+              >
+                <Dices className="size-3.5" />
+                {onlyFixed ? "Showing fixed only" : "Hide the varying ones"}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -118,7 +145,7 @@ export function CardGrid({ cards }: CardGridProps) {
           hundred image cards is otherwise laid out and painted in full before
           the first one can be looked at. */}
       <div className="card-list grid gap-4 sm:grid-cols-2">
-        {displayCards.map((card) => (
+        {visibleCards.map((card) => (
           <FlashCard
             key={card.id}
             card={card}
