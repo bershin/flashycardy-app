@@ -6,6 +6,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  GripVertical,
   ListTodo,
   Plus,
   Trash2,
@@ -17,6 +18,7 @@ import { selectTodosForDay } from "@/db/queries/todos";
 import type { DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { startTodoDrag } from "./todo-drag";
 import {
   addDayTodoAction,
   deleteDayTodoAction,
@@ -109,8 +111,17 @@ export function DayTodos({ date }: DayTodosProps) {
         {todos.map((todo) => (
           <li
             key={todo.id}
+            // Dropped on a square in the grid above, which is the fastest way
+            // to say "not today, Thursday". The buttons on the row do the same
+            // job for touch and for the keyboard.
+            draggable={!pending}
+            onDragStart={(e) => startTodoDrag(e, todo.id)}
             className="group flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-muted/60"
           >
+            <GripVertical
+              aria-hidden
+              className="-ml-1 size-3.5 shrink-0 cursor-grab text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+            />
             <button
               type="button"
               role="checkbox"
@@ -251,6 +262,12 @@ export function DayTodos({ date }: DayTodosProps) {
           Add
         </Button>
       </div>
+
+      {todos.length > 0 && (
+        <p className="mt-2 text-xs text-muted-foreground/80">
+          Drag an item onto a day above to move it there.
+        </p>
+      )}
 
       {open > 0 &&
         (carrying ? (

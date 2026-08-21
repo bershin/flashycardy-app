@@ -25,6 +25,8 @@ import {
 } from "./last-move";
 import { undoRescheduleAction } from "@/app/deck/actions";
 import { DayTodos } from "./day-todos";
+import { isTodoDrag, readTodoDrag } from "./todo-drag";
+import { updateDayTodoAction } from "./actions";
 
 /** Monday-first, matching how a week is read here. */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -132,6 +134,8 @@ export default function CalendarPage() {
   const todoDays = useStore(
     useCallback((db: DbDoc) => selectTodoDays(db, LOCAL_USER_ID), []),
   );
+  /** The square a dragged item is currently over, if any. */
+  const [dropDay, setDropDay] = useState<string | null>(null);
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -539,10 +543,47 @@ export default function CalendarPage() {
               }))
             : [];
 
+          const dropping = dropDay === day.key;
+
           return (
             // A container of buttons rather than one button: each deck's count
-            // opens that deck, and the date opens the day whole.
-            <div key={day.key} className={className} title={title}>
+            // opens that deck, and the date opens the day whole. It is also the
+            // drop target for an item dragged out of the panel below — the
+            // wrapper rather than any button inside it, so every part of the
+            // square accepts it.
+            <div
+              key={day.key}
+              className={`${className} ${dropping ? "outline-2 outline-offset-2 outline-amber-500" : ""}`}
+              title={title}
+              onDragOver={(e) => {
+                if (!day.inMonth || !isTodoDrag(e)) return;
+                // Without this the browser refuses the drop entirely.
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (dropDay !== day.key) setDropDay(day.key);
+              }}
+              onDragLeave={(e) => {
+                // Moving between the square's own children fires a leave for
+                // each one; only a leave that exits the square counts.
+                if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  return;
+                }
+                setDropDay((current) => (current === day.key ? null : current));
+              }}
+              onDrop={(e) => {
+                if (!day.inMonth) return;
+                const id = readTodoDrag(e);
+                setDropDay(null);
+                if (id === null) return;
+                e.preventDefault();
+                void updateDayTodoAction({ id, date: day.key });
+                // The panel follows the item, so the list you were working in
+                // is the one you can still see. Opened whole rather than
+                // narrowed: the deck you had filtered to need not have
+                // anything on the day you dropped onto.
+                selectDay(day.key);
+              }}
+            >
               {day.inMonth && todoDays.has(day.key) && (
                 // Above the bands, which are laid over the whole square on a
                 // day that has cards. Filled while anything is still open,
