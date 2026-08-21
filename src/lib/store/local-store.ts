@@ -348,3 +348,11 @@ export function allocateCardId(draft: DbDoc): number {
   draft.nextCardId += 1;
   return id;
 }
+
+export function allocateNoteId(draft: DbDoc): number {
+  // Documents written before notes existed have neither the counter nor the
+  // list, and are read with both defaulted rather than migrated.
+  const id = draft.nextNoteId ?? 1;
+  draft.nextNoteId = id + 1;
+  return id;
+}

@@ -12,6 +12,7 @@ import type { DbDoc } from "@/lib/store/types";
 import { CreateDeckButton } from "./create-deck-button";
 import { DeckSearchControl } from "./deck-search-control";
 import { DashboardSearch } from "./dashboard-search";
+import { DayNotes } from "./day-notes";
 
 export default function DashboardPage() {
   const ready = useStoreReady();
@@ -101,6 +102,8 @@ export default function DashboardPage() {
           <CreateDeckButton />
         </div>
       </div>
+
+      <DayNotes />
 
       <DashboardSearch decks={deckViews} query={query} />
     </div>

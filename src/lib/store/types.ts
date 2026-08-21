@@ -71,6 +71,27 @@ export const LEGACY_REVIEW_SCHEDULE: ReviewSchedule = "incremental";
 /** What a newly created card starts on. */
 export const NEW_CARD_SCHEDULE: ReviewSchedule = "weekly";
 
+/**
+ * Something written against a day rather than against a card.
+ *
+ * "Mock exam", "no study — away", "revise fractions before Friday". The
+ * calendar already knows what is due; this is for what the due list cannot
+ * know.
+ *
+ * The date is a plain `YYYY-MM-DD` string, not a timestamp. A note belongs to a
+ * day as written, and storing an instant would let a note typed at eleven at
+ * night in London appear on the day before to anyone east of it.
+ */
+export type DayNote = {
+  id: number;
+  userId: string;
+  /** `YYYY-MM-DD`, in the writer's own calendar. */
+  date: string;
+  text: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type CardRow = {
   id: number;
   deckId: number;
@@ -125,8 +146,11 @@ export type DbDoc = {
   /** Replaces Postgres `GENERATED ALWAYS AS IDENTITY`. */
   nextDeckId: number;
   nextCardId: number;
+  /** Absent in documents written before notes existed; starts from 1. */
+  nextNoteId: number;
   decks: DeckRow[];
   cards: CardRow[];
+  notes: DayNote[];
 };
 
 /** The JSON-safe form of {@link DbDoc}, with ISO strings instead of Dates. */
@@ -137,6 +161,14 @@ export type SerializedDbDoc = {
   deviceId: string;
   nextDeckId: number;
   nextCardId: number;
+  nextNoteId?: number;
+  /** Absent in documents written before notes existed; reads as none. */
+  notes?: Array<
+    Omit<DayNote, "createdAt" | "updatedAt"> & {
+      createdAt: string;
+      updatedAt: string;
+    }
+  >;
   decks: Array<Omit<DeckRow, "lastStudiedAt" | "createdAt" | "updatedAt"> & {
     lastStudiedAt: string | null;
     createdAt: string;
@@ -203,8 +235,10 @@ export function emptyDoc(deviceId: string): DbDoc {
     deviceId,
     nextDeckId: 1,
     nextCardId: 1,
+    nextNoteId: 1,
     decks: [],
     cards: [],
+    notes: [],
   };
 }
 
@@ -235,6 +269,12 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
     deviceId: raw.deviceId,
     nextDeckId: raw.nextDeckId,
     nextCardId: raw.nextCardId,
+    nextNoteId: raw.nextNoteId ?? (raw.notes?.length ?? 0) + 1,
+    notes: (raw.notes ?? []).map((n) => ({
+      ...n,
+      createdAt: toDate(n.createdAt),
+      updatedAt: toDate(n.updatedAt),
+    })),
     decks: raw.decks.map((d) => ({
       ...d,
       lastStudiedAt: toDate(d.lastStudiedAt),
@@ -268,6 +308,12 @@ export function serializeDoc(doc: DbDoc): SerializedDbDoc {
     deviceId: doc.deviceId,
     nextDeckId: doc.nextDeckId,
     nextCardId: doc.nextCardId,
+    nextNoteId: doc.nextNoteId,
+    notes: doc.notes.map((n) => ({
+      ...n,
+      createdAt: toIso(n.createdAt),
+      updatedAt: toIso(n.updatedAt),
+    })),
     decks: doc.decks.map((d) => ({
       ...d,
       lastStudiedAt: toIso(d.lastStudiedAt),

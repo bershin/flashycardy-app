@@ -23,6 +23,8 @@ import {
   subscribeLastMove,
 } from "./last-move";
 import { undoRescheduleAction } from "@/app/deck/actions";
+import { saveDayNoteAction } from "./actions";
+import { DayNoteEditor } from "./day-note";
 
 /** Monday-first, matching how a week is read here. */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -125,6 +127,16 @@ export default function CalendarPage() {
   const ready = useStoreReady();
   const { cards, deckOf } = useStore(
     useCallback((db: DbDoc) => selectActiveCards(db), []),
+  );
+  /** Keyed by day, so a cell can mark itself without searching the list. */
+  const notes = useStore(
+    useCallback((db: DbDoc) => {
+      const byDay = new Map<string, string>();
+      for (const note of db.notes) {
+        if (note.userId === LOCAL_USER_ID) byDay.set(note.date, note.text);
+      }
+      return byDay;
+    }, []),
   );
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -279,6 +291,12 @@ export default function CalendarPage() {
       .filter((d) => selectedParent === null || d.rootId === selectedParent)
       .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title));
   }, [byDeck, selected, selectedParent]);
+
+  /** What the open panel is counting: the whole day, or one parent's share. */
+  const selectedCount =
+    selectedParent === null
+      ? (selected?.count ?? 0)
+      : selectedDecks.reduce((sum, d) => sum + d.count, 0);
 
   /**
    * The top-level decks with anything on this month's grid.
@@ -531,6 +549,13 @@ export default function CalendarPage() {
             // A container of buttons rather than one button: each deck's count
             // opens that deck, and the date opens the day whole.
             <div key={day.key} className={className} title={title}>
+              {day.inMonth && notes.has(day.key) && (
+                <span
+                  aria-hidden
+                  title={notes.get(day.key)}
+                  className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-amber-500"
+                />
+              )}
               {clickable ? (
                 <button
                   type="button"
@@ -545,6 +570,20 @@ export default function CalendarPage() {
                 >
                   {day.date.getDate()}
                   <span className="sr-only"> — every deck</span>
+                </button>
+              ) : day.inMonth ? (
+                // Openable even with nothing due: a free day is exactly the one
+                // worth writing "away until Thursday" on.
+                <button
+                  type="button"
+                  aria-pressed={isSelected}
+                  title={`${day.date.toLocaleDateString()} — nothing due. Click to write a note`}
+                  onClick={() => selectDay(isSelected ? null : day.key)}
+                  className="absolute inset-0 cursor-pointer text-left focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none"
+                >
+                  <span className="absolute top-1 left-1.5 text-[0.65rem] opacity-70">
+                    {day.date.getDate()}
+                  </span>
                 </button>
               ) : (
                 <span className="absolute top-1 left-1.5 text-[0.65rem] opacity-70">
@@ -674,21 +713,20 @@ export default function CalendarPage() {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {/* When narrowed, the totals are that deck's — quoting the
                     day's full count next to one deck's sub-decks would not
-                    add up. */}
-                {selectedParent === null
-                  ? selected.count
-                  : selectedDecks.reduce((sum, d) => sum + d.count, 0)}{" "}
-                card
-                {(selectedParent === null
-                  ? selected.count
-                  : selectedDecks.reduce((sum, d) => sum + d.count, 0)) === 1
-                  ? ""
-                  : "s"}{" "}
-                across {selectedDecks.length} deck
-                {selectedDecks.length === 1 ? "" : "s"}
-                {selectedParent === null &&
-                  selected.overdue > 0 &&
-                  `, including ${selected.overdue} overdue`}
+                    add up. A free day is opened for its note, so it says so
+                    rather than reporting "0 cards across 0 decks". */}
+                {selectedCount === 0 ? (
+                  "Nothing due"
+                ) : (
+                  <>
+                    {selectedCount} card{selectedCount === 1 ? "" : "s"} across{" "}
+                    {selectedDecks.length} deck
+                    {selectedDecks.length === 1 ? "" : "s"}
+                    {selectedParent === null &&
+                      selected.overdue > 0 &&
+                      `, including ${selected.overdue} overdue`}
+                  </>
+                )}
               </p>
               {selectedParent !== null && (
                 <button
@@ -761,6 +799,15 @@ export default function CalendarPage() {
               </li>
             ))}
           </ul>
+
+          <DayNoteEditor
+            key={selected.key}
+            date={selected.key}
+            note={notes.get(selected.key)}
+            onSave={(text) =>
+              saveDayNoteAction({ date: selected.key, text })
+            }
+          />
 
           {selectedDecks.length > DECK_LIMIT && (
             <button
