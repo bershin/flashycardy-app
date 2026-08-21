@@ -553,7 +553,9 @@ export default function CalendarPage() {
                 <span
                   aria-hidden
                   title={notes.get(day.key)}
-                  className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-amber-500"
+                  // Above the bands, which are laid over the whole square on a
+                  // day that has cards.
+                  className="absolute top-1.5 right-1.5 z-20 size-1.5 rounded-full bg-amber-500"
                 />
               )}
               {clickable ? (
