@@ -13,6 +13,7 @@ import { LOCAL_USER_ID } from "@/lib/auth";
 import { accentVar } from "@/lib/deck-accent";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import { isArchiveDeck, startOfDay } from "@/lib/store/selectors";
+import { selectTodoDays } from "@/db/queries/todos";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import { MoveDueCardsDialog, type MovableCard } from "./move-due-cards-dialog";
@@ -23,8 +24,7 @@ import {
   subscribeLastMove,
 } from "./last-move";
 import { undoRescheduleAction } from "@/app/deck/actions";
-import { saveDayNoteAction } from "./actions";
-import { DayNoteEditor } from "./day-note";
+import { DayTodos } from "./day-todos";
 
 /** Monday-first, matching how a week is read here. */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -129,14 +129,8 @@ export default function CalendarPage() {
     useCallback((db: DbDoc) => selectActiveCards(db), []),
   );
   /** Keyed by day, so a cell can mark itself without searching the list. */
-  const notes = useStore(
-    useCallback((db: DbDoc) => {
-      const byDay = new Map<string, string>();
-      for (const note of db.notes) {
-        if (note.userId === LOCAL_USER_ID) byDay.set(note.date, note.text);
-      }
-      return byDay;
-    }, []),
+  const todoDays = useStore(
+    useCallback((db: DbDoc) => selectTodoDays(db, LOCAL_USER_ID), []),
   );
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -549,13 +543,25 @@ export default function CalendarPage() {
             // A container of buttons rather than one button: each deck's count
             // opens that deck, and the date opens the day whole.
             <div key={day.key} className={className} title={title}>
-              {day.inMonth && notes.has(day.key) && (
+              {day.inMonth && todoDays.has(day.key) && (
+                // Above the bands, which are laid over the whole square on a
+                // day that has cards. Filled while anything is still open,
+                // hollow once the day's list is finished — a day that has been
+                // dealt with should not keep asking to be looked at.
                 <span
                   aria-hidden
-                  title={notes.get(day.key)}
-                  // Above the bands, which are laid over the whole square on a
-                  // day that has cards.
-                  className="absolute top-1.5 right-1.5 z-20 size-1.5 rounded-full bg-amber-500"
+                  title={
+                    todoDays.get(day.key)!.open > 0
+                      ? `${todoDays.get(day.key)!.open} still to do`
+                      : "Everything here is done"
+                  }
+                  className={`absolute top-1.5 right-1.5 z-20 size-1.5 rounded-full ${
+                    todoDays.get(day.key)!.open > 0
+                      ? "bg-amber-500"
+                      // Carries its own background so the ring reads against a
+                      // saturated band as well as an empty square.
+                      : "border border-emerald-500 bg-background"
+                  }`}
                 />
               )}
               {clickable ? (
@@ -575,11 +581,11 @@ export default function CalendarPage() {
                 </button>
               ) : day.inMonth ? (
                 // Openable even with nothing due: a free day is exactly the one
-                // worth writing "away until Thursday" on.
+                // worth putting "away until Thursday" on.
                 <button
                   type="button"
                   aria-pressed={isSelected}
-                  title={`${day.date.toLocaleDateString()} — nothing due. Click to write a note`}
+                  title={`${day.date.toLocaleDateString()} — nothing due. Click to add something to do`}
                   onClick={() => selectDay(isSelected ? null : day.key)}
                   className="absolute inset-0 cursor-pointer text-left focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none"
                 >
@@ -802,14 +808,7 @@ export default function CalendarPage() {
             ))}
           </ul>
 
-          <DayNoteEditor
-            key={selected.key}
-            date={selected.key}
-            note={notes.get(selected.key)}
-            onSave={(text) =>
-              saveDayNoteAction({ date: selected.key, text })
-            }
-          />
+          <DayTodos key={selected.key} date={selected.key} />
 
           {selectedDecks.length > DECK_LIMIT && (
             <button

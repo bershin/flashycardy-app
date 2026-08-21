@@ -76,18 +76,25 @@ export const NEW_CARD_SCHEDULE: ReviewSchedule = "weekly";
  *
  * "Mock exam", "no study — away", "revise fractions before Friday". The
  * calendar already knows what is due; this is for what the due list cannot
- * know.
+ * know. A day holds as many as you write, each one able to be ticked off and
+ * carried to another day when it doesn't happen.
  *
- * The date is a plain `YYYY-MM-DD` string, not a timestamp. A note belongs to a
- * day as written, and storing an instant would let a note typed at eleven at
+ * The date is a plain `YYYY-MM-DD` string, not a timestamp. An item belongs to a
+ * day as written, and storing an instant would let something typed at eleven at
  * night in London appear on the day before to anyone east of it.
  */
-export type DayNote = {
+export type DayTodo = {
   id: number;
   userId: string;
-  /** `YYYY-MM-DD`, in the writer's own calendar. */
+  /** `YYYY-MM-DD`, in the writer's own calendar. Changed by moving it. */
   date: string;
   text: string;
+  done: boolean;
+  /**
+   * When it was ticked off, so a day can show what actually happened on it.
+   * Null while it is still open.
+   */
+  doneAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -146,11 +153,11 @@ export type DbDoc = {
   /** Replaces Postgres `GENERATED ALWAYS AS IDENTITY`. */
   nextDeckId: number;
   nextCardId: number;
-  /** Absent in documents written before notes existed; starts from 1. */
-  nextNoteId: number;
+  /** Absent in documents written before day items existed; starts from 1. */
+  nextTodoId: number;
   decks: DeckRow[];
   cards: CardRow[];
-  notes: DayNote[];
+  todos: DayTodo[];
 };
 
 /** The JSON-safe form of {@link DbDoc}, with ISO strings instead of Dates. */
@@ -161,10 +168,36 @@ export type SerializedDbDoc = {
   deviceId: string;
   nextDeckId: number;
   nextCardId: number;
+  nextTodoId?: number;
+  /**
+   * What day items were called for the hour they were one note per day.
+   *
+   * Read as todos and written back under the new name, so anything typed in
+   * that window survives rather than disappearing on the next load. Nothing
+   * writes this field.
+   */
+  notes?: Array<{
+    id: number;
+    userId: string;
+    date: string;
+    text: string;
+    /** Never present — declared so the two shapes read as one. */
+    done?: boolean;
+    doneAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  /** Absent in documents written before day items existed; reads as none. */
   nextNoteId?: number;
-  /** Absent in documents written before notes existed; reads as none. */
-  notes?: Array<
-    Omit<DayNote, "createdAt" | "updatedAt"> & {
+  /**
+   * `done` and `doneAt` are optional because the first version of this was a
+   * single note per day with no way to tick it off. Those read as open items,
+   * which is what they were.
+   */
+  todos?: Array<
+    Omit<DayTodo, "done" | "doneAt" | "createdAt" | "updatedAt"> & {
+      done?: boolean;
+      doneAt?: string | null;
       createdAt: string;
       updatedAt: string;
     }
@@ -235,10 +268,10 @@ export function emptyDoc(deviceId: string): DbDoc {
     deviceId,
     nextDeckId: 1,
     nextCardId: 1,
-    nextNoteId: 1,
+    nextTodoId: 1,
     decks: [],
     cards: [],
-    notes: [],
+    todos: [],
   };
 }
 
@@ -269,11 +302,18 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
     deviceId: raw.deviceId,
     nextDeckId: raw.nextDeckId,
     nextCardId: raw.nextCardId,
-    nextNoteId: raw.nextNoteId ?? (raw.notes?.length ?? 0) + 1,
-    notes: (raw.notes ?? []).map((n) => ({
-      ...n,
-      createdAt: toDate(n.createdAt),
-      updatedAt: toDate(n.updatedAt),
+    nextTodoId:
+      raw.nextTodoId ??
+      raw.nextNoteId ??
+      (raw.todos?.length ?? raw.notes?.length ?? 0) + 1,
+    // A document from the note-per-day hour has `notes` and no `todos`; its
+    // entries are exactly todos that were never able to be ticked off.
+    todos: (raw.todos ?? raw.notes ?? []).map((t) => ({
+      ...t,
+      done: t.done ?? false,
+      doneAt: t.doneAt ? toDate(t.doneAt) : null,
+      createdAt: toDate(t.createdAt),
+      updatedAt: toDate(t.updatedAt),
     })),
     decks: raw.decks.map((d) => ({
       ...d,
@@ -308,11 +348,12 @@ export function serializeDoc(doc: DbDoc): SerializedDbDoc {
     deviceId: doc.deviceId,
     nextDeckId: doc.nextDeckId,
     nextCardId: doc.nextCardId,
-    nextNoteId: doc.nextNoteId,
-    notes: doc.notes.map((n) => ({
-      ...n,
-      createdAt: toIso(n.createdAt),
-      updatedAt: toIso(n.updatedAt),
+    nextTodoId: doc.nextTodoId,
+    todos: doc.todos.map((t) => ({
+      ...t,
+      doneAt: toIso(t.doneAt),
+      createdAt: toIso(t.createdAt),
+      updatedAt: toIso(t.updatedAt),
     })),
     decks: doc.decks.map((d) => ({
       ...d,

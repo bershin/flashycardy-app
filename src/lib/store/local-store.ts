@@ -349,10 +349,10 @@ export function allocateCardId(draft: DbDoc): number {
   return id;
 }
 
-export function allocateNoteId(draft: DbDoc): number {
-  // Documents written before notes existed have neither the counter nor the
+export function allocateTodoId(draft: DbDoc): number {
+  // Documents written before day items existed have neither the counter nor the
   // list, and are read with both defaulted rather than migrated.
-  const id = draft.nextNoteId ?? 1;
-  draft.nextNoteId = id + 1;
+  const id = draft.nextTodoId ?? 1;
+  draft.nextTodoId = id + 1;
   return id;
 }
