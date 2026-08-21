@@ -116,8 +116,10 @@ export function VaryDeckDialog({ cards, open, onOpenChange }: VaryDeckDialogProp
           <DialogTitle>Make the whole deck vary</DialogTitle>
           <DialogDescription>
             {fixed.length} card{fixed.length === 1 ? "" : "s"} to read, one model
-            call each. Only templates that reproduce the card&rsquo;s own answer
-            are saved; anything else is left alone and listed for you to look at.
+            call each. These are converted in place — for a varying version
+            beside the original, use a single card&rsquo;s menu instead. Only
+            templates that reproduce the card&rsquo;s own answer are saved;
+            anything else is left alone and listed for you to look at.
           </DialogDescription>
         </DialogHeader>
 

@@ -215,7 +215,7 @@ export function FlashCard({
                   <Wand2 />
                   {card.type === "generated"
                     ? "Rebuild the template…"
-                    : "Make it vary…"}
+                    : "Make a varying version…"}
                 </DropdownMenuItem>
                 {card.type === "generated" && (
                   <DropdownMenuItem onClick={handleRevert} disabled={isPending}>

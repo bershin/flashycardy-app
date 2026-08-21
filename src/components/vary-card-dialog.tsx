@@ -17,6 +17,7 @@ import {
   type GeneratedPayload,
 } from "@/lib/generated-card";
 import {
+  addCardAction,
   proposeGeneratedCardAction,
   updateCardAction,
 } from "@/app/deck/actions";
@@ -92,6 +93,34 @@ export function VaryCardDialog({ card, open, onOpenChange }: VaryCardDialogProps
     return rolls;
   }
 
+  /**
+   * Keep the card as it is and put the varying version beside it.
+   *
+   * The new card carries the template's own sentence rather than a copy of the
+   * original's scan: the picture would be a second copy of several hundred
+   * kilobytes, and studying shows the rolled question anyway. The original is
+   * left completely alone, streak and all.
+   */
+  function saveAsNew() {
+    if (!payload) return;
+    setError(null);
+    startSaving(async () => {
+      try {
+        await addCardAction({
+          deckId: card.deckId,
+          type: "generated",
+          front: `<p>${payload.template}</p>`,
+          back: payload.explanation ? `<p>${payload.explanation}</p>` : "",
+          schedule: card.schedule,
+          generated: payload,
+        });
+        onOpenChange(false);
+      } catch (e) {
+        setError(readable(e, "Couldn't add the card."));
+      }
+    });
+  }
+
   function save() {
     if (!payload) return;
     setError(null);
@@ -119,8 +148,8 @@ export function VaryCardDialog({ card, open, onOpenChange }: VaryCardDialogProps
           <DialogTitle>Make this card vary</DialogTitle>
           <DialogDescription>
             The numbers change every time the card comes up, so it has to be
-            worked out rather than remembered. Check the examples before saving —
-            a template is used forever, mistakes included.
+            worked out rather than remembered. Check the examples, then either
+            replace this card or keep it and add the varying one beside it.
           </DialogDescription>
         </DialogHeader>
 
@@ -209,13 +238,25 @@ export function VaryCardDialog({ card, open, onOpenChange }: VaryCardDialogProps
 
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
 
-        <DialogFooter className="mt-4">
+        <DialogFooter className="mt-4 sm:justify-between">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={!payload || saving}>
-            {saving ? "Saving…" : "Use this template"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {/* Two ways to keep it, because they answer different questions:
+                replace a card you have outgrown, or keep the original and add a
+                practice version beside it. */}
+            <Button
+              variant="outline"
+              onClick={saveAsNew}
+              disabled={!payload || saving}
+            >
+              {saving ? "Saving…" : "Add as a new card"}
+            </Button>
+            <Button onClick={save} disabled={!payload || saving}>
+              {saving ? "Saving…" : "Replace this card"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
