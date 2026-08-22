@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import {
   CalendarArrowUp,
@@ -28,13 +34,34 @@ import { DayTodos } from "./day-todos";
 import { isTodoDrag, readTodoDrag } from "./todo-drag";
 import { updateDayTodoAction } from "./actions";
 
+/**
+ * How many weeks the grid shows at once.
+ *
+ * Six, which is what a month grid needed at its widest — so the page is the
+ * size it always was, and scrolling changes which weeks are in it rather than
+ * how much there is to look at.
+ */
+const WINDOW_WEEKS = 6;
+
+/**
+ * How far the scrollable ribbon reaches either side of this week.
+ *
+ * Rendered in full rather than fetched as you go: a cell is a handful of
+ * elements and this is one person's calendar, so eight months of them costs
+ * less than the machinery for loading weeks on demand would.
+ */
+const WEEKS_BEFORE = 4;
+const WEEKS_AFTER = 30;
+const TOTAL_WEEKS = WEEKS_BEFORE + WEEKS_AFTER;
+
 /** Monday-first, matching how a week is read here. */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type Day = {
   date: Date;
   key: string;
-  inMonth: boolean;
+  /** True on the 1st, where the grid crosses into a new month. */
+  startsMonth: boolean;
   isToday: boolean;
   count: number;
   /** Cards already past their date, all folded into today. */
@@ -72,6 +99,19 @@ type DeckCount = DeckRef & {
   overdue: number;
   cards: MovableCard[];
 };
+
+/**
+ * What the corner of a square reads.
+ *
+ * Plain on most days; on the 1st the month comes with it, because with the
+ * window free to sit across two months a bare "1" between the 31st and the 2nd
+ * is the only thing that says which month you are now looking at.
+ */
+function dayNumber(day: Day): string {
+  return day.startsMonth
+    ? day.date.toLocaleDateString(undefined, { day: "numeric", month: "short" })
+    : String(day.date.getDate());
+}
 
 function ymd(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -136,7 +176,9 @@ export default function CalendarPage() {
   );
   /** The square a dragged item is currently over, if any. */
   const [dropDay, setDropDay] = useState<string | null>(null);
-  const [monthOffset, setMonthOffset] = useState(0);
+  /** The topmost week in view, as an index into the rendered range. */
+  const [topWeek, setTopWeek] = useState(WEEKS_BEFORE);
+  const ribbon = useRef<HTMLDivElement | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -157,126 +199,122 @@ export default function CalendarPage() {
     setExpanded(false);
   }
 
-  const {
-    days,
-    monthLabel,
-    monthTotal,
-    busiest,
-    max,
-    overdueTotal,
-    byDeck,
-    byParent,
-    counts,
-  } = useMemo(() => {
-      const today = startOfDay(new Date());
+  const { days, max, overdueTotal, byDeck, byParent, counts } = useMemo(() => {
+    const today = startOfDay(new Date());
 
-      // Everything already past shows on today, which is where the app will
-      // actually present it — dotting it across previous days would describe a
-      // backlog that no longer exists as separate days of work.
-      const counts = new Map<string, number>();
-      // The same tally split by deck, so a heavy day can be read as "which
-      // decks is this?" without opening each one.
-      const byDeck = new Map<string, Map<number, DeckCount>>();
-      // And rolled up again to top level, which is what a cell has room to
-      // show: a day of 67 is legible as 60 of one collection and 7 of another
-      // without opening anything at all.
-      const byParent = new Map<string, Map<number, ParentCount>>();
-      let overdueTotal = 0;
-      for (const card of cards) {
-        const due = startOfDay(new Date(card.nextReviewAt));
-        const overdue = due < today;
-        if (overdue) overdueTotal += 1;
-        const key = ymd(overdue ? today : due);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
+    // Everything already past shows on today, which is where the app will
+    // actually present it — dotting it across previous days would describe a
+    // backlog that no longer exists as separate days of work.
+    const counts = new Map<string, number>();
+    // The same tally split by deck, so a heavy day can be read as "which
+    // decks is this?" without opening each one.
+    const byDeck = new Map<string, Map<number, DeckCount>>();
+    // And rolled up again to top level, which is what a cell has room to
+    // show: a day of 67 is legible as 60 of one collection and 7 of another
+    // without opening anything at all.
+    const byParent = new Map<string, Map<number, ParentCount>>();
+    let overdueTotal = 0;
+    for (const card of cards) {
+      const due = startOfDay(new Date(card.nextReviewAt));
+      const overdue = due < today;
+      if (overdue) overdueTotal += 1;
+      const key = ymd(overdue ? today : due);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
 
-        const deck = deckOf.get(card.deckId);
-        if (!deck) continue;
-        let decks = byDeck.get(key);
-        if (!decks) {
-          decks = new Map();
-          byDeck.set(key, decks);
-        }
-        const entry = decks.get(deck.id) ?? {
-          ...deck,
-          count: 0,
-          overdue: 0,
-          cards: [],
-        };
-        entry.count += 1;
-        if (overdue) entry.overdue += 1;
-        entry.cards.push({ id: card.id, streak: card.consecutiveCorrect });
-        decks.set(deck.id, entry);
-
-        let parents = byParent.get(key);
-        if (!parents) {
-          parents = new Map();
-          byParent.set(key, parents);
-        }
-        const parent = parents.get(deck.rootId) ?? {
-          id: deck.rootId,
-          title: deck.rootTitle,
-          position: deck.rootPosition,
-          count: 0,
-        };
-        parent.count += 1;
-        parents.set(deck.rootId, parent);
+      const deck = deckOf.get(card.deckId);
+      if (!deck) continue;
+      let decks = byDeck.get(key);
+      if (!decks) {
+        decks = new Map();
+        byDeck.set(key, decks);
       }
+      const entry = decks.get(deck.id) ?? {
+        ...deck,
+        count: 0,
+        overdue: 0,
+        cards: [],
+      };
+      entry.count += 1;
+      if (overdue) entry.overdue += 1;
+      entry.cards.push({ id: card.id, streak: card.consecutiveCorrect });
+      decks.set(deck.id, entry);
 
-      const anchor = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
-      const monthLabel = anchor.toLocaleDateString(undefined, {
-        month: "long",
-        year: "numeric",
+      let parents = byParent.get(key);
+      if (!parents) {
+        parents = new Map();
+        byParent.set(key, parents);
+      }
+      const parent = parents.get(deck.rootId) ?? {
+        id: deck.rootId,
+        title: deck.rootTitle,
+        position: deck.rootPosition,
+        count: 0,
+      };
+      parent.count += 1;
+      parents.set(deck.rootId, parent);
+    }
+
+    // One long ribbon of weeks that scrolls, rather than a month you page
+    // through. Anchoring to a month meant the days after the 31st were
+    // greyed-out scenery you had to leave the month to reach; here every square
+    // is a real day and the next month is simply further down.
+    const start = new Date(today);
+    start.setDate(
+      start.getDate() - ((start.getDay() + 6) % 7) - WEEKS_BEFORE * 7,
+    );
+
+    const days: Day[] = [];
+    for (let i = 0; i < TOTAL_WEEKS * 7; i++) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + i);
+      const key = ymd(date);
+      days.push({
+        date,
+        key,
+        startsMonth: date.getDate() === 1,
+        isToday: key === ymd(today),
+        count: counts.get(key) ?? 0,
+        overdue: key === ymd(today) ? overdueTotal : 0,
       });
+    }
 
-      // Grid starts on the Monday on or before the 1st.
-      const start = new Date(anchor);
-      const weekday = (start.getDay() + 6) % 7;
-      start.setDate(start.getDate() - weekday);
+    const max = Math.max(...days.map((d) => d.count), 0);
 
-      const days: Day[] = [];
-      for (let i = 0; i < 42; i++) {
-        const date = new Date(start);
-        date.setDate(start.getDate() + i);
-        const key = ymd(date);
-        days.push({
-          date,
-          key,
-          inMonth: date.getMonth() === anchor.getMonth(),
-          isToday: key === ymd(today),
-          count: counts.get(key) ?? 0,
-          overdue: key === ymd(today) ? overdueTotal : 0,
-        });
-      }
+    return { days, max, overdueTotal, byDeck, byParent, counts };
+  }, [cards, deckOf]);
 
-      const inMonth = days.filter((d) => d.inMonth);
-      const monthTotal = inMonth.reduce((sum, d) => sum + d.count, 0);
-      const max = Math.max(...days.map((d) => d.count), 0);
-      const busiest = inMonth.reduce<Day | null>(
+  /**
+   * What the heading describes: the six weeks currently in view.
+   *
+   * Recomputed as the ribbon scrolls, because a total covering eight months
+   * would be a number about nothing you can see.
+   */
+  const { rangeLabel, windowTotal, busiest } = useMemo(() => {
+    const shown = days.slice(topWeek * 7, (topWeek + WINDOW_WEEKS) * 7);
+    const first = shown[0].date;
+    const last = shown[shown.length - 1].date;
+    const sameYear = first.getFullYear() === last.getFullYear();
+    return {
+      rangeLabel:
+        first.getMonth() === last.getMonth() && sameYear
+          ? first.toLocaleDateString(undefined, {
+              month: "long",
+              year: "numeric",
+            })
+          : `${first.toLocaleDateString(undefined, { month: "short", ...(sameYear ? {} : { year: "numeric" }) })} – ${last.toLocaleDateString(undefined, { month: "short", year: "numeric" })}`,
+      windowTotal: shown.reduce((sum, d) => sum + d.count, 0),
+      busiest: shown.reduce<Day | null>(
         (best, d) => (d.count > (best?.count ?? 0) ? d : best),
         null,
-      );
-
-      return {
-        days,
-        monthLabel,
-        monthTotal,
-        busiest,
-        max,
-        overdueTotal,
-        byDeck,
-        byParent,
-        counts,
-      };
-    }, [cards, deckOf, monthOffset]);
+      ),
+    };
+  }, [days, topWeek]);
 
   /**
    * How many cards a day holds, for any date — including ones off this grid,
    * which the move dialog can reach with its date field.
    */
-  const countOn = useCallback(
-    (key: string) => counts.get(key) ?? 0,
-    [counts],
-  );
+  const countOn = useCallback((key: string) => counts.get(key) ?? 0, [counts]);
 
   const selected = selectedKey
     ? (days.find((d) => d.key === selectedKey) ?? null)
@@ -307,17 +345,16 @@ export default function CalendarPage() {
       : selectedDecks.reduce((sum, d) => sum + d.count, 0);
 
   /**
-   * The top-level decks with anything on this month's grid.
+   * The top-level decks with anything on the visible weeks.
    *
    * Every cell is divided between these in this order, so a deck keeps the same
-   * half of every square all month — the position becomes as good a label as
-   * the letter, and a row of cells can be scanned without reading either.
-   * Dashboard order, so the two screens agree on which deck comes first.
+   * half of every square — the position becomes as good a label as the letter,
+   * and a row of cells can be scanned without reading either. Dashboard order,
+   * so the two screens agree on which deck comes first.
    */
-  const monthParents = useMemo(() => {
+  const gridParents = useMemo(() => {
     const seen = new Map<number, ParentCount>();
     for (const day of days) {
-      if (!day.inMonth) continue;
       for (const parent of byParent.get(day.key)?.values() ?? []) {
         const entry = seen.get(parent.id) ?? { ...parent, count: 0 };
         entry.count += parent.count;
@@ -387,11 +424,51 @@ export default function CalendarPage() {
     }
   }
 
-  /** Moving month keeps no selection: the picked day is no longer on screen. */
-  function goToMonth(next: (m: number) => number) {
-    setMonthOffset(next);
-    selectDay(null);
+  /** The pixel pitch of one week row, measured rather than assumed. */
+  function weekPitch(box: HTMLDivElement): number {
+    return box.scrollHeight / TOTAL_WEEKS;
   }
+
+  /**
+   * Move the ribbon by whole weeks.
+   *
+   * The scroll position is the source of truth — `topWeek` follows it rather
+   * than driving it — so the buttons and the wheel cannot disagree about where
+   * the calendar is.
+   */
+  function scrollWeeks(delta: number) {
+    const box = ribbon.current;
+    if (!box) return;
+    box.scrollTo({
+      top: (topWeek + delta) * weekPitch(box),
+      behavior: "smooth",
+    });
+  }
+
+  function onRibbonScroll() {
+    const box = ribbon.current;
+    if (!box) return;
+    const week = Math.round(box.scrollTop / weekPitch(box));
+    // Clamped so the heading never describes weeks past the end of the ribbon.
+    const clamped = Math.min(Math.max(week, 0), TOTAL_WEEKS - WINDOW_WEEKS);
+    if (clamped !== topWeek) setTopWeek(clamped);
+  }
+
+  /**
+   * Opens on this week, not on the four weeks of history above it.
+   *
+   * Done as the node mounts rather than in an effect, because the page spends
+   * its first render on a loading skeleton with no ribbon in it — an effect
+   * with an empty dependency list would fire against nothing and never run
+   * again.
+   */
+  const placed = useRef(false);
+  const attachRibbon = useCallback((node: HTMLDivElement | null) => {
+    ribbon.current = node;
+    if (!node || placed.current) return;
+    placed.current = true;
+    node.scrollTop = (WEEKS_BEFORE * node.scrollHeight) / TOTAL_WEEKS;
+  }, []);
 
   /**
    * The heaviest single deck-day on the grid, which the tints are scaled to.
@@ -403,7 +480,6 @@ export default function CalendarPage() {
   const bandMax = useMemo(() => {
     let most = 0;
     for (const day of days) {
-      if (!day.inMonth) continue;
       for (const parent of byParent.get(day.key)?.values() ?? []) {
         most = Math.max(most, parent.count);
       }
@@ -460,12 +536,12 @@ export default function CalendarPage() {
       <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="bg-gradient-to-br from-[oklch(0.55_0.22_300)] via-[oklch(0.6_0.2_330)] to-[oklch(0.55_0.2_265)] bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl dark:from-[oklch(0.85_0.14_300)] dark:via-[oklch(0.82_0.13_330)] dark:to-[oklch(0.8_0.14_265)]">
-            {monthLabel}
+            {rangeLabel}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {monthTotal === 0
-              ? "Nothing due this month"
-              : `${monthTotal} card${monthTotal === 1 ? "" : "s"} due this month`}
+            {windowTotal === 0
+              ? "Nothing due in these weeks"
+              : `${windowTotal} card${windowTotal === 1 ? "" : "s"} due in these weeks`}
             {busiest && busiest.count > 0 && (
               <>
                 {" · heaviest is "}
@@ -484,24 +560,26 @@ export default function CalendarPage() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Previous month"
-            onClick={() => goToMonth((m) => m - 1)}
+            aria-label="Back a week"
+            title="Back a week"
+            onClick={() => scrollWeeks(-1)}
           >
             <ChevronLeft className="size-4" />
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => goToMonth(() => 0)}
-            disabled={monthOffset === 0}
+            onClick={() => scrollWeeks(WEEKS_BEFORE - topWeek)}
+            disabled={topWeek === WEEKS_BEFORE}
           >
             Today
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Next month"
-            onClick={() => goToMonth((m) => m + 1)}
+            aria-label="Forward a week"
+            title="Forward a week"
+            onClick={() => scrollWeeks(1)}
           >
             <ChevronRight className="size-4" />
           </Button>
@@ -532,12 +610,22 @@ export default function CalendarPage() {
             {day}
           </div>
         ))}
+      </div>
 
+      {/* The weeks are a real scrolling region, not a wheel handler pretending
+          to be one: the wheel, a trackpad, a scrollbar and the keyboard all
+          work without being taught to, and `overscroll-contain` stops a flick
+          that ends at the last week from carrying on into the page. */}
+      <div
+        ref={attachRibbon}
+        onScroll={onRibbonScroll}
+        className="grid max-h-[70vh] snap-y snap-proximity grid-cols-7 gap-1 overflow-y-auto overscroll-contain sm:gap-2"
+      >
         {days.map((day) => {
           const isSelected = day.key === selected?.key;
           // Days with nothing on them have no breakdown to open, so they stay
           // plain cells rather than buttons that would do nothing.
-          const clickable = day.inMonth && day.count > 0;
+          const clickable = day.count > 0;
           const title =
             day.count > 0
               ? `${day.date.toLocaleDateString()} — ${day.count} due${day.overdue > 0 ? `, including ${day.overdue} overdue` : ""}${clickable ? ". Click for the deck breakdown" : ""}`
@@ -551,18 +639,17 @@ export default function CalendarPage() {
               : "border-border/60";
           // The cell itself is plain now: the colour lives in the bands, where
           // it can say whose cards these are as well as how many.
-          const className = `relative flex aspect-square flex-col overflow-hidden rounded-lg border transition-colors ${outline} ${
-            day.inMonth
-              ? "bg-transparent"
-              : "border-transparent bg-transparent text-muted-foreground/40"
-          }`;
+          // `snap-start` on every cell lands the scroll on a whole week rather
+          // than halfway through one — the cells of a row share a top edge, so
+          // snapping them individually snaps the row.
+          const className = `relative flex aspect-square snap-start flex-col overflow-hidden rounded-lg border bg-transparent transition-colors ${outline}`;
 
           // Every deck on this month's grid gets a band, whether or not it has
           // cards today: the bands are how a deck is identified at a glance, so
           // they cannot move about from square to square. A deck with nothing
           // due reads 0 and is not clickable — there is no list behind it.
           const bands = clickable
-            ? monthParents.map((parent) => ({
+            ? gridParents.map((parent) => ({
                 ...parent,
                 count: byParent.get(day.key)?.get(parent.id)?.count ?? 0,
               }))
@@ -581,7 +668,7 @@ export default function CalendarPage() {
               className={`${className} ${dropping ? "outline-2 outline-offset-2 outline-amber-500" : ""}`}
               title={title}
               onDragOver={(e) => {
-                if (!day.inMonth || !isTodoDrag(e)) return;
+                if (!isTodoDrag(e)) return;
                 // Without this the browser refuses the drop entirely.
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
@@ -596,7 +683,6 @@ export default function CalendarPage() {
                 setDropDay((current) => (current === day.key ? null : current));
               }}
               onDrop={(e) => {
-                if (!day.inMonth) return;
                 const id = readTodoDrag(e);
                 setDropDay(null);
                 if (id === null) return;
@@ -609,7 +695,7 @@ export default function CalendarPage() {
                 selectDay(day.key);
               }}
             >
-              {day.inMonth && todoDays.has(day.key) && (
+              {todoDays.has(day.key) && (
                 // Above the bands, which are laid over the whole square on a
                 // day that has cards. Filled while anything is still open,
                 // hollow once the day's list is finished — a day that has been
@@ -624,9 +710,9 @@ export default function CalendarPage() {
                   className={`absolute top-1.5 right-1.5 z-20 size-1.5 rounded-full ${
                     todoDays.get(day.key)!.open > 0
                       ? "bg-amber-500"
-                      // Carries its own background so the ring reads against a
-                      // saturated band as well as an empty square.
-                      : "border border-emerald-500 bg-background"
+                      : // Carries its own background so the ring reads against a
+                        // saturated band as well as an empty square.
+                        "border border-emerald-500 bg-background"
                   }`}
                 />
               )}
@@ -642,10 +728,10 @@ export default function CalendarPage() {
                   }
                   className="absolute top-0.5 left-0.5 z-10 cursor-pointer rounded px-1 text-[0.65rem] opacity-70 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
                 >
-                  {day.date.getDate()}
+                  {dayNumber(day)}
                   <span className="sr-only"> — every deck</span>
                 </button>
-              ) : day.inMonth ? (
+              ) : (
                 // Openable even with nothing due: a free day is exactly the one
                 // worth putting "away until Thursday" on.
                 <button
@@ -656,13 +742,9 @@ export default function CalendarPage() {
                   className="absolute inset-0 cursor-pointer text-left focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none"
                 >
                   <span className="absolute top-1 left-1.5 text-[0.65rem] opacity-70">
-                    {day.date.getDate()}
+                    {dayNumber(day)}
                   </span>
                 </button>
-              ) : (
-                <span className="absolute top-1 left-1.5 text-[0.65rem] opacity-70">
-                  {day.date.getDate()}
-                </span>
               )}
 
               {/* The square is divided between the decks, one band each,
@@ -918,7 +1000,7 @@ export default function CalendarPage() {
       <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
         {/* The names are behind a hover now, so the key carries them: each
             deck's colour, and the scale that colour is read on. */}
-        {monthParents.map((parent) => (
+        {gridParents.map((parent) => (
           <div key={parent.id} className="flex items-center gap-2">
             <span className="font-medium text-foreground">{parent.title}</span>
             <span className="flex gap-0.5">
@@ -934,9 +1016,14 @@ export default function CalendarPage() {
             </span>
           </div>
         ))}
-        {bandMax > 0 && <span>Deeper is heavier, up to {bandMax} in a day</span>}
+        {bandMax > 0 && (
+          <span>Deeper is heavier, up to {bandMax} in a day</span>
+        )}
         {max > 0 && (
-          <span>Click a count for its sub-decks, or the date for the day</span>
+          <span>
+            Scroll the grid to move through the weeks · Click a count for its
+            sub-decks, or the date for the day
+          </span>
         )}
         {overdueTotal > 0 && (
           <span>
