@@ -89,6 +89,13 @@ export type DayTodo = {
   /** `YYYY-MM-DD`, in the writer's own calendar. Changed by moving it. */
   date: string;
   text: string;
+  /**
+   * Where it sits in its day's list, low first.
+   *
+   * Only meaningful against the other items of the same day, and only compared,
+   * never counted — a day's positions may have gaps after items are moved away.
+   */
+  position: number;
   done: boolean;
   /**
    * When it was ticked off, so a day can show what actually happened on it.
@@ -182,6 +189,7 @@ export type SerializedDbDoc = {
     date: string;
     text: string;
     /** Never present — declared so the two shapes read as one. */
+    position?: number;
     done?: boolean;
     doneAt?: string | null;
     createdAt: string;
@@ -195,7 +203,9 @@ export type SerializedDbDoc = {
    * which is what they were.
    */
   todos?: Array<
-    Omit<DayTodo, "done" | "doneAt" | "createdAt" | "updatedAt"> & {
+    Omit<DayTodo, "position" | "done" | "doneAt" | "createdAt" | "updatedAt"> & {
+      /** Absent before the list could be reordered; falls back to the id. */
+      position?: number;
       done?: boolean;
       doneAt?: string | null;
       createdAt: string;
@@ -310,6 +320,9 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
     // entries are exactly todos that were never able to be ticked off.
     todos: (raw.todos ?? raw.notes ?? []).map((t) => ({
       ...t,
+      // Ids rise with creation, so falling back to one keeps a list written
+      // before ordering existed in exactly the order it was written.
+      position: t.position ?? t.id,
       done: t.done ?? false,
       doneAt: t.doneAt ? toDate(t.doneAt) : null,
       createdAt: toDate(t.createdAt),

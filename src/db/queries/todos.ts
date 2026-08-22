@@ -9,18 +9,29 @@ import { allocateTodoId, getSnapshot, mutate } from "@/lib/store/local-store";
 import type { DayTodo, DbDoc } from "@/lib/store/types";
 
 /**
- * Open items first, each group oldest first.
+ * Open items first, each group in the order it has been put in.
  *
  * What is still to do is the reason the list is being looked at; what is done
  * settles underneath it as a record of the day rather than a demand on it.
+ * Within each group the order is the one the list was arranged into, which for
+ * a list nobody has rearranged is the order it was written in.
  */
 function inReadingOrder(todos: DayTodo[]): DayTodo[] {
   return [...todos].sort(
     (a, b) =>
-      Number(a.done) - Number(b.done) ||
-      a.createdAt.getTime() - b.createdAt.getTime() ||
-      a.id - b.id,
+      Number(a.done) - Number(b.done) || a.position - b.position || a.id - b.id,
   );
+}
+
+/** One past the end of a day's list, so a new arrival lands at the bottom. */
+function nextPosition(db: DbDoc, date: string, userId: string): number {
+  let max = -1;
+  for (const todo of db.todos) {
+    if (todo.userId === userId && todo.date === date && todo.position > max) {
+      max = todo.position;
+    }
+  }
+  return max + 1;
 }
 
 export function selectTodosByUser(db: DbDoc, userId: string): DayTodo[] {
@@ -68,6 +79,7 @@ export async function addTodo(date: string, userId: string, text: string) {
       userId,
       date,
       text: trimmed,
+      position: nextPosition(draft, date, userId),
       done: false,
       doneAt: null,
       createdAt: now,
@@ -115,6 +127,11 @@ export async function updateTodo(id: number, userId: string, patch: TodoPatch) {
       date: patch.date ?? current.date,
       updatedAt: new Date(),
     };
+    // Something arriving from another day joins the end of the list it lands
+    // in: its old position was only ever meaningful beside its old neighbours.
+    if (patch.date !== undefined && patch.date !== current.date) {
+      updated.position = nextPosition(draft, patch.date, userId);
+    }
     // Stamped only when it changes state, so re-editing the text of something
     // already done doesn't rewrite when it was finished.
     if (patch.done !== undefined && patch.done !== current.done) {
@@ -149,13 +166,70 @@ export async function moveOpenTodos(
 ): Promise<number> {
   const moved = await mutate((draft) => {
     const now = new Date();
+    const next = nextPosition(draft, to, userId);
     let count = 0;
+    // Sorted first so they keep their order relative to each other as they land
+    // at the end of the day they are carried to.
+    const carried = new Set(
+      inReadingOrder(
+        draft.todos.filter(
+          (t) => t.userId === userId && t.date === from && !t.done,
+        ),
+      ).map((t) => t.id),
+    );
+    const order = [...carried];
     draft.todos = draft.todos.map((t) => {
-      if (t.userId !== userId || t.date !== from || t.done) return t;
+      if (!carried.has(t.id)) return t;
       count += 1;
-      return { ...t, date: to, updatedAt: now };
+      return {
+        ...t,
+        date: to,
+        position: next + order.indexOf(t.id),
+        updatedAt: now,
+      };
     });
     return count;
   });
   return moved ?? 0;
+}
+
+/**
+ * Put a day's list in the given order.
+ *
+ * Takes the whole day rather than a pair to swap: the list is short, the write
+ * is one document mutation either way, and a full ordering can't leave two
+ * items claiming the same place. Ids that aren't on the day are ignored, and
+ * anything on the day that isn't named keeps its place at the end.
+ */
+export async function reorderTodos(
+  date: string,
+  userId: string,
+  orderedIds: number[],
+): Promise<number> {
+  const reordered = await mutate((draft) => {
+    const onDay = new Set(
+      draft.todos
+        .filter((t) => t.userId === userId && t.date === date)
+        .map((t) => t.id),
+    );
+    const named = orderedIds.filter((id) => onDay.has(id));
+    if (named.length === 0) return 0;
+
+    const now = new Date();
+    draft.todos = draft.todos.map((t) => {
+      const index = named.indexOf(t.id);
+      if (index === -1) return t;
+      return { ...t, position: index, updatedAt: now };
+    });
+    // Anything on the day the caller didn't name — added by another tab
+    // mid-drag — goes after the arrangement rather than fighting it for a slot.
+    let tail = named.length;
+    draft.todos = draft.todos.map((t) =>
+      onDay.has(t.id) && !named.includes(t.id)
+        ? { ...t, position: tail++ }
+        : t,
+    );
+    return named.length;
+  });
+  return reordered ?? 0;
 }

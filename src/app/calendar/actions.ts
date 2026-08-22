@@ -11,6 +11,7 @@ import {
   addTodo,
   deleteTodo,
   moveOpenTodos,
+  reorderTodos,
   updateTodo,
 } from "@/db/queries/todos";
 
@@ -27,6 +28,10 @@ const updateSchema = z.object({
 });
 const idSchema = z.object({ id: z.number().int().positive() });
 const moveDaySchema = z.object({ from: daySchema, to: daySchema });
+const reorderSchema = z.object({
+  date: daySchema,
+  ids: z.array(z.number().int().positive()).max(200),
+});
 
 export async function addDayTodoAction(data: z.infer<typeof addSchema>) {
   const { userId } = auth();
@@ -50,6 +55,17 @@ export async function deleteDayTodoAction(data: z.infer<typeof idSchema>) {
   if (!userId) throw new Error("Unauthorized");
 
   return deleteTodo(idSchema.parse(data).id, userId);
+}
+
+/** Puts one day's list in the given order. */
+export async function reorderDayTodosAction(
+  data: z.infer<typeof reorderSchema>,
+) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = reorderSchema.parse(data);
+  return reorderTodos(parsed.date, userId, parsed.ids);
 }
 
 /** Carries everything still open on one day over to another. */

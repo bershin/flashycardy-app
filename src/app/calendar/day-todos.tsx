@@ -4,8 +4,10 @@ import { useCallback, useRef, useState, useTransition } from "react";
 import {
   CalendarArrowUp,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   GripVertical,
   ListTodo,
   Plus,
@@ -18,11 +20,12 @@ import { selectTodosForDay } from "@/db/queries/todos";
 import type { DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { startTodoDrag } from "./todo-drag";
+import { isTodoDrag, readTodoDrag, startTodoDrag } from "./todo-drag";
 import {
   addDayTodoAction,
   deleteDayTodoAction,
   moveOpenTodosAction,
+  reorderDayTodosAction,
   updateDayTodoAction,
 } from "./actions";
 
@@ -66,6 +69,10 @@ export function DayTodos({ date }: DayTodosProps) {
   /** Which item is showing its date picker, if any. */
   const [movingId, setMovingId] = useState<number | null>(null);
   const [moveTo, setMoveTo] = useState(date);
+  /** The row a dragged item is over, and which side of it, for the insert line. */
+  const [dropOn, setDropOn] = useState<{ id: number; below: boolean } | null>(
+    null,
+  );
   /** Set when the whole day's open items are being carried somewhere. */
   const [carrying, setCarrying] = useState(false);
   const [carryTo, setCarryTo] = useState(() => shiftDay(date, 1));
@@ -91,6 +98,37 @@ export function DayTodos({ date }: DayTodosProps) {
     });
   }
 
+  /**
+   * Put `id` where `target` is, above or below it.
+   *
+   * The whole day's order is sent rather than the pair that changed: the list
+   * on screen is already the order the day is in, so rebuilding it here is
+   * exactly what the day should end up as.
+   */
+  function reorder(id: number, target: number, below: boolean) {
+    setDropOn(null);
+    if (id === target) return;
+    const ids = todos.map((t) => t.id).filter((other) => other !== id);
+    const at = ids.indexOf(target);
+    if (at === -1) return;
+    ids.splice(below ? at + 1 : at, 0, id);
+    startWriting(async () => {
+      await reorderDayTodosAction({ date, ids });
+    });
+  }
+
+  /** Steps an item one place up or down its own list. */
+  function nudge(id: number, delta: number) {
+    const ids = todos.map((t) => t.id);
+    const from = ids.indexOf(id);
+    const to = from + delta;
+    if (from === -1 || to < 0 || to >= ids.length) return;
+    ids.splice(to, 0, ...ids.splice(from, 1));
+    startWriting(async () => {
+      await reorderDayTodosAction({ date, ids });
+    });
+  }
+
   return (
     <div className="mt-4 border-t border-border/60 pt-3">
       <div className="flex items-center gap-2">
@@ -108,15 +146,54 @@ export function DayTodos({ date }: DayTodosProps) {
       </div>
 
       <ul className="mt-2 grid gap-0.5">
-        {todos.map((todo) => (
+        {todos.map((todo, index) => (
           <li
             key={todo.id}
-            // Dropped on a square in the grid above, which is the fastest way
-            // to say "not today, Thursday". The buttons on the row do the same
-            // job for touch and for the keyboard.
+            // One drag, two meanings, decided by where it is let go: a square in
+            // the grid above moves the item to that day, another row moves it to
+            // that place in this day. The buttons do both jobs for touch and for
+            // the keyboard.
             draggable={!pending}
             onDragStart={(e) => startTodoDrag(e, todo.id)}
-            className="group flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-muted/60"
+            onDragEnd={() => setDropOn(null)}
+            onDragOver={(e) => {
+              if (!isTodoDrag(e)) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              // Which half of the row the pointer is in decides whether the
+              // item lands above or below it.
+              const box = e.currentTarget.getBoundingClientRect();
+              const below = e.clientY > box.top + box.height / 2;
+              if (dropOn?.id !== todo.id || dropOn.below !== below) {
+                setDropOn({ id: todo.id, below });
+              }
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                return;
+              }
+              setDropOn((current) =>
+                current?.id === todo.id ? null : current,
+              );
+            }}
+            onDrop={(e) => {
+              const dragged = readTodoDrag(e);
+              const below = dropOn?.id === todo.id ? dropOn.below : false;
+              setDropOn(null);
+              if (dragged === null) return;
+              e.preventDefault();
+              // Stops the square underneath from also claiming it as a move to
+              // another day.
+              e.stopPropagation();
+              reorder(dragged, todo.id, below);
+            }}
+            className={`group flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-muted/60 ${
+              dropOn?.id === todo.id
+                ? dropOn.below
+                  ? "border-b-2 border-amber-500"
+                  : "border-t-2 border-amber-500"
+                : "border-y-2 border-transparent"
+            }`}
           >
             <GripVertical
               aria-hidden
@@ -184,6 +261,36 @@ export function DayTodos({ date }: DayTodosProps) {
               // Hidden until the row is pointed at, but always reachable by
               // keyboard — focus-within keeps them visible while tabbing.
               <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                {todos.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={pending || index === 0}
+                      title="Move up the list"
+                      aria-label={`Move "${todo.text}" up the list`}
+                      onClick={() => nudge(todo.id, -1)}
+                      className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-default disabled:opacity-30"
+                    >
+                      <ChevronUp className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending || index === todos.length - 1}
+                      title="Move down the list"
+                      aria-label={`Move "${todo.text}" down the list`}
+                      onClick={() => nudge(todo.id, 1)}
+                      className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-default disabled:opacity-30"
+                    >
+                      <ChevronDown className="size-3.5" />
+                    </button>
+                    {/* The two jobs look alike at a glance — up and down are
+                        this list, left and right are the calendar. */}
+                    <span
+                      aria-hidden
+                      className="mx-0.5 h-3.5 w-px bg-border"
+                    />
+                  </>
+                )}
                 <button
                   type="button"
                   disabled={pending}
@@ -265,7 +372,8 @@ export function DayTodos({ date }: DayTodosProps) {
 
       {todos.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground/80">
-          Drag an item onto a day above to move it there.
+          Drag an item onto another to reorder it, or onto a day above to move
+          it there.
         </p>
       )}
 
