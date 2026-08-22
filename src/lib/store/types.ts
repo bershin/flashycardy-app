@@ -105,6 +105,14 @@ export type DayTodo = {
   remindAt: string | null;
   /** Marked as mattering more than the rest of its day. */
   important: boolean;
+  /**
+   * The longer version: what it actually involves, a link, a room number.
+   *
+   * Empty rather than null for "none" — a textarea produces an empty string
+   * when cleared, and a third state between empty and absent would only ever
+   * have to be collapsed back to two.
+   */
+  note: string;
   done: boolean;
   /**
    * When it was ticked off, so a day can show what actually happened on it.
@@ -201,6 +209,7 @@ export type SerializedDbDoc = {
     position?: number;
     remindAt?: string | null;
     important?: boolean;
+    note?: string;
     done?: boolean;
     doneAt?: string | null;
     createdAt: string;
@@ -219,6 +228,7 @@ export type SerializedDbDoc = {
       | "position"
       | "remindAt"
       | "important"
+      | "note"
       | "done"
       | "doneAt"
       | "createdAt"
@@ -230,6 +240,8 @@ export type SerializedDbDoc = {
       remindAt?: string | null;
       /** Absent before items could be starred; reads as ordinary. */
       important?: boolean;
+      /** Absent before items could carry a note; reads as none. */
+      note?: string;
       done?: boolean;
       doneAt?: string | null;
       createdAt: string;
@@ -349,6 +361,7 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       position: t.position ?? t.id,
       remindAt: t.remindAt ?? null,
       important: t.important ?? false,
+      note: t.note ?? "",
       done: t.done ?? false,
       doneAt: t.doneAt ? toDate(t.doneAt) : null,
       createdAt: toDate(t.createdAt),

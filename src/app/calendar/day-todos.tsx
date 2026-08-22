@@ -12,6 +12,7 @@ import {
   Copy,
   GripVertical,
   ListTodo,
+  NotebookPen,
   Plus,
   Star,
   Trash2,
@@ -78,6 +79,24 @@ export function DayTodos({ date, label }: DayTodosProps) {
   const [moveTo, setMoveTo] = useState(date);
   /** Which item is having a time set, if any. */
   const [timingId, setTimingId] = useState<number | null>(null);
+  /** Which item's note is open, and what it currently says. */
+  const [notingId, setNotingId] = useState<number | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+
+  function openNote(id: number, note: string) {
+    setNotingId(id);
+    setNoteDraft(note);
+  }
+
+  function commitNote(id: number, original: string) {
+    const note = noteDraft.trim();
+    setNotingId(null);
+    if (note === original) return;
+    startWriting(async () => {
+      await updateDayTodoAction({ id, note });
+    });
+  }
+
   /** Which item's words are being changed, and what they currently say. */
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
@@ -223,7 +242,7 @@ export function DayTodos({ date, label }: DayTodosProps) {
               e.stopPropagation();
               reorder(dragged, todo.id, below);
             }}
-            className={`group flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-muted/60 ${
+            className={`group rounded-md px-1.5 py-1 hover:bg-muted/60 ${
               dropOn?.id === todo.id
                 ? dropOn.below
                   ? "border-b-2 border-amber-500"
@@ -231,284 +250,329 @@ export function DayTodos({ date, label }: DayTodosProps) {
                 : "border-y-2 border-transparent"
             }`}
           >
-            <GripVertical
-              aria-hidden
-              className="-ml-1 size-3.5 shrink-0 cursor-grab text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
-            />
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={todo.done}
-              aria-label={todo.done ? "Mark as not done" : "Mark as done"}
-              disabled={pending}
-              onClick={() =>
-                startWriting(async () => {
-                  await updateDayTodoAction({ id: todo.id, done: !todo.done });
-                })
-              }
-              className={`flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors ${
-                todo.done
-                  ? "border-emerald-500 bg-emerald-500 text-white"
-                  : "border-input hover:border-emerald-500"
-              }`}
-            >
-              {todo.done && <Check className="size-3" />}
-            </button>
-
-            {todo.important && (
-              <Star
-                aria-label="Important"
-                className={`size-3.5 shrink-0 fill-current ${
-                  todo.done ? "text-muted-foreground" : "text-amber-500"
-                }`}
+            <div className="flex items-center gap-2">
+              <GripVertical
+                aria-hidden
+                className="-ml-1 size-3.5 shrink-0 cursor-grab text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
               />
-            )}
-
-            {editingId === todo.id ? (
-              <Input
-                value={editText}
-                autoFocus
-                maxLength={500}
-                onChange={(e) => setEditText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    commitEdit(todo.id, todo.text);
-                  }
-                  if (e.key === "Escape") setEditingId(null);
-                }}
-                onBlur={() => commitEdit(todo.id, todo.text)}
-                className="h-7 min-w-0 flex-1 px-2 py-0 text-sm"
-              />
-            ) : (
               <button
                 type="button"
-                // The words are the control: a copy exists to be changed into
-                // something else, and hunting for a pencil to do it would be
-                // the long way round.
-                title="Click to edit"
-                onClick={() => startEditing(todo.id, todo.text)}
-                className={`min-w-0 flex-1 cursor-text truncate text-left text-sm ${
-                  todo.done
-                    ? "text-muted-foreground line-through"
-                    : todo.important
-                      ? "font-medium"
-                      : ""
-                }`}
-              >
-                {todo.text}
-              </button>
-            )}
-
-            {todo.remindAt !== null && timingId !== todo.id && (
-              <button
-                type="button"
+                role="checkbox"
+                aria-checked={todo.done}
+                aria-label={todo.done ? "Mark as not done" : "Mark as done"}
                 disabled={pending}
-                title="Change or clear this time"
-                onClick={() => setTimingId(todo.id)}
-                className={`flex shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${
+                onClick={() =>
+                  startWriting(async () => {
+                    await updateDayTodoAction({
+                      id: todo.id,
+                      done: !todo.done,
+                    });
+                  })
+                }
+                className={`flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors ${
                   todo.done
-                    ? "text-muted-foreground"
-                    : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                    ? "border-emerald-500 bg-emerald-500 text-white"
+                    : "border-input hover:border-emerald-500"
                 }`}
               >
-                <Clock className="size-3" />
-                {todo.remindAt}
+                {todo.done && <Check className="size-3" />}
               </button>
-            )}
 
-            {timingId === todo.id && (
-              // The time is committed as it is picked rather than behind a
-              // save: there is nothing else on the row to get out of step
-              // with it.
-              <span className="flex shrink-0 items-center gap-1">
+              {todo.important && (
+                <Star
+                  aria-label="Important"
+                  className={`size-3.5 shrink-0 fill-current ${
+                    todo.done ? "text-muted-foreground" : "text-amber-500"
+                  }`}
+                />
+              )}
+
+              {editingId === todo.id ? (
                 <Input
-                  type="time"
+                  value={editText}
                   autoFocus
-                  value={todo.remindAt ?? ""}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    startWriting(async () => {
-                      await updateDayTodoAction({
-                        id: todo.id,
-                        remindAt: value === "" ? null : value,
-                      });
-                    });
+                  maxLength={500}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitEdit(todo.id, todo.text);
+                    }
+                    if (e.key === "Escape") setEditingId(null);
                   }}
-                  className="h-7 w-[7.5rem] px-2 py-0 text-xs"
+                  onBlur={() => commitEdit(todo.id, todo.text)}
+                  className="h-7 min-w-0 flex-1 px-2 py-0 text-sm"
                 />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-1.5"
-                  onClick={() => setTimingId(null)}
-                >
-                  <X className="size-3.5" />
-                  <span className="sr-only">Done setting the time</span>
-                </Button>
-              </span>
-            )}
-
-            {movingId === todo.id ? (
-              // The picker replaces the row's controls rather than sitting
-              // beside them: it is the only thing being decided.
-              <span className="flex shrink-0 items-center gap-1">
-                <Input
-                  type="date"
-                  value={moveTo}
-                  autoFocus
-                  onChange={(e) => setMoveTo(e.target.value)}
-                  className="h-7 w-[9.5rem] px-2 py-0 text-xs"
-                />
-                <Button
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  disabled={pending || moveTo === date}
-                  onClick={() => move(todo.id, moveTo)}
-                >
-                  Move
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-1.5"
-                  onClick={() => setMovingId(null)}
-                >
-                  <X className="size-3.5" />
-                  <span className="sr-only">Cancel the move</span>
-                </Button>
-              </span>
-            ) : (
-              // Hidden until the row is pointed at, but always reachable by
-              // keyboard — focus-within keeps them visible while tabbing.
-              <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-                {todos.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      disabled={pending || index === 0}
-                      title="Move up the list"
-                      aria-label={`Move "${todo.text}" up the list`}
-                      onClick={() => nudge(todo.id, -1)}
-                      className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-default disabled:opacity-30"
-                    >
-                      <ChevronUp className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pending || index === todos.length - 1}
-                      title="Move down the list"
-                      aria-label={`Move "${todo.text}" down the list`}
-                      onClick={() => nudge(todo.id, 1)}
-                      className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-default disabled:opacity-30"
-                    >
-                      <ChevronDown className="size-3.5" />
-                    </button>
-                  </>
-                )}
+              ) : (
                 <button
                   type="button"
-                  disabled={pending}
-                  title={todo.important ? "No longer important" : "Important"}
-                  aria-pressed={todo.important}
-                  aria-label={`Mark "${todo.text}" as important`}
-                  onClick={() =>
-                    startWriting(async () => {
-                      await updateDayTodoAction({
-                        id: todo.id,
-                        important: !todo.important,
-                      });
-                    })
-                  }
-                  className={`cursor-pointer rounded p-0.5 hover:bg-background ${
-                    todo.important
-                      ? "text-amber-500"
-                      : "text-muted-foreground hover:text-amber-500"
+                  // The words are the control: a copy exists to be changed into
+                  // something else, and hunting for a pencil to do it would be
+                  // the long way round.
+                  title="Click to edit"
+                  onClick={() => startEditing(todo.id, todo.text)}
+                  className={`min-w-0 flex-1 cursor-text truncate text-left text-sm ${
+                    todo.done
+                      ? "text-muted-foreground line-through"
+                      : todo.important
+                        ? "font-medium"
+                        : ""
                   }`}
                 >
-                  <Star
-                    className={`size-3.5 ${todo.important ? "fill-current" : ""}`}
+                  {todo.text}
+                </button>
+              )}
+
+              {todo.remindAt !== null && timingId !== todo.id && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  title="Change or clear this time"
+                  onClick={() => setTimingId(todo.id)}
+                  className={`flex shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${
+                    todo.done
+                      ? "text-muted-foreground"
+                      : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                  }`}
+                >
+                  <Clock className="size-3" />
+                  {todo.remindAt}
+                </button>
+              )}
+
+              {timingId === todo.id && (
+                // The time is committed as it is picked rather than behind a
+                // save: there is nothing else on the row to get out of step
+                // with it.
+                <span className="flex shrink-0 items-center gap-1">
+                  <Input
+                    type="time"
+                    autoFocus
+                    value={todo.remindAt ?? ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      startWriting(async () => {
+                        await updateDayTodoAction({
+                          id: todo.id,
+                          remindAt: value === "" ? null : value,
+                        });
+                      });
+                    }}
+                    className="h-7 w-[7.5rem] px-2 py-0 text-xs"
                   />
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  title="Make a copy below"
-                  aria-label={`Make a copy of "${todo.text}"`}
-                  onClick={() =>
-                    startWriting(async () => {
-                      await duplicateDayTodoAction({ id: todo.id });
-                    })
-                  }
-                  className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                >
-                  <Copy className="size-3.5" />
-                </button>
-                {/* The two jobs look alike at a glance — everything left of
-                    this line is the item and its place in the list, everything
-                    right of it is the calendar. */}
-                <span aria-hidden className="mx-0.5 h-3.5 w-px bg-border" />
-                <button
-                  type="button"
-                  disabled={pending}
-                  title={`Move to ${dayLabel(shiftDay(todo.date, -1))}`}
-                  aria-label={`Move to ${dayLabel(shiftDay(todo.date, -1))}`}
-                  onClick={() => move(todo.id, shiftDay(todo.date, -1))}
-                  className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                >
-                  <ChevronLeft className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  title={`Move to ${dayLabel(shiftDay(todo.date, 1))}`}
-                  aria-label={`Move to ${dayLabel(shiftDay(todo.date, 1))}`}
-                  onClick={() => move(todo.id, shiftDay(todo.date, 1))}
-                  className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                >
-                  <ChevronRight className="size-3.5" />
-                </button>
-                {todo.remindAt === null && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-1.5"
+                    onClick={() => setTimingId(null)}
+                  >
+                    <X className="size-3.5" />
+                    <span className="sr-only">Done setting the time</span>
+                  </Button>
+                </span>
+              )}
+
+              {movingId === todo.id ? (
+                // The picker replaces the row's controls rather than sitting
+                // beside them: it is the only thing being decided.
+                <span className="flex shrink-0 items-center gap-1">
+                  <Input
+                    type="date"
+                    value={moveTo}
+                    autoFocus
+                    onChange={(e) => setMoveTo(e.target.value)}
+                    className="h-7 w-[9.5rem] px-2 py-0 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={pending || moveTo === date}
+                    onClick={() => move(todo.id, moveTo)}
+                  >
+                    Move
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-1.5"
+                    onClick={() => setMovingId(null)}
+                  >
+                    <X className="size-3.5" />
+                    <span className="sr-only">Cancel the move</span>
+                  </Button>
+                </span>
+              ) : (
+                // Hidden until the row is pointed at, but always reachable by
+                // keyboard — focus-within keeps them visible while tabbing.
+                <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                  {todos.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={pending || index === 0}
+                        title="Move up the list"
+                        aria-label={`Move "${todo.text}" up the list`}
+                        onClick={() => nudge(todo.id, -1)}
+                        className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-default disabled:opacity-30"
+                      >
+                        <ChevronUp className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending || index === todos.length - 1}
+                        title="Move down the list"
+                        aria-label={`Move "${todo.text}" down the list`}
+                        onClick={() => nudge(todo.id, 1)}
+                        className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-default disabled:opacity-30"
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     disabled={pending}
-                    title="Remind me at a time…"
-                    aria-label={`Set a time for "${todo.text}"`}
-                    onClick={() => setTimingId(todo.id)}
+                    title={todo.important ? "No longer important" : "Important"}
+                    aria-pressed={todo.important}
+                    aria-label={`Mark "${todo.text}" as important`}
+                    onClick={() =>
+                      startWriting(async () => {
+                        await updateDayTodoAction({
+                          id: todo.id,
+                          important: !todo.important,
+                        });
+                      })
+                    }
+                    className={`cursor-pointer rounded p-0.5 hover:bg-background ${
+                      todo.important
+                        ? "text-amber-500"
+                        : "text-muted-foreground hover:text-amber-500"
+                    }`}
+                  >
+                    <Star
+                      className={`size-3.5 ${todo.important ? "fill-current" : ""}`}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    title={todo.note ? "Edit the note" : "Add a note"}
+                    aria-label={`${todo.note ? "Edit" : "Add"} a note on "${todo.text}"`}
+                    onClick={() => openNote(todo.id, todo.note)}
+                    className={`cursor-pointer rounded p-0.5 hover:bg-background hover:text-foreground ${
+                      todo.note ? "text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    <NotebookPen className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    title="Make a copy below"
+                    aria-label={`Make a copy of "${todo.text}"`}
+                    onClick={() =>
+                      startWriting(async () => {
+                        await duplicateDayTodoAction({ id: todo.id });
+                      })
+                    }
                     className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
                   >
-                    <Clock className="size-3.5" />
+                    <Copy className="size-3.5" />
                   </button>
-                )}
-                <button
-                  type="button"
-                  disabled={pending}
-                  title="Move to a day…"
-                  aria-label="Move to a particular day"
-                  onClick={() => {
-                    setMoveTo(todo.date);
-                    setMovingId(todo.id);
+                  {/* The two jobs look alike at a glance — everything left of
+                    this line is the item and its place in the list, everything
+                    right of it is the calendar. */}
+                  <span aria-hidden className="mx-0.5 h-3.5 w-px bg-border" />
+                  <button
+                    type="button"
+                    disabled={pending}
+                    title={`Move to ${dayLabel(shiftDay(todo.date, -1))}`}
+                    aria-label={`Move to ${dayLabel(shiftDay(todo.date, -1))}`}
+                    onClick={() => move(todo.id, shiftDay(todo.date, -1))}
+                    className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    title={`Move to ${dayLabel(shiftDay(todo.date, 1))}`}
+                    aria-label={`Move to ${dayLabel(shiftDay(todo.date, 1))}`}
+                    onClick={() => move(todo.id, shiftDay(todo.date, 1))}
+                    className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                  >
+                    <ChevronRight className="size-3.5" />
+                  </button>
+                  {todo.remindAt === null && (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      title="Remind me at a time…"
+                      aria-label={`Set a time for "${todo.text}"`}
+                      onClick={() => setTimingId(todo.id)}
+                      className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                    >
+                      <Clock className="size-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={pending}
+                    title="Move to a day…"
+                    aria-label="Move to a particular day"
+                    onClick={() => {
+                      setMoveTo(todo.date);
+                      setMovingId(todo.id);
+                    }}
+                    className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                  >
+                    <CalendarArrowUp className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    title="Delete"
+                    aria-label={`Delete "${todo.text}"`}
+                    onClick={() =>
+                      startWriting(async () => {
+                        await deleteDayTodoAction({ id: todo.id });
+                      })
+                    }
+                    className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-red-600"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            {(notingId === todo.id || todo.note) &&
+              (notingId === todo.id ? (
+                <textarea
+                  value={noteDraft}
+                  autoFocus
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="What it involves, a link, a room number…"
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Enter makes a new line here — a note is prose, not a
+                    // label — so leaving is how it is kept.
+                    if (e.key === "Escape") setNotingId(null);
                   }}
-                  className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                >
-                  <CalendarArrowUp className="size-3.5" />
-                </button>
+                  onBlur={() => commitNote(todo.id, todo.note)}
+                  className="mt-1 ml-[3.4rem] block w-[calc(100%-3.9rem)] resize-y rounded-md border border-border bg-background px-2 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
+                />
+              ) : (
                 <button
                   type="button"
-                  disabled={pending}
-                  title="Delete"
-                  aria-label={`Delete "${todo.text}"`}
-                  onClick={() =>
-                    startWriting(async () => {
-                      await deleteDayTodoAction({ id: todo.id });
-                    })
-                  }
-                  className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-red-600"
+                  title="Click to edit this note"
+                  onClick={() => openNote(todo.id, todo.note)}
+                  className="mt-0.5 ml-[3.4rem] block w-[calc(100%-3.9rem)] cursor-text text-left text-xs whitespace-pre-line text-muted-foreground"
                 >
-                  <Trash2 className="size-3.5" />
+                  {todo.note}
                 </button>
-              </span>
-            )}
+              ))}
           </li>
         ))}
       </ul>
@@ -541,8 +605,8 @@ export function DayTodos({ date, label }: DayTodosProps) {
 
       {todos.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground/80">
-          Click an item to edit it. Drag one onto another to reorder it, or
-          onto a day above to move it there.
+          Click an item to edit it. Drag one onto another to reorder it, or onto
+          a day above to move it there.
         </p>
       )}
 

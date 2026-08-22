@@ -30,6 +30,8 @@ const updateSchema = z.object({
   date: daySchema.optional(),
   remindAt: timeSchema.nullable().optional(),
   important: z.boolean().optional(),
+  /** Roomier than the one-line text, which is a label rather than a record. */
+  note: z.string().max(2000).optional(),
 });
 const idSchema = z.object({ id: z.number().int().positive() });
 const moveDaySchema = z.object({ from: daySchema, to: daySchema });

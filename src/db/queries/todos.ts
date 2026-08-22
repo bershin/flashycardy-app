@@ -82,6 +82,7 @@ export async function addTodo(date: string, userId: string, text: string) {
       position: nextPosition(draft, date, userId),
       remindAt: null,
       important: false,
+      note: "",
       done: false,
       doneAt: null,
       createdAt: now,
@@ -100,6 +101,8 @@ type TodoPatch = {
   /** `HH:MM`, or null to take the time off. */
   remindAt?: string | null;
   important?: boolean;
+  /** The longer version; an empty string takes it off. */
+  note?: string;
 };
 
 /**
@@ -134,6 +137,7 @@ export async function updateTodo(id: number, userId: string, patch: TodoPatch) {
       remindAt:
         patch.remindAt === undefined ? current.remindAt : patch.remindAt,
       important: patch.important ?? current.important,
+      note: patch.note === undefined ? current.note : patch.note.trim(),
       updatedAt: new Date(),
     };
     // Something arriving from another day joins the end of the list it lands
