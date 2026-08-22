@@ -12,6 +12,7 @@ import {
   CalendarArrowUp,
   ChevronLeft,
   ChevronRight,
+  Plus,
   Undo2,
   X,
 } from "lucide-react";
@@ -176,6 +177,8 @@ export default function CalendarPage() {
   );
   /** The square a dragged item is currently over, if any. */
   const [dropDay, setDropDay] = useState<string | null>(null);
+  /** Bumped whenever a square asks for the cursor in the add field. */
+  const [addSignal, setAddSignal] = useState(0);
   /** The topmost week in view, as an index into the rendered range. */
   const [topWeek, setTopWeek] = useState(WEEKS_BEFORE);
   const ribbon = useRef<HTMLDivElement | null>(null);
@@ -598,6 +601,7 @@ export default function CalendarPage() {
           // square switches it, and a list with no date on it would look like
           // today's however far into the month you had clicked.
           label={todoDay === todayKey ? "Today" : keyLabel(todoDay)}
+          focusSignal={addSignal}
         />
       </div>
 
@@ -642,7 +646,7 @@ export default function CalendarPage() {
           // `snap-start` on every cell lands the scroll on a whole week rather
           // than halfway through one — the cells of a row share a top edge, so
           // snapping them individually snaps the row.
-          const className = `relative flex aspect-square snap-start flex-col overflow-hidden rounded-lg border bg-transparent transition-colors ${outline}`;
+          const className = `group/day relative flex aspect-square snap-start flex-col overflow-hidden rounded-lg border bg-transparent transition-colors ${outline}`;
 
           // Every deck on this month's grid gets a band, whether or not it has
           // cards today: the bands are how a deck is identified at a glance, so
@@ -695,6 +699,23 @@ export default function CalendarPage() {
                 selectDay(day.key);
               }}
             >
+              {/* Adding straight from the square: it picks the day and puts
+                  the cursor in the list above in one go, rather than leaving
+                  you to find the field yourself. Shown on hover, and on
+                  keyboard focus, so it costs the cell nothing at rest. */}
+              <button
+                type="button"
+                title={`Add something to do on ${day.date.toLocaleDateString()}`}
+                aria-label={`Add something to do on ${day.date.toLocaleDateString()}`}
+                onClick={() => {
+                  selectDay(day.key);
+                  setAddSignal((n) => n + 1);
+                }}
+                className="absolute right-1 bottom-1 z-20 flex size-5 cursor-pointer items-center justify-center rounded-md bg-background/90 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none group-hover/day:opacity-100"
+              >
+                <Plus className="size-3.5" />
+              </button>
+
               {todoDays.has(day.key) && (
                 // Above the bands, which are laid over the whole square on a
                 // day that has cards. Filled while anything is still open,

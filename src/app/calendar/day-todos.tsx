@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   CalendarArrowUp,
   Check,
@@ -56,6 +62,14 @@ interface DayTodosProps {
   date: string;
   /** Names the day beside the heading, for when it isn't obvious which one. */
   label?: string;
+  /**
+   * Bumped by whoever wants the cursor put in the add field.
+   *
+   * A number rather than a boolean because the same day can be asked for
+   * twice: a second `true` is indistinguishable from the first, but a second
+   * number is not.
+   */
+  focusSignal?: number;
 }
 
 /**
@@ -65,7 +79,7 @@ interface DayTodosProps {
  * deleted: most of what doesn't happen on a Tuesday still needs doing, and a
  * list that can only be finished or abandoned gets abandoned.
  */
-export function DayTodos({ date, label }: DayTodosProps) {
+export function DayTodos({ date, label, focusSignal = 0 }: DayTodosProps) {
   const todos = useStore(
     useCallback(
       (db: DbDoc) => selectTodosForDay(db, date, LOCAL_USER_ID),
@@ -129,6 +143,15 @@ export function DayTodos({ date, label }: DayTodosProps) {
   const [carrying, setCarrying] = useState(false);
   const [carryTo, setCarryTo] = useState(() => shiftDay(date, 1));
   const addRef = useRef<HTMLInputElement>(null);
+
+  // Brought into view as well as focused: the list sits above the grid, so a
+  // day picked from a square near the bottom would otherwise put the cursor
+  // somewhere off the top of the screen.
+  useEffect(() => {
+    if (focusSignal === 0) return;
+    addRef.current?.focus();
+    addRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusSignal]);
 
   const open = todos.filter((t) => !t.done).length;
 
