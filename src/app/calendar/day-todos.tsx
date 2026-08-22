@@ -78,6 +78,30 @@ export function DayTodos({ date, label }: DayTodosProps) {
   const [moveTo, setMoveTo] = useState(date);
   /** Which item is having a time set, if any. */
   const [timingId, setTimingId] = useState<number | null>(null);
+  /** Which item's words are being changed, and what they currently say. */
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+
+  function startEditing(id: number, text: string) {
+    setEditingId(id);
+    setEditText(text);
+  }
+
+  /**
+   * Keeps the new wording, unless there is none.
+   *
+   * An emptied box cancels rather than deletes: the row has a delete button of
+   * its own, and losing an item to a stray select-all would be a poor way to
+   * find that out.
+   */
+  function commitEdit(id: number, original: string) {
+    const text = editText.trim();
+    setEditingId(null);
+    if (!text || text === original) return;
+    startWriting(async () => {
+      await updateDayTodoAction({ id, text });
+    });
+  }
   /** The row a dragged item is over, and which side of it, for the insert line. */
   const [dropOn, setDropOn] = useState<{ id: number; below: boolean } | null>(
     null,
@@ -165,7 +189,7 @@ export function DayTodos({ date, label }: DayTodosProps) {
             // the grid above moves the item to that day, another row moves it to
             // that place in this day. The buttons do both jobs for touch and for
             // the keyboard.
-            draggable={!pending}
+            draggable={!pending && editingId !== todo.id}
             onDragStart={(e) => startTodoDrag(e, todo.id)}
             onDragEnd={() => setDropOn(null)}
             onDragOver={(e) => {
@@ -240,18 +264,41 @@ export function DayTodos({ date, label }: DayTodosProps) {
               />
             )}
 
-            <span
-              className={`min-w-0 flex-1 truncate text-sm ${
-                todo.done
-                  ? "text-muted-foreground line-through"
-                  : todo.important
-                    ? "font-medium"
-                    : ""
-              }`}
-              title={todo.text}
-            >
-              {todo.text}
-            </span>
+            {editingId === todo.id ? (
+              <Input
+                value={editText}
+                autoFocus
+                maxLength={500}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitEdit(todo.id, todo.text);
+                  }
+                  if (e.key === "Escape") setEditingId(null);
+                }}
+                onBlur={() => commitEdit(todo.id, todo.text)}
+                className="h-7 min-w-0 flex-1 px-2 py-0 text-sm"
+              />
+            ) : (
+              <button
+                type="button"
+                // The words are the control: a copy exists to be changed into
+                // something else, and hunting for a pencil to do it would be
+                // the long way round.
+                title="Click to edit"
+                onClick={() => startEditing(todo.id, todo.text)}
+                className={`min-w-0 flex-1 cursor-text truncate text-left text-sm ${
+                  todo.done
+                    ? "text-muted-foreground line-through"
+                    : todo.important
+                      ? "font-medium"
+                      : ""
+                }`}
+              >
+                {todo.text}
+              </button>
+            )}
 
             {todo.remindAt !== null && timingId !== todo.id && (
               <button
@@ -494,8 +541,8 @@ export function DayTodos({ date, label }: DayTodosProps) {
 
       {todos.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground/80">
-          Drag an item onto another to reorder it, or onto a day above to move
-          it there.
+          Click an item to edit it. Drag one onto another to reorder it, or
+          onto a day above to move it there.
         </p>
       )}
 
