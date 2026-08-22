@@ -9,9 +9,10 @@
  * app is served from /<repo>/, and hardcoding "/" would break every path.
  */
 
-// Bumped to v2 to drop entries written by the previous worker: it stored
-// redirected responses, which cannot be replayed into a navigation.
-const CACHE = "flashycardy-v2";
+// Bumped to v3 to drop entries written by the previous worker: it served Next's
+// route payloads from cache, so a cache filled before a deploy kept naming
+// chunks that the deploy had deleted.
+const CACHE = "flashycardy-v3";
 const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, "");
 
 self.addEventListener("install", () => {
@@ -38,6 +39,25 @@ self.addEventListener("activate", (event) => {
 const IS_DEV =
   self.location.hostname === "localhost" ||
   self.location.hostname === "127.0.0.1";
+
+/**
+ * Whether a URL's contents can never change under its own name.
+ *
+ * Everything under `_next/static` is content-hashed by the build: a different
+ * file gets a different name, so a cached copy is correct forever and can be
+ * served without asking.
+ *
+ * Nothing else qualifies — and in particular Next's route payloads must not be
+ * mistaken for assets. They sit at stable paths like `/deck/index.txt` and
+ * `/deck/__next.deck.txt` but are rewritten by every build, and they are what
+ * names the chunks to load. Served from cache after a deploy, they asked for
+ * chunk files the deploy had deleted; the router could not load the route, fell
+ * back to a full navigation, and the window showed "this page couldn't load"
+ * instead of the app.
+ */
+function isImmutable(url) {
+  return url.pathname.startsWith(`${BASE_PATH}/_next/static/`);
+}
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
@@ -99,20 +119,36 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Assets: serve from cache when present, and refresh in the background.
+  // Hashed assets: serve from cache when present, and refresh in the
+  // background. Anything else is asked of the network first, because its name
+  // says nothing about its contents; the cache is the offline fallback rather
+  // than the first port of call.
   event.respondWith(
     (async () => {
       const cached = await caches.match(request);
-      const network = fetch(request)
-        .then(async (response) => {
-          if (response.ok) {
-            const cache = await caches.open(CACHE);
-            cache.put(request, response.clone());
-          }
-          return response;
-        })
-        .catch(() => cached ?? Response.error());
-      return cached ?? network;
+
+      if (cached && isImmutable(new URL(request.url))) {
+        void fetch(request)
+          .then(async (response) => {
+            if (response.ok) {
+              const cache = await caches.open(CACHE);
+              await cache.put(request, response.clone());
+            }
+          })
+          .catch(() => undefined);
+        return cached;
+      }
+
+      try {
+        const response = await fetch(request);
+        if (response.ok) {
+          const cache = await caches.open(CACHE);
+          await cache.put(request, response.clone());
+        }
+        return response;
+      } catch {
+        return cached ?? Response.error();
+      }
     })(),
   );
 });
