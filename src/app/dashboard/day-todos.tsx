@@ -2,7 +2,7 @@
 
 import { useCallback, useTransition } from "react";
 import Link from "next/link";
-import { Check, ListTodo } from "lucide-react";
+import { Check, Clock, ListTodo } from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import { selectTodosByUser } from "@/db/queries/todos";
@@ -59,13 +59,29 @@ export function DashboardTodos() {
   // Keys are `YYYY-MM-DD`, so string comparison is date comparison — no
   // parsing, and no timezone to get wrong. Anything left open on a past day
   // stays here rather than vanishing with the day it was written on.
+  // Within a day, timed items come first and in time order — a list with times
+  // on it is read as a schedule. The rest keep the order the day was arranged
+  // into.
   const todos = all
     .filter((t) => !t.done && t.date <= horizonKey)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    .sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) ||
+        Number(a.remindAt === null) - Number(b.remindAt === null) ||
+        (a.remindAt ?? "").localeCompare(b.remindAt ?? "") ||
+        a.position - b.position ||
+        a.id - b.id,
+    );
 
   if (todos.length === 0) return null;
 
   const urgent = (t: DayTodo) => t.date <= todayKey;
+  // `today` was floored to midnight, so the clock comes from a fresh reading.
+  const clock = new Date();
+  const nowTime = `${String(clock.getHours()).padStart(2, "0")}:${String(clock.getMinutes()).padStart(2, "0")}`;
+  /** A time today that has already gone by — the app was shut when it rang. */
+  const missed = (t: DayTodo) =>
+    t.remindAt !== null && (t.date < todayKey || t.remindAt <= nowTime);
 
   return (
     <ul className="mt-6 grid gap-2">
@@ -104,6 +120,21 @@ export function DashboardTodos() {
             <span className="text-muted-foreground"> · </span>
             <span className="text-muted-foreground">{todo.text}</span>
           </Link>
+          {todo.remindAt !== null && (
+            <span
+              // A time that has gone says so: the reminder could only have rung
+              // if the app happened to be open, so this is the record of it.
+              title={missed(todo) ? "This time has gone by" : undefined}
+              className={`flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${
+                missed(todo)
+                  ? "bg-red-500/10 text-red-700 dark:text-red-300"
+                  : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+              }`}
+            >
+              <Clock className="size-3" />
+              {todo.remindAt}
+            </span>
+          )}
         </li>
       ))}
     </ul>

@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Clock,
   GripVertical,
   ListTodo,
   Plus,
@@ -21,6 +22,7 @@ import type { DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isTodoDrag, readTodoDrag, startTodoDrag } from "./todo-drag";
+import { EnableNotifications } from "@/components/todo-reminders";
 import {
   addDayTodoAction,
   deleteDayTodoAction,
@@ -69,6 +71,8 @@ export function DayTodos({ date }: DayTodosProps) {
   /** Which item is showing its date picker, if any. */
   const [movingId, setMovingId] = useState<number | null>(null);
   const [moveTo, setMoveTo] = useState(date);
+  /** Which item is having a time set, if any. */
+  const [timingId, setTimingId] = useState<number | null>(null);
   /** The row a dragged item is over, and which side of it, for the insert line. */
   const [dropOn, setDropOn] = useState<{ id: number; below: boolean } | null>(
     null,
@@ -228,6 +232,55 @@ export function DayTodos({ date }: DayTodosProps) {
               {todo.text}
             </span>
 
+            {todo.remindAt !== null && timingId !== todo.id && (
+              <button
+                type="button"
+                disabled={pending}
+                title="Change or clear this time"
+                onClick={() => setTimingId(todo.id)}
+                className={`flex shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${
+                  todo.done
+                    ? "text-muted-foreground"
+                    : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                }`}
+              >
+                <Clock className="size-3" />
+                {todo.remindAt}
+              </button>
+            )}
+
+            {timingId === todo.id && (
+              // The time is committed as it is picked rather than behind a
+              // save: there is nothing else on the row to get out of step
+              // with it.
+              <span className="flex shrink-0 items-center gap-1">
+                <Input
+                  type="time"
+                  autoFocus
+                  value={todo.remindAt ?? ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    startWriting(async () => {
+                      await updateDayTodoAction({
+                        id: todo.id,
+                        remindAt: value === "" ? null : value,
+                      });
+                    });
+                  }}
+                  className="h-7 w-[7.5rem] px-2 py-0 text-xs"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-1.5"
+                  onClick={() => setTimingId(null)}
+                >
+                  <X className="size-3.5" />
+                  <span className="sr-only">Done setting the time</span>
+                </Button>
+              </span>
+            )}
+
             {movingId === todo.id ? (
               // The picker replaces the row's controls rather than sitting
               // beside them: it is the only thing being decided.
@@ -311,6 +364,18 @@ export function DayTodos({ date }: DayTodosProps) {
                 >
                   <ChevronRight className="size-3.5" />
                 </button>
+                {todo.remindAt === null && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    title="Remind me at a time…"
+                    aria-label={`Set a time for "${todo.text}"`}
+                    onClick={() => setTimingId(todo.id)}
+                    className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                  >
+                    <Clock className="size-3.5" />
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={pending}
@@ -374,6 +439,12 @@ export function DayTodos({ date }: DayTodosProps) {
         <p className="mt-2 text-xs text-muted-foreground/80">
           Drag an item onto another to reorder it, or onto a day above to move
           it there.
+        </p>
+      )}
+
+      {todos.some((t) => t.remindAt !== null) && (
+        <p className="mt-1">
+          <EnableNotifications />
         </p>
       )}
 

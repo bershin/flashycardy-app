@@ -20,11 +20,14 @@ const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const textSchema = z.string().trim().min(1).max(500);
 
 const addSchema = z.object({ date: daySchema, text: textSchema });
+/** 24-hour wall clock, as an `<input type="time">` reports it. */
+const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const updateSchema = z.object({
   id: z.number().int().positive(),
   text: textSchema.optional(),
   done: z.boolean().optional(),
   date: daySchema.optional(),
+  remindAt: timeSchema.nullable().optional(),
 });
 const idSchema = z.object({ id: z.number().int().positive() });
 const moveDaySchema = z.object({ from: daySchema, to: daySchema });

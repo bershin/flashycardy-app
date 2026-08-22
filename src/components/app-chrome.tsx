@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useStoreBootstrap, useStoreNotice } from "@/lib/store/use-store";
 import { dismissNotice } from "@/lib/store/local-store";
+import { TodoReminders } from "@/components/todo-reminders";
 import {
   getSyncError,
   getSyncState,
@@ -57,6 +58,7 @@ export function AppChrome() {
   return (
     <>
       <TabNotice />
+      <TodoReminders />
       <header className="flex items-center justify-end gap-2 p-4">
         <SyncIndicator />
         <Tooltip>

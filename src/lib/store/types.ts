@@ -96,6 +96,13 @@ export type DayTodo = {
    * never counted — a day's positions may have gaps after items are moved away.
    */
   position: number;
+  /**
+   * A time of day to be reminded, `HH:MM`, or null for an item with no time.
+   *
+   * Local wall-clock like the date, not an instant: "half nine" means half nine
+   * wherever you are, and storing a moment would move it when you travel.
+   */
+  remindAt: string | null;
   done: boolean;
   /**
    * When it was ticked off, so a day can show what actually happened on it.
@@ -190,6 +197,7 @@ export type SerializedDbDoc = {
     text: string;
     /** Never present — declared so the two shapes read as one. */
     position?: number;
+    remindAt?: string | null;
     done?: boolean;
     doneAt?: string | null;
     createdAt: string;
@@ -203,9 +211,14 @@ export type SerializedDbDoc = {
    * which is what they were.
    */
   todos?: Array<
-    Omit<DayTodo, "position" | "done" | "doneAt" | "createdAt" | "updatedAt"> & {
+    Omit<
+      DayTodo,
+      "position" | "remindAt" | "done" | "doneAt" | "createdAt" | "updatedAt"
+    > & {
       /** Absent before the list could be reordered; falls back to the id. */
       position?: number;
+      /** Absent before items could carry a time; reads as none. */
+      remindAt?: string | null;
       done?: boolean;
       doneAt?: string | null;
       createdAt: string;
@@ -323,6 +336,7 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       // Ids rise with creation, so falling back to one keeps a list written
       // before ordering existed in exactly the order it was written.
       position: t.position ?? t.id,
+      remindAt: t.remindAt ?? null,
       done: t.done ?? false,
       doneAt: t.doneAt ? toDate(t.doneAt) : null,
       createdAt: toDate(t.createdAt),
