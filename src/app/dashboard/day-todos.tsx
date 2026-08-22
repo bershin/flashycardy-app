@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, Clock, ListTodo, Plus } from "lucide-react";
+import { Check, Clock, ListTodo, Plus, Star } from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import { selectTodosByUser } from "@/db/queries/todos";
@@ -79,14 +79,15 @@ export function DashboardTodos() {
   // Keys are `YYYY-MM-DD`, so string comparison is date comparison — no
   // parsing, and no timezone to get wrong. Anything left open on a past day
   // stays here rather than vanishing with the day it was written on. Within a
-  // day, timed items come first and in time order — a list with times on it
-  // reads as a schedule — and the rest keep the order that day was arranged
-  // into.
+  // day, starred items come first, then timed ones in time order — a list with
+  // times on it reads as a schedule — and the rest keep the order that day was
+  // arranged into.
   const todos = all
     .filter((t) => !t.done && t.date <= horizonKey)
     .sort(
       (a, b) =>
         a.date.localeCompare(b.date) ||
+        Number(b.important) - Number(a.important) ||
         Number(a.remindAt === null) - Number(b.remindAt === null) ||
         (a.remindAt ?? "").localeCompare(b.remindAt ?? "") ||
         a.position - b.position ||
@@ -128,16 +129,29 @@ export function DashboardTodos() {
             >
               <Check className="size-3 opacity-0 hover:opacity-40" />
             </button>
-            <ListTodo
-              aria-hidden
-              className={`size-4 shrink-0 ${urgent(todo) ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}
-            />
+            {todo.important ? (
+              <Star
+                aria-label="Important"
+                className="size-4 shrink-0 fill-current text-amber-500"
+              />
+            ) : (
+              <ListTodo
+                aria-hidden
+                className={`size-4 shrink-0 ${urgent(todo) ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}
+              />
+            )}
             <Link href="/calendar/" className="min-w-0 flex-1 hover:underline">
               <span className="font-medium">
                 {when(todo.date, todayKey, tomorrowKey)}
               </span>
               <span className="text-muted-foreground"> · </span>
-              <span className="text-muted-foreground">{todo.text}</span>
+              <span
+                className={
+                  todo.important ? "font-medium" : "text-muted-foreground"
+                }
+              >
+                {todo.text}
+              </span>
             </Link>
             {todo.remindAt !== null && (
               <span

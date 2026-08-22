@@ -81,6 +81,7 @@ export async function addTodo(date: string, userId: string, text: string) {
       text: trimmed,
       position: nextPosition(draft, date, userId),
       remindAt: null,
+      important: false,
       done: false,
       doneAt: null,
       createdAt: now,
@@ -98,6 +99,7 @@ type TodoPatch = {
   date?: string;
   /** `HH:MM`, or null to take the time off. */
   remindAt?: string | null;
+  important?: boolean;
 };
 
 /**
@@ -131,6 +133,7 @@ export async function updateTodo(id: number, userId: string, patch: TodoPatch) {
       // Undefined leaves the time alone; null is how it is taken off.
       remindAt:
         patch.remindAt === undefined ? current.remindAt : patch.remindAt,
+      important: patch.important ?? current.important,
       updatedAt: new Date(),
     };
     // Something arriving from another day joins the end of the list it lands
@@ -145,6 +148,45 @@ export async function updateTodo(id: number, userId: string, patch: TodoPatch) {
     }
     draft.todos[index] = updated;
     return updated;
+  });
+}
+
+/**
+ * Copy an item, directly under the one it came from.
+ *
+ * For the thing that needs doing again — the same words, the same time, the
+ * same weight — without typing it twice. The copy starts open however the
+ * original ended up: a finished thing copied is a thing to do again, which is
+ * the only reason to copy a finished one.
+ */
+export async function duplicateTodo(id: number, userId: string) {
+  return mutate((draft) => {
+    const source = draft.todos.find((t) => t.id === id && t.userId === userId);
+    if (!source) return null;
+
+    const now = new Date();
+    const clone: DayTodo = {
+      ...source,
+      id: allocateTodoId(draft),
+      done: false,
+      doneAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    draft.todos.push(clone);
+
+    // Renumber the day so the copy sits directly under its original rather
+    // than at the end, where the pair would be separated by everything else.
+    const ordered = inReadingOrder(
+      draft.todos.filter((t) => t.userId === userId && t.date === source.date),
+    ).filter((t) => t.id !== clone.id);
+    ordered.splice(ordered.findIndex((t) => t.id === source.id) + 1, 0, clone);
+    const places = new Map(ordered.map((t, index) => [t.id, index]));
+    draft.todos = draft.todos.map((t) =>
+      places.has(t.id) ? { ...t, position: places.get(t.id)! } : t,
+    );
+
+    return clone.id;
   });
 }
 

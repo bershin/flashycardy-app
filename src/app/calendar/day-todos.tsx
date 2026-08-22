@@ -9,9 +9,11 @@ import {
   ChevronRight,
   ChevronUp,
   Clock,
+  Copy,
   GripVertical,
   ListTodo,
   Plus,
+  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -26,6 +28,7 @@ import { EnableNotifications } from "@/components/todo-reminders";
 import {
   addDayTodoAction,
   deleteDayTodoAction,
+  duplicateDayTodoAction,
   moveOpenTodosAction,
   reorderDayTodosAction,
   updateDayTodoAction,
@@ -228,9 +231,22 @@ export function DayTodos({ date, label }: DayTodosProps) {
               {todo.done && <Check className="size-3" />}
             </button>
 
+            {todo.important && (
+              <Star
+                aria-label="Important"
+                className={`size-3.5 shrink-0 fill-current ${
+                  todo.done ? "text-muted-foreground" : "text-amber-500"
+                }`}
+              />
+            )}
+
             <span
               className={`min-w-0 flex-1 truncate text-sm ${
-                todo.done ? "text-muted-foreground line-through" : ""
+                todo.done
+                  ? "text-muted-foreground line-through"
+                  : todo.important
+                    ? "font-medium"
+                    : ""
               }`}
               title={todo.text}
             >
@@ -341,14 +357,50 @@ export function DayTodos({ date, label }: DayTodosProps) {
                     >
                       <ChevronDown className="size-3.5" />
                     </button>
-                    {/* The two jobs look alike at a glance — up and down are
-                        this list, left and right are the calendar. */}
-                    <span
-                      aria-hidden
-                      className="mx-0.5 h-3.5 w-px bg-border"
-                    />
                   </>
                 )}
+                <button
+                  type="button"
+                  disabled={pending}
+                  title={todo.important ? "No longer important" : "Important"}
+                  aria-pressed={todo.important}
+                  aria-label={`Mark "${todo.text}" as important`}
+                  onClick={() =>
+                    startWriting(async () => {
+                      await updateDayTodoAction({
+                        id: todo.id,
+                        important: !todo.important,
+                      });
+                    })
+                  }
+                  className={`cursor-pointer rounded p-0.5 hover:bg-background ${
+                    todo.important
+                      ? "text-amber-500"
+                      : "text-muted-foreground hover:text-amber-500"
+                  }`}
+                >
+                  <Star
+                    className={`size-3.5 ${todo.important ? "fill-current" : ""}`}
+                  />
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  title="Make a copy below"
+                  aria-label={`Make a copy of "${todo.text}"`}
+                  onClick={() =>
+                    startWriting(async () => {
+                      await duplicateDayTodoAction({ id: todo.id });
+                    })
+                  }
+                  className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                >
+                  <Copy className="size-3.5" />
+                </button>
+                {/* The two jobs look alike at a glance — everything left of
+                    this line is the item and its place in the list, everything
+                    right of it is the calendar. */}
+                <span aria-hidden className="mx-0.5 h-3.5 w-px bg-border" />
                 <button
                   type="button"
                   disabled={pending}

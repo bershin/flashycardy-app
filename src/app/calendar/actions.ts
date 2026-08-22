@@ -10,6 +10,7 @@ import { auth } from "@/lib/auth";
 import {
   addTodo,
   deleteTodo,
+  duplicateTodo,
   moveOpenTodos,
   reorderTodos,
   updateTodo,
@@ -28,6 +29,7 @@ const updateSchema = z.object({
   done: z.boolean().optional(),
   date: daySchema.optional(),
   remindAt: timeSchema.nullable().optional(),
+  important: z.boolean().optional(),
 });
 const idSchema = z.object({ id: z.number().int().positive() });
 const moveDaySchema = z.object({ from: daySchema, to: daySchema });
@@ -51,6 +53,14 @@ export async function updateDayTodoAction(data: z.infer<typeof updateSchema>) {
 
   const { id, ...patch } = updateSchema.parse(data);
   return updateTodo(id, userId, patch);
+}
+
+/** Copies an item, directly under the one it came from. */
+export async function duplicateDayTodoAction(data: z.infer<typeof idSchema>) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  return duplicateTodo(idSchema.parse(data).id, userId);
 }
 
 export async function deleteDayTodoAction(data: z.infer<typeof idSchema>) {
