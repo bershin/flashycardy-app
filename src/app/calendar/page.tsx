@@ -282,6 +282,16 @@ export default function CalendarPage() {
     ? (days.find((d) => d.key === selectedKey) ?? null)
     : null;
 
+  /**
+   * The day the list at the top belongs to: the one picked, or today.
+   *
+   * Falling back to today rather than hiding means the page opens on the list
+   * you are most likely to want, and a month you are only browsing does not
+   * quietly leave you editing a day you had forgotten was selected.
+   */
+  const todayKey = ymd(startOfDay(new Date()));
+  const todoDay = selected?.key ?? todayKey;
+
   /** The picked day's decks, heaviest first, narrowed to one parent if asked. */
   const selectedDecks = useMemo(() => {
     if (!selected) return [];
@@ -496,6 +506,21 @@ export default function CalendarPage() {
             <ChevronRight className="size-4" />
           </Button>
         </div>
+      </div>
+
+      {/* Above the grid rather than under it: the list is the part you act on,
+          and it was a scroll away from the days it belongs to. Sitting here it
+          is the first thing the page says, and an item is dragged down onto a
+          square rather than up out of a panel. */}
+      <div className="mt-6 rounded-lg border border-border/60 bg-card/60 px-4 pt-3 pb-4">
+        <DayTodos
+          key={todoDay}
+          date={todoDay}
+          // Named, because the list shown is not always today's — clicking a
+          // square switches it, and a list with no date on it would look like
+          // today's however far into the month you had clicked.
+          label={todoDay === todayKey ? "Today" : keyLabel(todoDay)}
+        />
       </div>
 
       <div className="mt-6 grid grid-cols-7 gap-1 sm:gap-2">
@@ -848,8 +873,6 @@ export default function CalendarPage() {
               </li>
             ))}
           </ul>
-
-          <DayTodos key={selected.key} date={selected.key} />
 
           {selectedDecks.length > DECK_LIMIT && (
             <button

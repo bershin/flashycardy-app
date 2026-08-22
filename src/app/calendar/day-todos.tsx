@@ -50,6 +50,8 @@ function dayLabel(key: string): string {
 interface DayTodosProps {
   /** The day this list belongs to, `YYYY-MM-DD`. */
   date: string;
+  /** Names the day beside the heading, for when it isn't obvious which one. */
+  label?: string;
 }
 
 /**
@@ -59,7 +61,7 @@ interface DayTodosProps {
  * deleted: most of what doesn't happen on a Tuesday still needs doing, and a
  * list that can only be finished or abandoned gets abandoned.
  */
-export function DayTodos({ date }: DayTodosProps) {
+export function DayTodos({ date, label }: DayTodosProps) {
   const todos = useStore(
     useCallback(
       (db: DbDoc) => selectTodosForDay(db, date, LOCAL_USER_ID),
@@ -134,12 +136,15 @@ export function DayTodos({ date }: DayTodosProps) {
   }
 
   return (
-    <div className="mt-4 border-t border-border/60 pt-3">
-      <div className="flex items-center gap-2">
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
         <ListTodo className="size-3.5 text-muted-foreground" />
         <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           To do
         </h3>
+        {label && (
+          <span className="text-xs font-medium text-foreground">{label}</span>
+        )}
         {todos.length > 0 && (
           <span className="text-xs text-muted-foreground">
             {open === 0
