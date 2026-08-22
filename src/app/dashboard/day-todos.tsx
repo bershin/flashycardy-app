@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -8,13 +8,13 @@ import {
   ChevronRight,
   Clock,
   ListTodo,
-  Plus,
   Star,
 } from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import { selectTodosByUser } from "@/db/queries/todos";
-import { addDayTodoAction, updateDayTodoAction } from "@/app/calendar/actions";
+import { updateDayTodoAction } from "@/app/calendar/actions";
+import { AddTodo } from "@/components/add-todo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { DayTodo, DbDoc } from "@/lib/store/types";
@@ -68,10 +68,6 @@ export function DashboardTodos() {
   const [pending, startWriting] = useTransition();
   /** The day on show. Starts on today and stays where it is put. */
   const [viewDay, setViewDay] = useState(todayKey);
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState("");
-  const addRef = useRef<HTMLInputElement>(null);
-
   const open = all.filter((t) => !t.done);
   const onToday = viewDay === todayKey;
   // Keys are `YYYY-MM-DD`, so string comparison is date comparison — no
@@ -98,16 +94,6 @@ export function DashboardTodos() {
   /** A time that has gone by — the app was shut when it would have rung. */
   const missed = (t: DayTodo) =>
     t.remindAt !== null && (t.date < todayKey || t.remindAt <= nowTime);
-
-  function add() {
-    if (!draft.trim()) return;
-    const text = draft;
-    setDraft("");
-    startWriting(async () => {
-      await addDayTodoAction({ date: viewDay, text });
-      addRef.current?.focus();
-    });
-  }
 
   const label = dayLabel(viewDay, todayKey, tomorrowKey);
 
@@ -246,51 +232,16 @@ export function DashboardTodos() {
         })}
       </ul>
 
-      {adding ? (
-        <div className="mt-2 flex items-center gap-2">
-          <Input
-            ref={addRef}
-            value={draft}
-            autoFocus
-            maxLength={500}
-            placeholder={`Something to do ${onToday ? "today" : `on ${label.toLowerCase()}`}…`}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                add();
-              }
-              if (e.key === "Escape") setAdding(false);
-            }}
-            // Folds away when left empty, so an abandoned field doesn't sit
-            // open on the dashboard for the rest of the session.
-            onBlur={() => !draft.trim() && setAdding(false)}
-            className="h-8 max-w-md text-sm"
-          />
-          <Button
-            size="sm"
-            className="h-8"
-            disabled={pending || !draft.trim()}
-            onClick={add}
-          >
-            <Plus className="size-3.5" />
-            Add
-          </Button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="mt-2 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          <Plus className="size-3.5" />
-          {/* Names the day it lands on, which is the one on show and not
-              always today. */}
-          {showing.length === 0
+      <AddTodo
+        className="mt-2"
+        date={viewDay}
+        label={
+          showing.length === 0
             ? `Nothing ${onToday ? "for today" : `on ${label.toLowerCase()}`} — add something`
-            : `Add something for ${onToday ? "today" : label.toLowerCase()}`}
-        </button>
-      )}
+            : `Add something for ${onToday ? "today" : label.toLowerCase()}`
+        }
+        placeholder={`Something to do ${onToday ? "today" : `on ${label.toLowerCase()}`}…`}
+      />
     </div>
   );
 }

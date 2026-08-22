@@ -16,6 +16,7 @@ import {
 import type { DbDoc } from "@/lib/store/types";
 import { DeckHeader } from "./deck-header";
 import { CardGrid } from "./card-grid";
+import { AddTodo } from "@/components/add-todo";
 import { SortableChildDecks } from "./sortable-child-decks";
 
 /**
@@ -98,6 +99,16 @@ function DeckPageContent() {
         canAddSubDeck={isTopLevel && cards.length === 0}
       />
 
+      {/* Sitting under the deck's own heading, because the thought this
+          catches — "finish these tomorrow", "ask about question 7" — arrives
+          while looking at the deck, and the calendar is two pages away. */}
+      <AddTodo
+        className="mt-3"
+        date={todayKey()}
+        label="Add something to do today"
+        placeholder={`Something to do about ${deck.title} today…`}
+      />
+
       {hasChildren ? (
         <SortableChildDecks
           parentId={deck.id}
@@ -138,6 +149,12 @@ function DeckPageContent() {
       )}
     </div>
   );
+}
+
+/** Today as `YYYY-MM-DD`, in the reader's own calendar. */
+function todayKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 export default function DeckPage() {
