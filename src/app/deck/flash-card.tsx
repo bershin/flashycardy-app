@@ -40,17 +40,21 @@ import { EditCardDialog } from "@/components/edit-card-dialog";
 import { MoveCardDialog } from "@/components/move-card-dialog";
 import { VaryCardDialog } from "@/components/vary-card-dialog";
 import type { CardRow } from "@/lib/store/types";
-import {
-  cloneCardAction,
-  deleteCardAction,
-  updateCardAction,
-} from "./actions";
+import { cloneCardAction, deleteCardAction, updateCardAction } from "./actions";
 
 interface FlashCardProps {
   card: CardRow;
   selecting?: boolean;
   selected?: boolean;
   onToggleSelected?: (id: number) => void;
+  /**
+   * Shown beside the card's history when the deck is stacked by date.
+   *
+   * Only then: a due date on every card at all times is noise, but an order you
+   * cannot read is not an order — sorted by date without the dates, the deck
+   * just looks shuffled.
+   */
+  dueLabel?: string | null;
 }
 
 export function FlashCard({
@@ -58,6 +62,7 @@ export function FlashCard({
   selecting = false,
   selected = false,
   onToggleSelected,
+  dueLabel = null,
 }: FlashCardProps) {
   const [editOpen, setEditOpen] = useState(false);
   // Holds the card the dialog is editing. Normally this card, but cloning
@@ -178,6 +183,11 @@ export function FlashCard({
             {/* Beside the menu rather than in the corner: browsing a deck is
                 where a card's record is worth scanning down a column, and it
                 should read the same here as it does mid-session. */}
+            {dueLabel && (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[0.7rem] font-medium text-muted-foreground tabular-nums">
+                {dueLabel}
+              </span>
+            )}
             <CardHistory
               compact
               timesMissed={card.timesMissed}
@@ -185,7 +195,10 @@ export function FlashCard({
             />
             <DropdownMenu>
               <DropdownMenuTrigger
-                className={buttonVariants({ variant: "ghost", size: "icon-xs" })}
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "icon-xs",
+                })}
               >
                 <Ellipsis className="size-3.5" />
                 <span className="sr-only">Card actions</span>
@@ -200,10 +213,7 @@ export function FlashCard({
                   <Pencil />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleClone}
-                  disabled={isPending}
-                >
+                <DropdownMenuItem onClick={handleClone} disabled={isPending}>
                   <Copy />
                   Clone
                 </DropdownMenuItem>
