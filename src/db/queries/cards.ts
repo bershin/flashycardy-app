@@ -143,7 +143,9 @@ export async function updateCard(
       // doesn't leave orphaned options behind to reappear if it switches back.
       quiz: type === "quiz" ? (data.quiz ?? current.quiz) : undefined,
       generated:
-        type === "generated" ? (data.generated ?? current.generated) : undefined,
+        type === "generated"
+          ? (data.generated ?? current.generated)
+          : undefined,
     };
     draft.cards[index] = updated;
     return updated;
@@ -177,7 +179,9 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
  */
 const REVIEW_SCHEDULES: Record<ReviewSchedule, readonly number[]> = {
   incremental: [1, 7, 14, 21, 30, 90, 180, 365],
-  weekly: [1, 5, 5, 5],
+  // Three rungs, so the fourth correct answer archives the card: a day to see
+  // it again, then two five-day gaps to prove it stuck.
+  weekly: [1, 5, 5],
 };
 
 /** How soon a missed card comes back round. */
@@ -232,7 +236,10 @@ function archiveCard(cardId: number, userId: string): CardRow | undefined {
     let root = selectArchiveRoot(draft, userId);
     if (!root) {
       const maxPosition = draft.decks.reduce(
-        (max, d) => (d.userId === userId && d.parentId === null ? Math.max(max, d.position) : max),
+        (max, d) =>
+          d.userId === userId && d.parentId === null
+            ? Math.max(max, d.position)
+            : max,
         -1,
       );
       root = {
@@ -286,7 +293,7 @@ function archiveCard(cardId: number, userId: string): CardRow | undefined {
  *  - `got_it`  → streak + 1, next review taken from the card's own ladder in
  *                `REVIEW_SCHEDULES` — widening, or a steady week
  *  - clearing that ladder → the card is **archived** (see `archiveCard`), which
- *    takes nine correct answers on the widening schedule and five on weekly
+ *    takes nine correct answers on the widening schedule and four on steady
  *
  * The streak moves at most one step a day. A card answered correctly a second
  * time today is rescheduled but not promoted: the ladder is built on the idea
@@ -330,9 +337,17 @@ export async function recordStudyResult(
     // the earlier answer chose. The floor of one covers a card that was missed
     // after being credited today: the streak stays where the miss left it, but
     // it has just been answered correctly, so it shouldn't nag again today.
+    //
+    // The ceiling covers a card whose streak is already past the end of its
+    // ladder, which happens when a ladder is shortened under cards that had
+    // climbed the old one. It would otherwise read past the end and schedule an
+    // Invalid Date. Such a card archives on its next answer on another day; the
+    // last rung is the right gap until then.
     nextReviewAt = addDays(
       today,
-      intervals[Math.max(consecutiveCorrect, 1) - 1],
+      intervals[
+        Math.min(Math.max(consecutiveCorrect, 1), intervals.length) - 1
+      ],
     );
   } else {
     consecutiveCorrect = existing.consecutiveCorrect + 1;
