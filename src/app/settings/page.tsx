@@ -1,9 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { Download, ShieldAlert, ShieldCheck, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LOCAL_USER_ID } from "@/lib/auth";
+import { useStore } from "@/lib/store/use-store";
+import { selectLearnedButUnarchived } from "@/db/queries/cards";
+import { archiveLearnedCardsAction } from "@/app/deck/actions";
+import type { DbDoc } from "@/lib/store/types";
 import {
   readStorageStatus,
   readStorageUsage,
@@ -77,7 +88,11 @@ export default function SettingsPage() {
     getSyncState,
     () => "disabled" as SyncState,
   );
-  const syncError = useSyncExternalStore(subscribeSync, getSyncError, () => null);
+  const syncError = useSyncExternalStore(
+    subscribeSync,
+    getSyncError,
+    () => null,
+  );
 
   const [config, setConfig] = useState<SyncConfig>(EMPTY_CONFIG);
   const [provider, setProvider] = useState<AIProvider>("openai");
@@ -85,6 +100,17 @@ export default function SettingsPage() {
   const [model, setModel] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * Read from the store rather than counted once, so it falls to zero the
+   * moment the sweep runs and cannot sit there quoting a number that is no
+   * longer true.
+   */
+  const learned = useStore(
+    useCallback(
+      (db: DbDoc) => selectLearnedButUnarchived(db, LOCAL_USER_ID).length,
+      [],
+    ),
+  );
   const [resetOpen, setResetOpen] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [storage, setStorage] = useState<StorageStatus>("unsupported");
@@ -208,7 +234,8 @@ export default function SettingsPage() {
           >
             fine-grained token
           </a>{" "}
-          scoped to only that repository, with <em>Contents: read and write</em>.
+          scoped to only that repository, with <em>Contents: read and write</em>
+          .
         </p>
 
         <Card className="mt-4">
@@ -291,7 +318,9 @@ export default function SettingsPage() {
                   onClick={() => {
                     setSyncConfig(null);
                     setConfig(EMPTY_CONFIG);
-                    setMessage("Sync turned off. Your data stays in this browser.");
+                    setMessage(
+                      "Sync turned off. Your data stays in this browser.",
+                    );
                   }}
                 >
                   Turn off sync
@@ -337,7 +366,9 @@ export default function SettingsPage() {
                       if (!active) return;
                       setBusy(true);
                       await resolveWithLocal(active);
-                      setMessage("Overwrote GitHub with this device's version.");
+                      setMessage(
+                        "Overwrote GitHub with this device's version.",
+                      );
                       setBusy(false);
                     }}
                   >
@@ -352,7 +383,9 @@ export default function SettingsPage() {
                       if (!active) return;
                       setBusy(true);
                       await resolveWithRemote(active);
-                      setMessage("Replaced local data with the GitHub version.");
+                      setMessage(
+                        "Replaced local data with the GitHub version.",
+                      );
                       setBusy(false);
                     }}
                   >
@@ -412,6 +445,46 @@ export default function SettingsPage() {
             <span className="text-xs text-muted-foreground">
               {usageMb.toFixed(1)} MB used on this device
             </span>
+          )}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold">Review schedules</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          A card is archived when it has been answered correctly enough times in
+          a row for its schedule. Shortening a schedule leaves cards that have
+          already passed the new mark still sitting in their decks — nothing has
+          asked them a question since, so nothing has noticed.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {learned === 0 ? (
+            <span className="text-xs text-muted-foreground">
+              Nothing is waiting — every card is where its schedule says it
+              should be.
+            </span>
+          ) : (
+            <>
+              <span className="text-sm">
+                <strong className="tabular-nums">{learned}</strong> card
+                {learned === 1 ? " has" : "s have"} already met their schedule.
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  const moved = await archiveLearnedCardsAction();
+                  setMessage(
+                    `Archived ${moved} card${moved === 1 ? "" : "s"} that had already met their schedule.`,
+                  );
+                  setBusy(false);
+                }}
+              >
+                Archive them
+              </Button>
+            </>
           )}
         </div>
       </section>
@@ -550,7 +623,9 @@ export default function SettingsPage() {
       <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Erase everything on this device?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Erase everything on this device?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               This clears all decks and cards stored in this browser. If sync is
               on, the empty database will be pushed to GitHub the next time you

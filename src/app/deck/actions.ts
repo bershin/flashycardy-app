@@ -25,6 +25,7 @@ import {
   rescheduleCards,
   restoreCardDates,
   bulkInsertCards,
+  archiveLearnedCards,
 } from "@/db/queries/cards";
 
 /**
@@ -127,6 +128,20 @@ const addCardSchema = z.intersection(
 );
 
 type AddCardInput = z.infer<typeof addCardSchema>;
+
+/**
+ * Retire every card that already meets its schedule.
+ *
+ * Takes no input: what qualifies is decided by the ladders, not by the caller,
+ * so there is nothing here for a stray click to get wrong. Returns how many
+ * moved, which is the only thing the button has to say afterwards.
+ */
+export async function archiveLearnedCardsAction() {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  return archiveLearnedCards(userId);
+}
 
 export async function addCardAction(data: AddCardInput) {
   const { userId } = auth();

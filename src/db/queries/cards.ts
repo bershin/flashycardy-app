@@ -203,6 +203,49 @@ export function graduationStreak(schedule: ReviewSchedule): number {
 }
 
 /**
+ * Cards that have already earned their place in the archive but are still out.
+ *
+ * Normally impossible: a card is archived the moment its streak reaches the
+ * ladder's end. It becomes possible when a ladder is *shortened* — every card
+ * that had climbed past the new top is suddenly learned by the new rule, but
+ * nothing has asked it a question since, so nothing has noticed.
+ */
+export function selectLearnedButUnarchived(
+  db: DbDoc,
+  userId: string,
+): CardRow[] {
+  const owned = new Map(
+    db.decks.filter((d) => d.userId === userId).map((d) => [d.id, d]),
+  );
+  return db.cards.filter((card) => {
+    const deck = owned.get(card.deckId);
+    if (!deck || isArchiveDeck(db, deck)) return false;
+    return card.consecutiveCorrect >= graduationStreak(card.schedule);
+  });
+}
+
+export async function countLearnedButUnarchived(userId: string) {
+  return selectLearnedButUnarchived(getSnapshot(), userId).length;
+}
+
+/**
+ * Retire everything that already meets its schedule.
+ *
+ * One card at a time through the same `archiveCard` the study session uses, so
+ * these land exactly where a card that graduated normally would — under the
+ * archive's sub-deck for the deck it came from, streak reset — rather than in
+ * some parallel arrangement that only this function knows how to make.
+ */
+export async function archiveLearnedCards(userId: string): Promise<number> {
+  const due = selectLearnedButUnarchived(getSnapshot(), userId);
+  let archived = 0;
+  for (const card of due) {
+    if (archiveCard(card.id, userId)) archived += 1;
+  }
+  return archived;
+}
+
+/**
  * Move a learned card into the archive.
  *
  * Creates the archive root and the per-source sub-deck on demand, then moves the
