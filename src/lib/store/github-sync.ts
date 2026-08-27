@@ -19,8 +19,15 @@ import {
   type DbDoc,
   type SerializedDbDoc,
 } from "./types";
+import { baseOf, mergeDocs, type SyncBase } from "./merge";
 
 const CONFIG_KEY = "flashycardy.sync";
+/**
+ * What this device and GitHub last agreed the document contained — ids and
+ * their timestamps, not contents. See `merge.ts`: without it, a record missing
+ * from one side cannot be told from a record newly added to the other.
+ */
+const BASE_KEY = "flashycardy.sync.base";
 const SHA_KEY = "flashycardy.sync.sha";
 const LAST_SYNCED_KEY = "flashycardy.sync.lastSyncedAt";
 /** Web Locks name holding pushes to one tab at a time. */
@@ -155,6 +162,29 @@ function setSha(sha: string | null) {
   if (typeof window === "undefined") return;
   if (sha === null) window.localStorage.removeItem(SHA_KEY);
   else window.localStorage.setItem(SHA_KEY, sha);
+}
+
+function readBase(): SyncBase | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(BASE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as SyncBase;
+  } catch {
+    // A base we cannot read is a base we do not have: the merge falls back to
+    // keeping everything, which is the safe direction.
+    return null;
+  }
+}
+
+function writeBase(doc: DbDoc) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(BASE_KEY, JSON.stringify(baseOf(doc)));
+  } catch {
+    // Out of quota: the next merge keeps more than it strictly should rather
+    // than dropping the sync.
+  }
 }
 
 function markSynced() {
@@ -349,6 +379,7 @@ async function pushLocked(
         ) as SerializedDbDoc;
         if (sameContent(remote, serialized)) {
           setSha(meta.sha);
+          writeBase(doc);
           markSynced();
           return "ok";
         }
@@ -362,8 +393,32 @@ async function pushLocked(
 
   const body = (await response.json()) as { content: { sha: string } };
   setSha(body.content.sha);
+  // GitHub now holds exactly this, so this is what the two have agreed on.
+  // Recorded here rather than only on pull, or a record deleted locally and
+  // pushed would look, on the next pull, like a record the remote had newly
+  // added — and come straight back.
+  writeBase(doc);
   markSynced();
   return "ok";
+}
+
+/**
+ * Fetch what GitHub holds and merge it into this device's document.
+ *
+ * Returns whether the merge left this device holding something GitHub does not
+ * — the caller decides whether to push it. Module level rather than tucked
+ * inside `startSync`, because a push that loses a race needs exactly this
+ * before trying again.
+ */
+async function pullAndMerge(config: SyncConfig): Promise<{ owesRemote: boolean }> {
+  const result = await pull(config);
+  if (result.kind !== "pulled") return { owesRemote: false };
+
+  const { doc, report } = mergeDocs(readBase(), getSnapshot(), result.doc);
+  if (report.localChanged) await replaceDoc(doc);
+  writeBase(doc);
+  markSynced();
+  return { owesRemote: report.remoteChanged };
 }
 
 /**
@@ -426,8 +481,20 @@ async function runPush() {
   inFlight = true;
   setState("pushing");
   try {
-    const result = await push(config);
+    let result = await push(config);
+
     if (result === "conflict") {
+      // The other machine pushed between this one's last read and this write.
+      // That used to stop sync dead and ask the user to pick a version; now it
+      // is just a race, and merging is exactly the answer to it. Take what is
+      // there, merge, and write once more.
+      await pullAndMerge(config);
+      result = await push(config);
+    }
+
+    if (result === "conflict") {
+      // Twice in a row is no longer a race — something about the remote cannot
+      // be reconciled — so it goes back to the user, as before.
       setState(
         "conflict",
         "This file changed on GitHub since this device last synced.",
@@ -485,19 +552,14 @@ export function startSync(): () => void {
     if (getSyncState() === "conflict" || inFlight) return;
     setState("pulling");
     try {
-      const result = await pull(config);
-      if (result.kind === "pulled") {
-        const local = getSnapshot();
-        const localIsNewer =
-          local.mutatedAt.getTime() > result.doc.mutatedAt.getTime();
-        const localIsEmpty =
-          local.decks.length === 0 && local.cards.length === 0;
-
-        if (localIsEmpty || !localIsNewer) {
-          await replaceDoc(result.doc);
-          markSynced();
-        }
-      }
+      // Merged rather than compared. The old rule — take the remote only if it
+      // was newer than everything here — dropped the older side's work whole
+      // and silently, decided by whichever machine's clock ran ahead.
+      //
+      // Anything this device holds that GitHub does not goes back up: left
+      // undone, the two would only ever agree in one direction.
+      const { owesRemote } = await pullAndMerge(config);
+      if (owesRemote) schedulePush();
       markChecked();
       setState("idle");
     } catch (error) {
