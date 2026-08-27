@@ -12,7 +12,10 @@ import {
   CalendarArrowUp,
   ChevronLeft,
   ChevronRight,
+  Ellipsis,
+  Layers,
   Plus,
+  Trash2,
   Undo2,
   X,
 } from "lucide-react";
@@ -23,6 +26,24 @@ import { isArchiveDeck, startOfDay } from "@/lib/store/selectors";
 import { selectTodoDays } from "@/db/queries/todos";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { deleteCardsAction, setCardsScheduleAction } from "@/app/deck/actions";
+import { REVIEW_SCHEDULES, type ReviewSchedule } from "@/lib/store/types";
 import { MoveDueCardsDialog, type MovableCard } from "./move-due-cards-dialog";
 import {
   getLastMove,
@@ -54,6 +75,11 @@ const WINDOW_WEEKS = 6;
 const WEEKS_BEFORE = 4;
 const WEEKS_AFTER = 30;
 const TOTAL_WEEKS = WEEKS_BEFORE + WEEKS_AFTER;
+
+const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
+  incremental: "Widening",
+  weekly: "Steady",
+};
 
 /** Monday-first, matching how a week is read here. */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -177,6 +203,31 @@ export default function CalendarPage() {
   );
   /** The square a dragged item is currently over, if any. */
   const [dropDay, setDropDay] = useState<string | null>(null);
+  /** The deck-day whose cards are being deleted, pending confirmation. */
+  const [deleting, setDeleting] = useState<DeckCount | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchNote, setBatchNote] = useState<string | null>(null);
+
+  /**
+   * Apply something to every card a deck has on the open day.
+   *
+   * The ids are already here — the breakdown carries them so the move dialog
+   * can name them — so nothing has to be re-derived from the day and the deck.
+   */
+  async function runOnDeckDay(
+    deck: DeckCount,
+    said: string,
+    work: (ids: number[]) => Promise<unknown>,
+  ) {
+    setBatchBusy(true);
+    try {
+      await work(deck.cards.map((c) => c.id));
+      setBatchNote(`${said} · ${deck.title}`);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
   /** Bumped whenever a square asks for the cursor in the add field. */
   const [addSignal, setAddSignal] = useState(0);
   /** The topmost week in view, as an index into the rendered range. */
@@ -925,6 +976,12 @@ export default function CalendarPage() {
             </Button>
           </div>
 
+          {batchNote && (
+            <p role="status" className="mt-2 text-xs text-muted-foreground">
+              {batchNote}
+            </p>
+          )}
+
           <ul className="mt-3 space-y-1">
             {visibleDecks.map((deck) => (
               // The Move control is a sibling of the link rather than inside
@@ -973,6 +1030,47 @@ export default function CalendarPage() {
                   <CalendarArrowUp className="mr-1 inline size-3.5" />
                   Move
                 </button>
+                {/* The rest of what can be done to a batch. Moving keeps its
+                    own button because it is why this row is being looked at —
+                    the day is heavy — while these are the occasional ones. */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    aria-label={`More actions for ${deck.title}`}
+                    className="shrink-0 cursor-pointer rounded-md border border-border/60 px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:border-violet-500 hover:text-foreground"
+                  >
+                    <Ellipsis className="size-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {REVIEW_SCHEDULES.map((schedule) => (
+                      <DropdownMenuItem
+                        key={schedule}
+                        disabled={batchBusy}
+                        onClick={() =>
+                          runOnDeckDay(
+                            deck,
+                            `Put ${deck.count} on ${SCHEDULE_LABELS[schedule]}`,
+                            (ids) =>
+                              setCardsScheduleAction({
+                                cardIds: ids,
+                                schedule,
+                              }),
+                          )
+                        }
+                      >
+                        <Layers />
+                        Put these {deck.count} on {SCHEDULE_LABELS[schedule]}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuItem
+                      disabled={batchBusy}
+                      onClick={() => setDeleting(deck)}
+                      variant="destructive"
+                    >
+                      <Trash2 />
+                      Delete these {deck.count}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </li>
             ))}
           </ul>
@@ -990,6 +1088,44 @@ export default function CalendarPage() {
           )}
         </div>
       )}
+
+      <AlertDialog
+        open={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {deleting?.count} card
+              {deleting?.count === 1 ? "" : "s"} from {deleting?.title}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {/* Named by day as well as deck: this is reached from a square,
+                  and "the ones due then" is the part that could be misread. */}
+              {`The ${deleting?.count} due on ${selected ? keyLabel(selected.key) : "this day"} go, not the whole deck.`}{" "}
+              This cannot be undone here, though a copy of your decks before
+              this change stays in your sync repo&rsquo;s history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep them</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={batchBusy}
+              onClick={() => {
+                const deck = deleting;
+                setDeleting(null);
+                if (deck) {
+                  void runOnDeckDay(deck, `Deleted ${deck.count}`, (ids) =>
+                    deleteCardsAction({ cardIds: ids }),
+                  );
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {moving && selected && (
         <MoveDueCardsDialog
