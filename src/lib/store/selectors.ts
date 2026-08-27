@@ -382,6 +382,24 @@ export function selectDueCardsByDeckForUser(
   );
 }
 
+/**
+ * Specific cards, in the order the deck shows them.
+ *
+ * For studying a hand-picked set: unlike the due list this ignores the review
+ * date entirely, because choosing a card is a decision to study it now.
+ */
+export function selectCardsByIdsForUser(
+  db: DbDoc,
+  cardIds: readonly number[],
+  userId: string,
+): CardRow[] {
+  const wanted = new Set(cardIds);
+  const owned = new Set(
+    db.decks.filter((d) => d.userId === userId).map((d) => d.id),
+  );
+  return db.cards.filter((c) => wanted.has(c.id) && owned.has(c.deckId));
+}
+
 export function startOfDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);

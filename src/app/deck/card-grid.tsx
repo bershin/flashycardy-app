@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import {
   ArrowDownWideNarrow,
+  BookOpen,
   CalendarClock,
   CheckSquare,
   Dices,
@@ -38,6 +39,8 @@ import {
   setCardsScheduleAction,
 } from "./actions";
 import { REVIEW_SCHEDULES, type ReviewSchedule } from "@/lib/store/types";
+import { setStudyPicks } from "@/lib/study-picks";
+import { useRouter } from "next/navigation";
 import { VaryDeckDialog } from "@/components/vary-deck-dialog";
 import type { CardRow } from "@/lib/store/types";
 import { FlashCard } from "./flash-card";
@@ -136,6 +139,9 @@ function shuffleArray<T>(arr: T[]): T[] {
 }
 
 export function CardGrid({ cards }: CardGridProps) {
+  const router = useRouter();
+  /** Every card here belongs to one deck, so the first one names it. */
+  const deckId = cards[0]?.deckId ?? 0;
   const [sort, setSort] = useState<SortKey>("recent");
   /**
    * A shuffle is an order that cannot be recomputed, so it is held rather than
@@ -308,6 +314,22 @@ export function CardGrid({ cards }: CardGridProps) {
               </>
             ) : (
               <>
+                {/* First, because studying a few cards you have just picked
+                    out is the likeliest reason to have picked them. */}
+                <Button
+                  size="sm"
+                  disabled={selected.size === 0}
+                  onClick={() => {
+                    const ids = displayCards
+                      .filter((c) => selected.has(c.id))
+                      .map((c) => c.id);
+                    setStudyPicks(deckId, ids);
+                    router.push(`/deck/study/?id=${deckId}`);
+                  }}
+                >
+                  <BookOpen className="size-3.5" />
+                  Study {selected.size}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -327,6 +349,7 @@ export function CardGrid({ cards }: CardGridProps) {
                   Review date
                 </Button>
                 <Button
+                  variant="outline"
                   size="sm"
                   disabled={selected.size === 0}
                   onClick={() => setMoveOpen(true)}

@@ -16,20 +16,30 @@ import { useStore, useStoreReady } from "@/lib/store/use-store";
 import {
   selectCardsByDeckForUser,
   selectDeckByIdForUser,
+  selectCardsByIdsForUser,
   selectDueCardsByDeckForUser,
 } from "@/lib/store/selectors";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { StudySession } from "./study-session";
+import { takeStudyPicks } from "@/lib/study-picks";
 
 type Rating = "got_it" | "missed";
 
 type Decision =
   /** An unfinished session exists — ask before discarding it. */
-  | { kind: "resume"; deckId: number; saved: SavedSession; order: CardRow[]; source: CardRow[] }
+  | {
+      kind: "resume";
+      deckId: number;
+      saved: SavedSession;
+      order: CardRow[];
+      source: CardRow[];
+    }
   | {
       kind: "study";
       deckId: number;
       cards: CardRow[];
+      /** True when these were chosen by hand rather than fallen due. */
+      picked?: boolean;
       order?: CardRow[];
       index: number;
       ratings: Array<[number, Rating]>;
@@ -37,11 +47,16 @@ type Decision =
       round: number;
     };
 
-function freshSession(deckId: number): Decision {
+function freshSession(deckId: number, picked: number[] | null): Decision {
   return {
     kind: "study",
     deckId,
-    cards: selectDueCardsByDeckForUser(getSnapshot(), deckId, LOCAL_USER_ID),
+    // A hand-picked set is studied as chosen, due or not. Otherwise it is the
+    // deck's due cards, as it has always been.
+    cards: picked
+      ? selectCardsByIdsForUser(getSnapshot(), picked, LOCAL_USER_ID)
+      : selectDueCardsByDeckForUser(getSnapshot(), deckId, LOCAL_USER_ID),
+    picked: picked !== null,
     index: 0,
     ratings: [],
     durations: [],
@@ -60,9 +75,7 @@ function freshSession(deckId: number): Decision {
 function restore(db: DbDoc, saved: SavedSession): Decision | null {
   const byId = new Map(db.cards.map((c) => [c.id, c]));
   const pick = (ids: number[]) =>
-    ids
-      .map((id) => byId.get(id))
-      .filter((c): c is CardRow => c !== undefined);
+    ids.map((id) => byId.get(id)).filter((c): c is CardRow => c !== undefined);
 
   const order = pick(saved.cardIds);
   const source = pick(saved.sourceCardIds);
@@ -88,7 +101,9 @@ function StudyPageContent() {
   const totalCards = useStore(
     useCallback(
       (db: DbDoc) =>
-        validId ? selectCardsByDeckForUser(db, deckId, LOCAL_USER_ID).length : 0,
+        validId
+          ? selectCardsByDeckForUser(db, deckId, LOCAL_USER_ID).length
+          : 0,
       [deckId, validId],
     ),
   );
@@ -117,9 +132,13 @@ function StudyPageContent() {
   // empty session and trigger a cascading render. The store is read directly so
   // this never resubscribes.
   if (ready && validId && decision?.deckId !== deckId) {
-    const saved = loadSession(deckId);
+    // Cards chosen on the deck page win over an unfinished session: asking to
+    // study a particular set is a clear instruction, and offering to resume
+    // something else instead would ignore it.
+    const picked = takeStudyPicks(deckId);
+    const saved = picked ? null : loadSession(deckId);
     const resumable = saved ? restore(getSnapshot(), saved) : null;
-    setDecision(resumable ?? freshSession(deckId));
+    setDecision(resumable ?? freshSession(deckId, picked));
   }
 
   const active = decision?.deckId === deckId ? decision : null;
@@ -199,8 +218,8 @@ function StudyPageContent() {
             {saved.round > 1 ? `, round ${saved.round}` : ""}.
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {answered} card{answered === 1 ? "" : "s"} already answered.
-            {" "}Those answers are saved either way.
+            {answered} card{answered === 1 ? "" : "s"} already answered. Those
+            answers are saved either way.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Button
@@ -224,7 +243,10 @@ function StudyPageContent() {
               variant="secondary"
               onClick={() => {
                 clearSession(deckId);
-                setDecision(freshSession(deckId));
+                // "Start fresh" means the deck's due cards: any chosen set was
+                // consumed on the way in, and this button is the offer to
+                // abandon a session rather than to re-run a selection.
+                setDecision(freshSession(deckId, null));
               }}
             >
               Start fresh
@@ -282,7 +304,10 @@ function StudyPageContent() {
           &larr; Back to deck
         </Link>
         <p className="text-sm text-muted-foreground">
-          {dueCards.length} card{dueCards.length === 1 ? "" : "s"} due
+          {/* Chosen cards are not due cards — most of the time they are being
+              studied precisely because they are not. */}
+          {dueCards.length} card{dueCards.length === 1 ? "" : "s"}{" "}
+          {active?.kind === "study" && active.picked ? "picked" : "due"}
         </p>
       </div>
       <h1 className="mt-2 text-xl font-bold tracking-tight">{deck.title}</h1>
