@@ -22,6 +22,17 @@ import {
 } from "lucide-react";
 import { CardHistory } from "@/components/card-history";
 import { EditCardDialog } from "@/components/edit-card-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { deleteCardAction } from "@/app/deck/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { accentStyle } from "@/lib/deck-accent";
@@ -46,6 +57,7 @@ import {
 import { CardTimer } from "./card-timer";
 import { useCardTimer } from "./use-card-timer";
 import { rateCardAction, markDeckStudiedAction } from "./actions";
+import { Trash2 } from "lucide-react";
 
 /** Study needs the whole card now, since behaviour branches on its type. */
 type StudyCard = CardRow;
@@ -54,6 +66,12 @@ interface StudySessionProps {
   /** The full set this session started from — drives "review missed cards". */
   cards: StudyCard[];
   deckId: number;
+  /**
+   * Told when a card is deleted, so the page's own copy of the set can drop it
+   * too — otherwise the header keeps counting cards that no longer exist.
+   */
+  onCardDeleted?: (cardId: number) => void;
+
   /** Working order when resuming; defaults to `cards`. */
   initialOrder?: StudyCard[];
   initialIndex?: number;
@@ -72,7 +90,10 @@ type Rating = "got_it" | "missed";
 
 /** Card fronts are rich text; the summary list wants one plain line of it. */
 function plainText(html: string): string {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function shuffleArray<T>(arr: T[]): T[] {
@@ -86,6 +107,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 
 export function StudySession({
   cards,
+  onCardDeleted,
   deckId,
   initialOrder,
   initialIndex = 0,
@@ -109,6 +131,36 @@ export function StudySession({
   );
   const [round, setRound] = useState(initialRound);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, startDeleting] = useTransition();
+
+  /**
+   * Remove the card on screen and carry on with the rest.
+   *
+   * The session holds its own copy of the list, so the card has to go from
+   * there as well as from the document — otherwise it would stay on screen,
+   * already deleted, and rating it would write a result for a card that no
+   * longer exists.
+   *
+   * The index stays put, which lands on the next card because the list has
+   * shortened beneath it. On the last card there is nothing after it, so the
+   * session ends.
+   */
+  function deleteCurrent() {
+    if (!current) return;
+    const doomed = current.id;
+    startDeleting(async () => {
+      await deleteCardAction({ cardId: doomed });
+      setDeleteOpen(false);
+      onCardDeleted?.(doomed);
+      setStudyCards((list) => {
+        const next = list.filter((c) => c.id !== doomed);
+        if (next.length === 0 || currentIndex >= next.length) setFinished(true);
+        return next;
+      });
+      setRevealed(false);
+    });
+  }
   /**
    * A scan being examined at full size, or null.
    *
@@ -194,7 +246,8 @@ export function StudySession({
 
   // A quiz card puts its options up straight away, so it is two columns from
   // the moment it appears; a basic card only becomes two when it is turned over.
-  const answerShowing = !finished && current !== undefined && (revealed || interactive);
+  const answerShowing =
+    !finished && current !== undefined && (revealed || interactive);
   useEffect(() => {
     onAnswerShowing?.(answerShowing);
   }, [answerShowing, onAnswerShowing]);
@@ -448,8 +501,7 @@ export function StudySession({
   }, [reveal, goPrev, rate, finished, revealed, interactive, editOpen, zoomed]);
 
   if (finished) {
-    const scorePercent =
-      total > 0 ? Math.round((gotItCount / total) * 100) : 0;
+    const scorePercent = total > 0 ? Math.round((gotItCount / total) * 100) : 0;
 
     return (
       <div className="mt-10 flex flex-col items-center gap-8 text-center">
@@ -625,9 +677,7 @@ export function StudySession({
       <div className="flex w-full items-center justify-between">
         <p className="text-sm text-muted-foreground">
           Card {currentIndex + 1} of {total}
-          {round > 1 && (
-            <span className="ml-2 text-xs">(Round {round})</span>
-          )}
+          {round > 1 && <span className="ml-2 text-xs">(Round {round})</span>}
         </p>
         <div className="flex items-center gap-3">
           {gotItCount + missedCount > 0 && (
@@ -678,6 +728,19 @@ export function StudySession({
           >
             <Pencil className="size-3.5" />
             Edit
+          </Button>
+          {/* Studying is where a bad card is noticed — a duplicate, a typo, a
+              question that turned out to be wrong. Until now that meant
+              remembering it and going back to the deck afterwards. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDeleteOpen(true)}
+            title="Delete this card"
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="size-3.5" />
+            <span className="sr-only">Delete this card</span>
           </Button>
           <Button variant="ghost" size="sm" onClick={shuffleCurrent}>
             <Shuffle className="size-3.5" />
@@ -783,9 +846,9 @@ export function StudySession({
         {current.type === "basic" && revealed && (
           <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
             <CardContent
-            className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3"
-            onClickCapture={openImageOnClick}
-          >
+              className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3"
+              onClickCapture={openImageOnClick}
+            >
               {/* Same auto-margin centring as the question. */}
               <div className="m-auto w-full">
                 <p className="mb-1 text-center text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
@@ -885,6 +948,27 @@ export function StudySession({
           }
         />
       )}
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this card?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {/* Asked mid-session, where a wrong tap costs a card rather than
+                  a rating, and the keyboard is already in use for answering. */}
+              It goes from the deck, and the session carries on with the rest.
+              This cannot be undone here, though a copy of your decks before
+              this change stays in your sync repo&rsquo;s history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction disabled={deleting} onClick={deleteCurrent}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* The picture with the screen as its frame. Rendered here rather than in
           a dialog component because it wants no chrome at all: the scan, a way

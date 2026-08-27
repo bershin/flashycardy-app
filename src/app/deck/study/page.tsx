@@ -313,6 +313,13 @@ function StudyPageContent() {
       <h1 className="mt-2 text-xl font-bold tracking-tight">{deck.title}</h1>
       <StudySession
         cards={dueCards}
+        onCardDeleted={(cardId) =>
+          setDecision((d) =>
+            d?.kind === "study"
+              ? { ...d, cards: d.cards.filter((c) => c.id !== cardId) }
+              : d,
+          )
+        }
         deckId={deckId}
         initialOrder={active?.kind === "study" ? active.order : undefined}
         initialIndex={active?.kind === "study" ? active.index : 0}
