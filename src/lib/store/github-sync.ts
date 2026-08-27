@@ -280,10 +280,18 @@ export type PullResult =
  * Fetch the remote document. Does not apply it — the caller decides, because a
  * pull that would discard newer local edits needs the user's consent.
  */
-export async function pull(config: SyncConfig): Promise<PullResult> {
+export async function pull(
+  config: SyncConfig,
+  options: { force?: boolean } = {},
+): Promise<PullResult> {
   const meta = await fetchMeta(config);
   if (!meta) return { kind: "no-remote" };
-  if (meta.sha === getSha()) return { kind: "unchanged" };
+  // Normally an unchanged SHA means there is nothing to fetch. `force` is for
+  // the case where the document is not what we are after: a device that has
+  // never recorded what it and GitHub agree on needs the contents to write that
+  // down, and would otherwise skip the download forever and keep merging as if
+  // it had no history — which never applies a deletion.
+  if (meta.sha === getSha() && !options.force) return { kind: "unchanged" };
 
   const text = await fetchBlob(config, meta.sha);
   const parsed = JSON.parse(text) as SerializedDbDoc;
@@ -411,7 +419,7 @@ async function pushLocked(
  * before trying again.
  */
 async function pullAndMerge(config: SyncConfig): Promise<{ owesRemote: boolean }> {
-  const result = await pull(config);
+  const result = await pull(config, { force: readBase() === null });
   if (result.kind !== "pulled") return { owesRemote: false };
 
   const { doc, report } = mergeDocs(readBase(), getSnapshot(), result.doc);
