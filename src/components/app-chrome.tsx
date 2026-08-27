@@ -29,6 +29,7 @@ import { useStoreBootstrap, useStoreNotice } from "@/lib/store/use-store";
 import { dismissNotice } from "@/lib/store/local-store";
 import { TodoReminders } from "@/components/todo-reminders";
 import {
+  getLastCheckedAt,
   getSyncError,
   getSyncState,
   subscribeSync,
@@ -127,11 +128,7 @@ function ThemeToggle() {
   // The theme is stamped onto <html> by an inline script before React runs, so
   // it is external state. Reading it through useSyncExternalStore lets React
   // reconcile the prerendered guess with the real value on hydration.
-  const theme = useSyncExternalStore(
-    subscribeTheme,
-    getTheme,
-    getServerTheme,
-  );
+  const theme = useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
   const next: Theme = theme === "dark" ? "light" : "dark";
 
   return (
@@ -157,9 +154,28 @@ function ThemeToggle() {
   );
 }
 
+/**
+ * "just now", "4 minutes ago" — how long since GitHub was last asked.
+ *
+ * Computed when the tooltip renders, which is when it opens, so there is no
+ * ticking clock re-rendering the header for a line nobody is reading.
+ */
+function ago(at: Date | null): string {
+  if (!at) return "not yet checked";
+  const seconds = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000));
+  if (seconds < 45) return "checked just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60)
+    return `checked ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  return `checked ${hours} hour${hours === 1 ? "" : "s"} ago`;
+}
+
 const LABELS: Record<SyncState, string> = {
   disabled: "Sync is off — set up a GitHub repo in Settings",
-  idle: "Everything is synced to GitHub",
+  // Says what it knows rather than what it hopes: the tick means the last
+  // attempt succeeded, and the tooltip adds when that was.
+  idle: "In step with GitHub as of the last check",
   pulling: "Checking GitHub for changes…",
   pushing: "Saving to GitHub…",
   conflict: "This file changed on GitHub — resolve in Settings",
@@ -174,6 +190,11 @@ function SyncIndicator() {
     () => "disabled" as SyncState,
   );
   const error = useSyncExternalStore(subscribeSync, getSyncError, () => null);
+  const checkedAt = useSyncExternalStore(
+    subscribeSync,
+    getLastCheckedAt,
+    () => null,
+  );
 
   if (state === "disabled") {
     return (
@@ -210,7 +231,11 @@ function SyncIndicator() {
           </Link>
         }
       />
-      <TooltipContent>{error ? `${LABELS[state]} — ${error}` : LABELS[state]}</TooltipContent>
+      <TooltipContent>
+        {error
+          ? `${LABELS[state]} — ${error}`
+          : `${LABELS[state]} · ${ago(checkedAt)}`}
+      </TooltipContent>
     </Tooltip>
   );
 }

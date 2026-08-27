@@ -26,6 +26,20 @@ const LAST_SYNCED_KEY = "flashycardy.sync.lastSyncedAt";
 /** Web Locks name holding pushes to one tab at a time. */
 const SYNC_LOCK = "flashycardy.sync.push";
 const PUSH_DEBOUNCE_MS = 3000;
+
+/**
+ * How often a visible tab asks GitHub whether anything changed.
+ *
+ * Without this the app only ever pulled on startup, focus, becoming visible,
+ * and coming back online — so a window left open and focused never learned
+ * anything at all. Two machines open at once would sit indefinitely on
+ * different documents, each showing a green tick, because neither had failed at
+ * anything; neither had looked.
+ *
+ * Only while visible: a hidden tab polling costs requests against the rate
+ * limit to learn something it will be told anyway the moment it is looked at.
+ */
+const POLL_INTERVAL_MS = 60_000;
 const API = "https://api.github.com";
 
 export type SyncConfig = {
@@ -71,6 +85,26 @@ export function getSyncState(): SyncState {
 
 export function getSyncError(): string | null {
   return lastError;
+}
+
+/**
+ * When GitHub was last asked, as opposed to when data last moved.
+ *
+ * `getLastSyncedAt` records the last time something actually transferred, which
+ * is the wrong number for "is this window current?" — a document that has not
+ * changed in a week is perfectly in sync, and its last *sync* was a week ago.
+ * Kept in memory rather than localStorage because it describes this tab's
+ * knowledge, and another tab's checking says nothing about this one's.
+ */
+let lastCheckedAt: Date | null = null;
+
+export function getLastCheckedAt(): Date | null {
+  return lastCheckedAt;
+}
+
+function markChecked() {
+  lastCheckedAt = new Date();
+  for (const listener of listeners) listener();
 }
 
 export function getLastSyncedAt(): Date | null {
@@ -151,7 +185,13 @@ async function fetchMeta(config: SyncConfig): Promise<ContentsMeta | null> {
   const url = `${API}/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(
     config.path,
   )}?ref=${encodeURIComponent(config.branch)}`;
-  const response = await fetch(url, { headers: headers(config) });
+  // GitHub answers this endpoint with `cache-control: public, max-age=60`, so
+  // without opting out a pull can be served from the browser's cache and hand
+  // back a SHA up to a minute old — a check that never leaves the machine.
+  const response = await fetch(url, {
+    headers: headers(config),
+    cache: "no-store",
+  });
 
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(await describe(response));
@@ -177,21 +217,27 @@ async function describe(response: Response): Promise<string> {
   } catch {
     /* non-JSON error body */
   }
-  if (response.status === 401) return `GitHub rejected the token (401)${detail}`;
+  if (response.status === 401)
+    return `GitHub rejected the token (401)${detail}`;
   if (response.status === 403) return `Access forbidden (403)${detail}`;
   if (response.status === 404) return `Repo or path not found (404)${detail}`;
   return `GitHub returned ${response.status}${detail}`;
 }
 
 /** Verify the configured repo and token work, without changing anything. */
-export async function testConnection(config: SyncConfig): Promise<
+export async function testConnection(
+  config: SyncConfig,
+): Promise<
   { ok: true; exists: boolean; size: number } | { ok: false; error: string }
 > {
   try {
     const meta = await fetchMeta(config);
     return { ok: true, exists: meta !== null, size: meta?.size ?? 0 };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -243,8 +289,7 @@ function sameContent(a: SerializedDbDoc, b: SerializedDbDoc): boolean {
  * the conflict handling below still catches the race after the fact.
  */
 async function withSyncLock<T>(work: () => Promise<T>): Promise<T> {
-  const locks =
-    typeof navigator !== "undefined" ? navigator.locks : undefined;
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
   if (!locks) return work();
   return await locks.request(SYNC_LOCK, async () => await work());
 }
@@ -453,6 +498,7 @@ export function startSync(): () => void {
           markSynced();
         }
       }
+      markChecked();
       setState("idle");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -463,6 +509,12 @@ export function startSync(): () => void {
   void doPull();
 
   const unsubscribe = onChange(() => schedulePush());
+
+  // Only while visible — see POLL_INTERVAL_MS. A tab that is hidden gets its
+  // pull from the visibility handler the moment it is looked at again.
+  const poll = setInterval(() => {
+    if (document.visibilityState === "visible") void doPull();
+  }, POLL_INTERVAL_MS);
 
   const onFocus = () => void doPull();
   const onVisibility = () => {
@@ -477,6 +529,7 @@ export function startSync(): () => void {
 
   return () => {
     unsubscribe();
+    clearInterval(poll);
     window.removeEventListener("focus", onFocus);
     document.removeEventListener("visibilitychange", onVisibility);
     window.removeEventListener("online", onOnline);
