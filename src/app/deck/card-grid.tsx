@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import {
   ArrowDownWideNarrow,
   BookOpen,
+  Filter,
   CalendarClock,
   CheckSquare,
   Dices,
@@ -111,6 +112,92 @@ function todayKey(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
+/**
+ * The ways a deck can be narrowed, each with the question it answers.
+ *
+ * Single-select rather than a set of independent checkboxes: combinations like
+ * "overdue and streak 2 and never missed" are rarely what anyone wants and
+ * would leave the count meaning something different every time. One at a time
+ * keeps "showing 12 of 340" true and legible.
+ *
+ * The counts are worked out for every filter whether or not it is chosen, so
+ * the menu says how many each would leave before you pick it — which is most of
+ * the value in asking.
+ */
+type Filter = {
+  value: string;
+  label: string;
+  test: (card: CardRow, now: Bounds) => boolean;
+};
+
+/** Day boundaries, computed once per render rather than per card. */
+type Bounds = { startOfToday: number; endOfToday: number; endOfWeek: number };
+
+const FILTERS: Filter[] = [
+  { value: "all", label: "All cards", test: () => true },
+  {
+    value: "overdue",
+    label: "Overdue",
+    test: (c, n) => c.nextReviewAt.getTime() < n.startOfToday,
+  },
+  {
+    value: "today",
+    label: "Due today",
+    test: (c, n) => c.nextReviewAt.getTime() < n.endOfToday,
+  },
+  {
+    value: "week",
+    label: "Due within a week",
+    test: (c, n) => c.nextReviewAt.getTime() < n.endOfWeek,
+  },
+  {
+    value: "missed",
+    label: "Missed at least once",
+    test: (c) => c.timesMissed > 0,
+  },
+  { value: "clean", label: "Never missed", test: (c) => c.timesMissed === 0 },
+  {
+    value: "streak0",
+    label: "Streak 0",
+    test: (c) => c.consecutiveCorrect === 0,
+  },
+  {
+    value: "streak1",
+    label: "Streak 1",
+    test: (c) => c.consecutiveCorrect === 1,
+  },
+  {
+    value: "streak2",
+    label: "Streak 2",
+    test: (c) => c.consecutiveCorrect === 2,
+  },
+  {
+    value: "streak3",
+    label: "Streak 3 or more",
+    test: (c) => c.consecutiveCorrect >= 3,
+  },
+  {
+    value: "varying",
+    label: "Varying only",
+    test: (c) => c.type === "generated",
+  },
+  { value: "fixed", label: "Fixed only", test: (c) => c.type !== "generated" },
+];
+
+function boundsNow(): Bounds {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const week = new Date(start);
+  week.setDate(week.getDate() + 7);
+  return {
+    startOfToday: start.getTime(),
+    endOfToday: end.getTime(),
+    endOfWeek: week.getTime(),
+  };
+}
+
 const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
   incremental: "Widening",
   weekly: "Steady",
@@ -161,7 +248,7 @@ export function CardGrid({ cards }: CardGridProps) {
    * remembering where you were. Filtering to the fixed ones turns that into a
    * list that visibly shortens.
    */
-  const [onlyFixed, setOnlyFixed] = useState(false);
+  const [filter, setFilter] = useState("all");
   const [varyDeckOpen, setVaryDeckOpen] = useState(false);
   /** Which bulk edit is open, if any — only one at a time in the toolbar. */
   const [editing, setEditing] = useState<"schedule" | "due" | null>(null);
@@ -219,9 +306,15 @@ export function CardGrid({ cards }: CardGridProps) {
 
   const displayCards = shuffled ?? sortCards(cards, sort);
   const varying = cards.filter((c) => c.type === "generated").length;
-  const visibleCards = onlyFixed
-    ? displayCards.filter((c) => c.type !== "generated")
-    : displayCards;
+  const bounds = boundsNow();
+  const counts = new Map(
+    FILTERS.map((f) => [
+      f.value,
+      cards.filter((c) => f.test(c, bounds)).length,
+    ]),
+  );
+  const active = FILTERS.find((f) => f.value === filter) ?? FILTERS[0];
+  const visibleCards = displayCards.filter((c) => active.test(c, bounds));
   const allSelected = selected.size === visibleCards.length;
 
   return (
@@ -382,16 +475,47 @@ export function CardGrid({ cards }: CardGridProps) {
                 {varying} of {cards.length} vary
               </span>
             )}
-            {varying > 0 && varying < cards.length && (
-              <Button
-                variant={onlyFixed ? "default" : "outline"}
-                size="sm"
-                onClick={() => setOnlyFixed((only) => !only)}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={buttonVariants({
+                  variant: filter === "all" ? "outline" : "default",
+                  size: "sm",
+                })}
               >
-                <Dices className="size-3.5" />
-                {onlyFixed ? "Showing fixed only" : "Hide the varying ones"}
-              </Button>
-            )}
+                <Filter className="size-3.5" />
+                {/* The count is the point: "showing 12 of 340" is the answer
+                    the filter was opened to get. */}
+                {filter === "all"
+                  ? "Filter"
+                  : `${active.label} · ${visibleCards.length} of ${cards.length}`}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuRadioGroup
+                  value={filter}
+                  onValueChange={setFilter}
+                >
+                  {FILTERS.filter(
+                    // A filter that would empty the deck, or leave it whole, is
+                    // not a choice worth offering — except "All cards", which is
+                    // how you come back.
+                    (f) =>
+                      f.value === "all" ||
+                      (counts.get(f.value)! > 0 &&
+                        counts.get(f.value)! < cards.length),
+                  ).map((option) => (
+                    <DropdownMenuRadioItem
+                      key={option.value}
+                      value={option.value}
+                    >
+                      {option.label}
+                      <span className="ml-auto pl-3 tabular-nums opacity-60">
+                        {counts.get(option.value)}
+                      </span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               variant="outline"
               size="sm"
@@ -457,6 +581,21 @@ export function CardGrid({ cards }: CardGridProps) {
           near the viewport — see the rule in globals.css. A deck of a few
           hundred image cards is otherwise laid out and painted in full before
           the first one can be looked at. */}
+      {visibleCards.length === 0 && (
+        // Reachable after editing: a filter chosen when it matched something
+        // can be left holding nothing once those cards change.
+        <p className="rounded-lg border border-border/60 bg-card/40 px-4 py-6 text-center text-sm text-muted-foreground">
+          No cards match {active.label.toLowerCase()}.{" "}
+          <button
+            type="button"
+            onClick={() => setFilter("all")}
+            className="cursor-pointer font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            Show all {cards.length}
+          </button>
+        </p>
+      )}
+
       <div className="card-list grid gap-4 sm:grid-cols-2">
         {visibleCards.map((card) => (
           <FlashCard
