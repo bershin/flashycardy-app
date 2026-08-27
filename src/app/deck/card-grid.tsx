@@ -3,10 +3,13 @@
 import { useCallback, useState } from "react";
 import {
   ArrowDownWideNarrow,
+  CalendarClock,
   CheckSquare,
   Dices,
   FolderInput,
+  Layers,
   Shuffle,
+  Trash2,
   X,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -18,6 +21,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoveCardDialog } from "@/components/move-card-dialog";
+import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  deleteCardsAction,
+  rescheduleCardsAction,
+  setCardsScheduleAction,
+} from "./actions";
+import { REVIEW_SCHEDULES, type ReviewSchedule } from "@/lib/store/types";
 import { VaryDeckDialog } from "@/components/vary-deck-dialog";
 import type { CardRow } from "@/lib/store/types";
 import { FlashCard } from "./flash-card";
@@ -76,6 +96,23 @@ function sortCards(cards: CardRow[], sort: SortKey): CardRow[] {
   }
 }
 
+/** Today as `YYYY-MM-DD`, in the reader's own calendar. */
+/** How a chosen date reads back in the confirmation line. */
+function dueLabelFor(key: string): string {
+  const [year, month, day] = key.split("-").map(Number);
+  return dueLabel(new Date(year, month - 1, day));
+}
+
+function todayKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
+  incremental: "Widening",
+  weekly: "Steady",
+};
+
 /** "Today", "Tomorrow", or a short date — relative where it is most read. */
 function dueLabel(date: Date): string {
   const day = new Date(date);
@@ -120,6 +157,28 @@ export function CardGrid({ cards }: CardGridProps) {
    */
   const [onlyFixed, setOnlyFixed] = useState(false);
   const [varyDeckOpen, setVaryDeckOpen] = useState(false);
+  /** Which bulk edit is open, if any — only one at a time in the toolbar. */
+  const [editing, setEditing] = useState<"schedule" | "due" | null>(null);
+  const [dueDate, setDueDate] = useState(() => todayKey());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function applyToSelection(
+    work: (ids: number[]) => Promise<unknown>,
+    said: (n: number) => string,
+  ) {
+    const ids = [...selected];
+    setBusy(true);
+    try {
+      await work(ids);
+      setNote(said(ids.length));
+      setEditing(null);
+      exitSelection();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (cards !== prevCards) {
     setPrevCards(cards);
@@ -180,19 +239,118 @@ export function CardGrid({ cards }: CardGridProps) {
             >
               {allSelected ? "Clear all" : "Select all"}
             </Button>
-            <Button
-              size="sm"
-              disabled={selected.size === 0}
-              onClick={() => setMoveOpen(true)}
-            >
-              <FolderInput className="size-3.5" />
-              Move
-              {selected.size > 0 ? ` ${selected.size}` : ""}
-            </Button>
-            <Button variant="outline" size="sm" onClick={exitSelection}>
-              <X className="size-3.5" />
-              Done
-            </Button>
+            {/* Each control acts on the ticked cards. Grouped as one row so
+                the count above them is plainly what they all apply to. */}
+            {editing === "schedule" ? (
+              <>
+                <span className="text-xs text-muted-foreground">
+                  Put {selected.size} on
+                </span>
+                {REVIEW_SCHEDULES.map((schedule) => (
+                  <Button
+                    key={schedule}
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      applyToSelection(
+                        (ids) =>
+                          setCardsScheduleAction({ cardIds: ids, schedule }),
+                        (n) =>
+                          `Put ${n} card${n === 1 ? "" : "s"} on ${SCHEDULE_LABELS[schedule]}.`,
+                      )
+                    }
+                  >
+                    {SCHEDULE_LABELS[schedule]}
+                  </Button>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditing(null)}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : editing === "due" ? (
+              <>
+                <span className="text-xs text-muted-foreground">
+                  Review {selected.size} on
+                </span>
+                <Input
+                  type="date"
+                  value={dueDate}
+                  autoFocus
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="h-8 w-[9.5rem] px-2 py-0 text-xs"
+                />
+                <Button
+                  size="sm"
+                  disabled={busy || !dueDate}
+                  onClick={() =>
+                    applyToSelection(
+                      (ids) =>
+                        rescheduleCardsAction({ cardIds: ids, date: dueDate }),
+                      (n) =>
+                        `Moved ${n} card${n === 1 ? "" : "s"} to ${dueLabelFor(dueDate)}.`,
+                    )
+                  }
+                >
+                  Set date
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditing(null)}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={selected.size === 0}
+                  onClick={() => setEditing("schedule")}
+                >
+                  <Layers className="size-3.5" />
+                  Schedule
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={selected.size === 0}
+                  onClick={() => setEditing("due")}
+                >
+                  <CalendarClock className="size-3.5" />
+                  Review date
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={selected.size === 0}
+                  onClick={() => setMoveOpen(true)}
+                >
+                  <FolderInput className="size-3.5" />
+                  Move
+                  {selected.size > 0 ? ` ${selected.size}` : ""}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={selected.size === 0}
+                  onClick={() => setConfirmDelete(true)}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="size-3.5" />
+                  Delete
+                </Button>
+                <Button variant="outline" size="sm" onClick={exitSelection}>
+                  <X className="size-3.5" />
+                  Done
+                </Button>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -266,6 +424,12 @@ export function CardGrid({ cards }: CardGridProps) {
         )}
       </div>
 
+      {note && (
+        <p role="status" className="mb-3 text-xs text-muted-foreground">
+          {note}
+        </p>
+      )}
+
       {/* `card-list` lets the browser skip the work for cards that are nowhere
           near the viewport — see the rule in globals.css. A deck of a few
           hundred image cards is otherwise laid out and painted in full before
@@ -284,6 +448,36 @@ export function CardGrid({ cards }: CardGridProps) {
           />
         ))}
       </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selected.size} card{selected.size === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {/* Said plainly: this is the one bulk action with nothing behind
+                  it. The rest can be set back by setting them again. */}
+              This cannot be undone here. A copy of your decks before this
+              change stays in your sync repo&rsquo;s history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep them</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busy}
+              onClick={() =>
+                applyToSelection(
+                  (ids) => deleteCardsAction({ cardIds: ids }),
+                  (n) => `Deleted ${n} card${n === 1 ? "" : "s"}.`,
+                )
+              }
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {varyDeckOpen && (
         <VaryDeckDialog cards={cards} open onOpenChange={setVaryDeckOpen} />

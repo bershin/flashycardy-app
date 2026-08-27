@@ -439,6 +439,62 @@ export async function recordStudyResult(
  * Returns `undefined` if the card or target isn't the user's, or if the target
  * has sub-decks and therefore cannot hold cards of its own.
  */
+/**
+ * Put a batch of cards on a different review schedule.
+ *
+ * Only the ladder changes. The streak is left where it is, because it is a
+ * record of what happened rather than a position on a particular ladder — and
+ * a card whose streak already exceeds its new ladder is simply learned by the
+ * new rule, which the next correct answer will act on.
+ */
+export async function setCardsSchedule(
+  cardIds: number[],
+  userId: string,
+  schedule: ReviewSchedule,
+): Promise<number> {
+  if (cardIds.length === 0) return 0;
+
+  const changed = await mutate((draft) => {
+    const wanted = new Set(cardIds);
+    const now = new Date();
+    let count = 0;
+
+    draft.cards = draft.cards.map((card) => {
+      if (!wanted.has(card.id) || !ownsCard(draft, card, userId)) return card;
+      if (card.schedule === schedule) return card;
+      count += 1;
+      return { ...card, schedule, updatedAt: now };
+    });
+
+    return count;
+  });
+  return changed ?? 0;
+}
+
+/**
+ * Delete a batch of cards.
+ *
+ * One pass rather than a loop over `deleteCard`: each of those is its own write
+ * to the document and its own sync push, so deleting fifty cards would be fifty
+ * commits and fifty chances to be interrupted half-done.
+ */
+export async function deleteCards(
+  cardIds: number[],
+  userId: string,
+): Promise<number> {
+  if (cardIds.length === 0) return 0;
+
+  const removed = await mutate((draft) => {
+    const wanted = new Set(cardIds);
+    const before = draft.cards.length;
+    draft.cards = draft.cards.filter(
+      (card) => !(wanted.has(card.id) && ownsCard(draft, card, userId)),
+    );
+    return before - draft.cards.length;
+  });
+  return removed ?? 0;
+}
+
 export async function moveCards(
   cardIds: number[],
   userId: string,

@@ -15,7 +15,7 @@ import {
   validateGenerated,
 } from "@/lib/generated-card";
 import { getDeckByIdForUser } from "@/db/queries/decks";
-import { NEW_CARD_SCHEDULE } from "@/lib/store/types";
+import { NEW_CARD_SCHEDULE, REVIEW_SCHEDULES } from "@/lib/store/types";
 import {
   insertCard,
   getCardByIdForUser,
@@ -26,6 +26,8 @@ import {
   restoreCardDates,
   bulkInsertCards,
   archiveLearnedCards,
+  setCardsSchedule,
+  deleteCards,
 } from "@/db/queries/cards";
 
 /**
@@ -250,6 +252,32 @@ export async function moveCardsAction(data: MoveCardsInput) {
   const moved = await moveCards(parsed.cardIds, userId, parsed.targetDeckId);
   if (moved.length === 0) throw new Error("That deck can't hold cards.");
   return moved;
+}
+
+const cardIdsSchema = z.array(z.number()).min(1);
+
+const setScheduleSchema = z.object({
+  cardIds: cardIdsSchema,
+  schedule: z.enum(REVIEW_SCHEDULES),
+});
+
+/** Put a batch of cards on a different review ladder. */
+export async function setCardsScheduleAction(
+  data: z.infer<typeof setScheduleSchema>,
+) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = setScheduleSchema.parse(data);
+  return setCardsSchedule(parsed.cardIds, userId, parsed.schedule);
+}
+
+/** Delete a batch of cards. There is no undo, so the caller must confirm. */
+export async function deleteCardsAction(data: { cardIds: number[] }) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  return deleteCards(cardIdsSchema.parse(data.cardIds), userId);
 }
 
 const rescheduleCardsSchema = z.object({
