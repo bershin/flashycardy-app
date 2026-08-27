@@ -27,6 +27,7 @@ import {
   bulkInsertCards,
   archiveLearnedCards,
   setCardsSchedule,
+  setScheduleUnderDeck,
   deleteCards,
 } from "@/db/queries/cards";
 
@@ -270,6 +271,22 @@ export async function setCardsScheduleAction(
 
   const parsed = setScheduleSchema.parse(data);
   return setCardsSchedule(parsed.cardIds, userId, parsed.schedule);
+}
+
+const deckScheduleSchema = z.object({
+  deckId: z.number(),
+  schedule: z.enum(REVIEW_SCHEDULES),
+});
+
+/** Put a whole collection — a deck and its sub-decks — on one schedule. */
+export async function setDeckScheduleAction(
+  data: z.infer<typeof deckScheduleSchema>,
+) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = deckScheduleSchema.parse(data);
+  return setScheduleUnderDeck(parsed.deckId, userId, parsed.schedule);
 }
 
 /** Delete a batch of cards. There is no undo, so the caller must confirm. */

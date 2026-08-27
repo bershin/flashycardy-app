@@ -440,6 +440,38 @@ export async function recordStudyResult(
  * has sub-decks and therefore cannot hold cards of its own.
  */
 /**
+ * Every card in a deck and in its sub-decks.
+ *
+ * Decks are one level deep — `selectDeckMoveOptions` enforces it — so this is
+ * the deck plus its children, with no recursion to get wrong.
+ *
+ * It exists because a parent deck's page lists its sub-decks rather than cards,
+ * so there is nowhere on it to select a card, and applying anything across a
+ * collection meant visiting every sub-deck in turn.
+ */
+export function selectCardsUnderDeck(
+  db: DbDoc,
+  deckId: number,
+  userId: string,
+): CardRow[] {
+  const owned = db.decks.filter((d) => d.userId === userId);
+  const inScope = new Set(
+    owned.filter((d) => d.id === deckId || d.parentId === deckId).map((d) => d.id),
+  );
+  return inScope.size === 0 ? [] : db.cards.filter((c) => inScope.has(c.deckId));
+}
+
+/** Put every card in a deck and its sub-decks on one schedule. */
+export async function setScheduleUnderDeck(
+  deckId: number,
+  userId: string,
+  schedule: ReviewSchedule,
+): Promise<number> {
+  const ids = selectCardsUnderDeck(getSnapshot(), deckId, userId).map((c) => c.id);
+  return setCardsSchedule(ids, userId, schedule);
+}
+
+/**
  * Put a batch of cards on a different review schedule.
  *
  * Only the ladder changes. The streak is left where it is, because it is a

@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useSyncExternalStore, useTransition } from "react";
+import {
+  useCallback,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   BookOpen,
   FolderInput,
+  Layers,
   Pencil,
   Plus,
   Sparkles,
@@ -29,7 +35,26 @@ import { AddCardDialog } from "@/components/add-card-dialog";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
 import { MoveDeckDialog } from "@/components/move-deck-dialog";
 import { deleteDeckAction } from "@/app/dashboard/actions";
-import { generateCardsWithAIAction } from "./actions";
+import { generateCardsWithAIAction, setDeckScheduleAction } from "./actions";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LOCAL_USER_ID } from "@/lib/auth";
+import { useStore } from "@/lib/store/use-store";
+import { selectCardsUnderDeck } from "@/db/queries/cards";
+import {
+  REVIEW_SCHEDULES,
+  type DbDoc,
+  type ReviewSchedule,
+} from "@/lib/store/types";
+
+const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
+  incremental: "Widening",
+  weekly: "Steady",
+};
 
 interface DeckHeaderProps {
   deck: {
@@ -54,6 +79,15 @@ export function DeckHeader({
   const [createSubDeckOpen, setCreateSubDeckOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [scheduling, startScheduling] = useTransition();
+  const [scheduleNote, setScheduleNote] = useState<string | null>(null);
+  /** Counted across the deck and its sub-decks — what the menu acts on. */
+  const underCount = useStore(
+    useCallback(
+      (db: DbDoc) => selectCardsUnderDeck(db, deck.id, LOCAL_USER_ID).length,
+      [deck.id],
+    ),
+  );
   const [isPending, startTransition] = useTransition();
   const [isGenerating, startGenerating] = useTransition();
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -118,6 +152,43 @@ export function DeckHeader({
           <FolderInput className="size-4" />
           <span className="sr-only">Move deck</span>
         </Button>
+        {/* Reaches the cards a parent deck's page cannot show. Its page lists
+            sub-decks, so there is nothing there to select, and putting a whole
+            collection on one schedule otherwise meant visiting each sub-deck. */}
+        {underCount > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Review schedule for every card in this deck"
+              className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+            >
+              <Layers className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {REVIEW_SCHEDULES.map((schedule) => (
+                <DropdownMenuItem
+                  key={schedule}
+                  disabled={scheduling}
+                  onClick={() =>
+                    startScheduling(async () => {
+                      const changed = await setDeckScheduleAction({
+                        deckId: deck.id,
+                        schedule,
+                      });
+                      setScheduleNote(
+                        changed === 0
+                          ? `Every card was already on ${SCHEDULE_LABELS[schedule]}.`
+                          : `Put ${changed} card${changed === 1 ? "" : "s"} on ${SCHEDULE_LABELS[schedule]}.`,
+                      );
+                    })
+                  }
+                >
+                  <Layers />
+                  Put all {underCount} on {SCHEDULE_LABELS[schedule]}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -127,6 +198,11 @@ export function DeckHeader({
           <span className="sr-only">Delete deck</span>
         </Button>
       </div>
+      {scheduleNote && (
+        <p role="status" className="mt-2 text-xs text-muted-foreground">
+          {scheduleNote}
+        </p>
+      )}
       {deck.description && (
         <p className="mt-1 text-muted-foreground">{deck.description}</p>
       )}
@@ -168,7 +244,11 @@ export function DeckHeader({
           </>
         )}
         {(hasChildren || canAddSubDeck) && (
-          <Button size="sm" variant={hasChildren ? "default" : "outline"} onClick={() => setCreateSubDeckOpen(true)}>
+          <Button
+            size="sm"
+            variant={hasChildren ? "default" : "outline"}
+            onClick={() => setCreateSubDeckOpen(true)}
+          >
             <Plus className="size-4" />
             New Sub-Deck
           </Button>
@@ -206,7 +286,9 @@ export function DeckHeader({
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete &ldquo;{deck.title}&rdquo;?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete &ldquo;{deck.title}&rdquo;?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {hasChildren
                 ? "This will permanently delete this deck, all of its sub-decks, and their cards. This action cannot be undone."
