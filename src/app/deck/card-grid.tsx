@@ -267,6 +267,10 @@ export function CardGrid({ cards }: CardGridProps) {
       await work(ids);
       setNote(said(ids.length));
       setEditing(null);
+      // Closed here, not by the button that opened it: clearing the selection
+      // leaves a confirmation asking about nothing — "Delete 0 cards?" — with
+      // the work already done and no way out of it.
+      setConfirmDelete(false);
       exitSelection();
     } finally {
       setBusy(false);
