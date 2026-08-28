@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CardRow } from "@/lib/store/types";
@@ -13,7 +13,11 @@ interface QuizAnswerProps {
    * Passed in rather than derived here so the question above and the options
    * below are always the same instance of the card.
    */
-  rolled?: { options: string[]; correctIndex: number; explanation: string | null };
+  rolled?: {
+    options: string[];
+    correctIndex: number;
+    explanation: string | null;
+  };
   /** Called once the user has seen the outcome and is ready to move on. */
   onResolved: (rating: "got_it" | "missed") => void;
   /**
@@ -58,6 +62,34 @@ export function QuizAnswer({
   const [picked, setPicked] = useState<number | null>(null);
   const answered = picked !== null;
   const wasCorrect = picked === correctIndex;
+
+  /**
+   * Right arrow moves on, once an answer is in.
+   *
+   * The same key that means "got it" on a self-rated card, which is the one
+   * this hand already knows — and on a quiz there is nothing to rate, so it
+   * carries the only meaning left: onwards. Bound only while an answer is
+   * showing, so it cannot skip a card that has not been answered.
+   */
+  useEffect(() => {
+    if (!answered) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowRight") return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        /^(INPUT|TEXTAREA)$/.test(target?.tagName ?? "")
+      ) {
+        return;
+      }
+      e.preventDefault();
+      onResolved(wasCorrect ? "got_it" : "missed");
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [answered, wasCorrect, onResolved]);
 
   function choose(index: number) {
     if (answered) return;
