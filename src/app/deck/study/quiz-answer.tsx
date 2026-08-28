@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CardRow } from "@/lib/store/types";
@@ -64,18 +64,34 @@ export function QuizAnswer({
   const wasCorrect = picked === correctIndex;
 
   /**
-   * Right arrow moves on, once an answer is in.
+   * A keyboard cursor over the options.
    *
-   * The same key that means "got it" on a self-rated card, which is the one
-   * this hand already knows — and on a quiz there is nothing to rate, so it
-   * carries the only meaning left: onwards. Bound only while an answer is
-   * showing, so it cannot skip a card that has not been answered.
+   * Held as a position in `order` — where the option sits on screen — not as an
+   * option index, so up and down move down the list as it reads rather than
+   * through the order the card was written in. Null until an arrow is pressed:
+   * highlighting an option the moment the card appears would look like a choice
+   * has already been made, and moving focus on mount would drag the page.
+   */
+  const [cursor, setCursor] = useState<number | null>(null);
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Focus follows the cursor, so Enter and Space keep working through the
+  // browser rather than through a second set of shortcuts, and a screen reader
+  // reads each option as it is reached.
+  useEffect(() => {
+    if (cursor !== null) optionRefs.current[cursor]?.focus();
+  }, [cursor]);
+
+  /**
+   * Up and down walk the options; right takes the highlighted one, and once an
+   * answer is in, right moves on to the next card.
+   *
+   * Right means "got it, onwards" on a self-rated card, which is the habit this
+   * borrows — on a quiz there is nothing to rate, so it carries the only
+   * meaning left over.
    */
   useEffect(() => {
-    if (!answered) return;
-
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "ArrowRight") return;
       const target = e.target as HTMLElement | null;
       if (
         target?.isContentEditable ||
@@ -83,13 +99,36 @@ export function QuizAnswer({
       ) {
         return;
       }
+
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (answered) {
+          onResolved(wasCorrect ? "got_it" : "missed");
+        } else if (cursor !== null) {
+          choose(order[cursor]);
+        }
+        return;
+      }
+
+      // Nothing to walk once the answer is showing: the options are spent and
+      // the only move left is the one right already makes.
+      if (answered) return;
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+
       e.preventDefault();
-      onResolved(wasCorrect ? "got_it" : "missed");
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setCursor((prev) => {
+        // The first press enters the list from the end it came from, rather
+        // than always at the top.
+        if (prev === null) return step === 1 ? 0 : order.length - 1;
+        return (prev + step + order.length) % order.length;
+      });
     };
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [answered, wasCorrect, onResolved]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answered, wasCorrect, cursor, order, onResolved]);
 
   function choose(index: number) {
     if (answered) return;
@@ -104,9 +143,13 @@ export function QuizAnswer({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="grid gap-2 overflow-y-auto">
-        {order.map((optionIndex) => {
+        {order.map((optionIndex, position) => {
           const isCorrect = optionIndex === correctIndex;
           const isPicked = optionIndex === picked;
+
+          // Drawn from the cursor rather than from :focus-visible, so the
+          // highlight is the same whether focus arrived by key or by tab.
+          const onCursor = !answered && position === cursor;
 
           const tone = !answered
             ? "border-border hover:-translate-y-0.5 hover:border-[var(--deck-accent-line)] hover:bg-muted"
@@ -119,10 +162,17 @@ export function QuizAnswer({
           return (
             <button
               key={optionIndex}
+              ref={(node) => {
+                optionRefs.current[position] = node;
+              }}
               type="button"
               disabled={answered}
               onClick={() => choose(optionIndex)}
-              className={`flex items-center gap-3 rounded-xl border p-4 text-left text-base transition-all disabled:cursor-default ${tone}`}
+              className={`flex items-center gap-3 rounded-xl border p-4 text-left text-base transition-all outline-none disabled:cursor-default ${tone} ${
+                onCursor
+                  ? "-translate-y-0.5 border-[var(--deck-accent-line)] bg-muted ring-2 ring-[var(--deck-accent-line)]"
+                  : ""
+              }`}
             >
               <span className="flex size-6 shrink-0 items-center justify-center">
                 {answered && isCorrect && <Check className="size-5" />}
