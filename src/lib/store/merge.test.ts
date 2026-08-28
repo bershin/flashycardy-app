@@ -161,6 +161,41 @@ test("both machines reach the same document from either direction", () => {
   assert.deepEqual(fronts(mergeDocs(base, a, b).doc), fronts(mergeDocs(base, b, a).doc));
 });
 
+test("studying a deck on one machine shows on the other", () => {
+  // The reported bug: marking a deck studied sets lastStudiedAt and leaves
+  // updatedAt alone, so comparing updatedAt tied and each machine kept its own
+  // copy — the tag never crossed.
+  const shared = doc({ decks: [deck(1, "Maths", T0)] });
+  const base = baseOf(shared);
+
+  const studied: DeckRow = { ...deck(1, "Maths", T0), lastStudiedAt: at(30) };
+  const local = doc({ decks: [deck(1, "Maths", T0)] });     // has not studied
+  const remote = doc({ decks: [studied] });                  // studied over there
+
+  const { doc: merged, report } = mergeDocs(base, local, remote);
+  assert.equal(
+    merged.decks[0].lastStudiedAt?.getTime(),
+    at(30).getTime(),
+    "the study stamp must arrive",
+  );
+  assert.equal(report.localChanged, true, "and this device must adopt it");
+});
+
+test("a studied deck is not overwritten by an unstudied copy", () => {
+  const shared = doc({ decks: [deck(1, "Maths", T0)] });
+  const base = baseOf(shared);
+  const studied: DeckRow = { ...deck(1, "Maths", T0), lastStudiedAt: at(30) };
+
+  // This machine did the studying; the other one has the older, unstudied row.
+  const { doc: merged, report } = mergeDocs(
+    base,
+    doc({ decks: [studied] }),
+    doc({ decks: [deck(1, "Maths", T0)] }),
+  );
+  assert.equal(merged.decks[0].lastStudiedAt?.getTime(), at(30).getTime());
+  assert.equal(report.remoteChanged, true, "and it must be pushed back");
+});
+
 test("an unsynced document does not clear a populated one", () => {
   // The failure that started this: a fresh device pulling, or a stale one
   // pushing, must never empty the other side.

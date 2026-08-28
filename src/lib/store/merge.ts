@@ -37,18 +37,36 @@ export type SyncBase = {
 
 type Row = { id: number; createdAt: Date; updatedAt: Date };
 
-function stamps(rows: readonly Row[]): Record<number, number> {
+/**
+ * When a row last changed, for deciding which side is newer.
+ *
+ * Not always `updatedAt`. Marking a deck studied deliberately leaves that field
+ * alone — studying is not editing — so a deck whose only change is the study
+ * stamp looks untouched, and two devices comparing `updatedAt` would tie and
+ * each keep its own copy. That is precisely why "studied today" never crossed
+ * between machines. Anything that records a change has to be part of the
+ * comparison, whether or not it is an edit.
+ */
+const deckStamp = (deck: DeckRow) =>
+  Math.max(deck.updatedAt.getTime(), deck.lastStudiedAt?.getTime() ?? 0);
+
+const rowStamp = (row: Row) => row.updatedAt.getTime();
+
+function stamps<T extends Row>(
+  rows: readonly T[],
+  stampOf: (row: T) => number,
+): Record<number, number> {
   const out: Record<number, number> = {};
-  for (const row of rows) out[row.id] = row.updatedAt.getTime();
+  for (const row of rows) out[row.id] = stampOf(row);
   return out;
 }
 
 /** The manifest to remember after a successful sync. */
 export function baseOf(doc: DbDoc): SyncBase {
   return {
-    decks: stamps(doc.decks),
-    cards: stamps(doc.cards),
-    todos: stamps(doc.todos),
+    decks: stamps(doc.decks, deckStamp),
+    cards: stamps(doc.cards, rowStamp),
+    todos: stamps(doc.todos, rowStamp),
   };
 }
 
@@ -72,6 +90,7 @@ function mergeRows<T extends Row>(
   base: Record<number, number> | null,
   local: readonly T[],
   remote: readonly T[],
+  stampOf: (row: T) => number,
   report: MergeReport,
   tally: Tally,
 ): T[] {
@@ -87,10 +106,10 @@ function mergeRows<T extends Row>(
       // The same record on both sides. Later wins; a tie keeps the local copy,
       // which is arbitrary but has to be decided the same way on both machines
       // or they would swap versions forever.
-      if (mine.updatedAt.getTime() >= theirs.updatedAt.getTime()) {
+      if (stampOf(mine) >= stampOf(theirs)) {
         merged.push(mine);
         tally.fromLocal += 1;
-        if (mine.updatedAt.getTime() > theirs.updatedAt.getTime()) {
+        if (stampOf(mine) > stampOf(theirs)) {
           report.remoteChanged = true;
         }
       } else {
@@ -120,7 +139,7 @@ function mergeRows<T extends Row>(
       continue;
     }
 
-    if (only.updatedAt.getTime() > known) {
+    if (stampOf(only) > known) {
       // Deleted on one side, edited on the other since they last agreed. The
       // edit is kept: a deletion that loses an edit is unrecoverable, while a
       // deletion that has to be repeated is an annoyance.
@@ -197,9 +216,21 @@ function renumberRemote(
   const next = (rows: readonly Row[], ...counters: number[]) =>
     Math.max(...counters, ...rows.map((r) => r.id + 1), 1);
 
-  let nextDeck = next([...local.decks, ...remote.decks], local.nextDeckId, remote.nextDeckId);
-  let nextCard = next([...local.cards, ...remote.cards], local.nextCardId, remote.nextCardId);
-  let nextTodo = next([...local.todos, ...remote.todos], local.nextTodoId, remote.nextTodoId);
+  let nextDeck = next(
+    [...local.decks, ...remote.decks],
+    local.nextDeckId,
+    remote.nextDeckId,
+  );
+  let nextCard = next(
+    [...local.cards, ...remote.cards],
+    local.nextCardId,
+    remote.nextCardId,
+  );
+  let nextTodo = next(
+    [...local.todos, ...remote.todos],
+    local.nextTodoId,
+    remote.nextTodoId,
+  );
 
   for (const id of deckMap.keys()) deckMap.set(id, nextDeck++);
   for (const id of cardMap.keys()) cardMap.set(id, nextCard++);
@@ -212,7 +243,9 @@ function renumberRemote(
     id: deckMap.get(deck.id) ?? deck.id,
     // A renumbered deck takes its children with it.
     parentId:
-      deck.parentId === null ? null : (deckMap.get(deck.parentId) ?? deck.parentId),
+      deck.parentId === null
+        ? null
+        : (deckMap.get(deck.parentId) ?? deck.parentId),
   }));
   const cards: CardRow[] = remote.cards.map((card) => ({
     ...card,
@@ -224,7 +257,15 @@ function renumberRemote(
     id: todoMap.get(todo.id) ?? todo.id,
   }));
 
-  return { ...remote, decks, cards, todos, nextDeckId: nextDeck, nextCardId: nextCard, nextTodoId: nextTodo };
+  return {
+    ...remote,
+    decks,
+    cards,
+    todos,
+    nextDeckId: nextDeck,
+    nextCardId: nextCard,
+    nextTodoId: nextTodo,
+  };
 }
 
 /**
@@ -257,9 +298,30 @@ export function mergeDocs(
     report.remoteChanged = true;
   }
 
-  const decks = mergeRows(base?.decks ?? null, local.decks, remote.decks, report, tally);
-  const cards = mergeRows(base?.cards ?? null, local.cards, remote.cards, report, tally);
-  const todos = mergeRows(base?.todos ?? null, local.todos, remote.todos, report, tally);
+  const decks = mergeRows(
+    base?.decks ?? null,
+    local.decks,
+    remote.decks,
+    deckStamp,
+    report,
+    tally,
+  );
+  const cards = mergeRows(
+    base?.cards ?? null,
+    local.cards,
+    remote.cards,
+    rowStamp,
+    report,
+    tally,
+  );
+  const todos = mergeRows(
+    base?.todos ?? null,
+    local.todos,
+    remote.todos,
+    rowStamp,
+    report,
+    tally,
+  );
 
   report.fromLocal = tally.fromLocal;
   report.fromRemote = tally.fromRemote;
