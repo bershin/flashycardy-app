@@ -16,6 +16,7 @@ import {
 } from "@/lib/generated-card";
 import { getDeckByIdForUser } from "@/db/queries/decks";
 import { NEW_CARD_SCHEDULE, REVIEW_SCHEDULES } from "@/lib/store/types";
+import { storeInlineImages } from "@/lib/card-images";
 import {
   insertCard,
   getCardByIdForUser,
@@ -155,11 +156,16 @@ export async function addCardAction(data: AddCardInput) {
   const deck = await getDeckByIdForUser(parsed.deckId, userId);
   if (!deck) throw new Error("Deck not found");
 
+  // Pictures are taken out of the HTML and stored on their own before the card
+  // is written, so a pasted image never enters the document. See lib/images.ts.
+  const front = (await storeInlineImages(parsed.front)).html;
+  const back = (await storeInlineImages(parsed.back)).html;
+
   return insertCard({
     deckId: parsed.deckId,
     type: parsed.type,
-    front: parsed.front,
-    back: parsed.back,
+    front,
+    back,
     schedule: parsed.schedule,
     quiz: parsed.quiz,
     generated: parsed.generated,
@@ -182,10 +188,21 @@ export async function updateCardAction(data: UpdateCardInput) {
   const existingCard = await getCardByIdForUser(parsed.cardId, userId);
   if (!existingCard) throw new Error("Card not found");
 
+  // As on the way in: a picture pasted while editing is stored on its own and
+  // the HTML keeps a reference. Undefined means "leave this field alone".
+  const front =
+    parsed.front === undefined
+      ? undefined
+      : (await storeInlineImages(parsed.front)).html;
+  const back =
+    parsed.back === undefined
+      ? undefined
+      : (await storeInlineImages(parsed.back)).html;
+
   return updateCard(parsed.cardId, userId, {
     type: parsed.type,
-    front: parsed.front,
-    back: parsed.back,
+    front,
+    back,
     schedule: parsed.schedule,
     quiz: parsed.quiz,
     generated: parsed.generated,

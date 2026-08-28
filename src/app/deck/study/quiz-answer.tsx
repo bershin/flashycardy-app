@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CardRow } from "@/lib/store/types";
-import { withLazyImages } from "@/lib/card-html";
+import { CardHtml } from "@/components/card-html";
 
 interface QuizAnswerProps {
   card: CardRow;
@@ -112,9 +112,9 @@ export function QuizAnswer({
             </p>
           ) : (
             card.back.replace(/<[^>]*>/g, "").trim().length > 0 && (
-              <div
+              <CardHtml
                 className="rich-content rounded-lg border bg-muted/50 p-3 text-sm"
-                dangerouslySetInnerHTML={{ __html: withLazyImages(card.back) }}
+                html={card.back}
               />
             )
           )}

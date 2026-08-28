@@ -19,8 +19,14 @@ import {
 } from "./types";
 
 const DB_NAME = "flashycardy";
-const DB_VERSION = 1;
+/**
+ * Bumped to 2 for the `images` store: card pictures live beside the document
+ * rather than inside it. See `src/lib/images.ts` for why.
+ */
+const DB_VERSION = 2;
 const STORE_NAME = "doc";
+/** Raw image bytes, keyed by the hash of those bytes. */
+export const IMAGE_STORE = "images";
 const DOC_KEY = "current";
 const DEVICE_ID_KEY = "flashycardy.deviceId";
 /** Tabs announce their writes here so the others can catch up. */
@@ -128,13 +134,19 @@ export function getDeviceId(): string {
   return id;
 }
 
-function openDb(): Promise<IDBDatabase> {
+export function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const database = request.result;
       if (!database.objectStoreNames.contains(STORE_NAME)) {
         database.createObjectStore(STORE_NAME);
+      }
+      // Added in version 2. Created here rather than from the image module so
+      // there is one upgrade path: two openers disagreeing about the schema is
+      // how an IndexedDB version gets stuck.
+      if (!database.objectStoreNames.contains(IMAGE_STORE)) {
+        database.createObjectStore(IMAGE_STORE);
       }
     };
     request.onsuccess = () => resolve(request.result);

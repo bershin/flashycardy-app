@@ -14,7 +14,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { withLazyImages } from "@/lib/card-html";
+import { CardHtml } from "@/components/card-html";
 import { CardHistory } from "@/components/card-history";
 import {
   Card,
@@ -139,9 +139,9 @@ export function FlashCard({
       >
         <Card className={selected ? "bg-primary/5" : undefined}>
           <CardHeader>
-            <div
+            <CardHtml
               className="rich-content min-w-0 overflow-hidden text-base font-semibold"
-              dangerouslySetInnerHTML={{ __html: withLazyImages(card.front) }}
+              html={card.front}
             />
             <CardAction className="flex items-center gap-2">
               <CardHistory
@@ -161,9 +161,9 @@ export function FlashCard({
             </CardAction>
           </CardHeader>
           <CardContent>
-            <div
+            <CardHtml
               className="rich-content min-w-0 overflow-hidden text-muted-foreground"
-              dangerouslySetInnerHTML={{ __html: withLazyImages(card.back) }}
+              html={card.back}
             />
           </CardContent>
         </Card>
@@ -175,9 +175,9 @@ export function FlashCard({
     <>
       <Card>
         <CardHeader>
-          <div
+          <CardHtml
             className="rich-content min-w-0 overflow-hidden text-base font-semibold"
-            dangerouslySetInnerHTML={{ __html: withLazyImages(card.front) }}
+            html={card.front}
           />
           <CardAction className="flex items-center gap-2">
             {/* Beside the menu rather than in the corner: browsing a deck is
@@ -266,9 +266,9 @@ export function FlashCard({
               ))}
             </ul>
           ) : (
-            <div
+            <CardHtml
               className="rich-content text-muted-foreground"
-              dangerouslySetInnerHTML={{ __html: withLazyImages(card.back) }}
+              html={card.back}
             />
           )}
           {card.type === "quiz" && (

@@ -21,6 +21,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { CardHistory } from "@/components/card-history";
+import { CardHtml } from "@/components/card-html";
 import { EditCardDialog } from "@/components/edit-card-dialog";
 import {
   AlertDialog,
@@ -810,9 +811,9 @@ export function StudySession({
                   {rolled.question}
                 </p>
               ) : (
-                <div
+                <CardHtml
                   className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
-                  dangerouslySetInnerHTML={{ __html: current.front }}
+                  html={current.front}
                 />
               )}
               {!revealed && !interactive && (
@@ -854,9 +855,9 @@ export function StudySession({
                 <p className="mb-1 text-center text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
                   Answer
                 </p>
-                <div
+                <CardHtml
                   className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
-                  dangerouslySetInnerHTML={{ __html: current.back }}
+                  html={current.back}
                 />
               </div>
             </CardContent>
