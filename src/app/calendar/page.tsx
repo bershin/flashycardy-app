@@ -12,6 +12,8 @@ import {
   CalendarArrowUp,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Ellipsis,
   Layers,
   Plus,
@@ -496,7 +498,10 @@ export default function CalendarPage() {
     if (!box) return;
     box.scrollTo({
       top: (topWeek + delta) * weekPitch(box),
-      behavior: "smooth",
+      // Animated only when there is someone to watch it. A smooth scroll is
+      // driven by animation frames, which a hidden tab does not get — so the
+      // move simply never happened until the tab was looked at again.
+      behavior: document.visibilityState === "visible" ? "smooth" : "auto",
     });
   }
 
@@ -516,6 +521,23 @@ export default function CalendarPage() {
     );
     const clamped = Math.min(Math.max(week, 0), TOTAL_WEEKS - WINDOW_WEEKS);
     scrollWeeks(clamped - topWeek);
+  }
+
+  /**
+   * Move to the start of the next or previous month.
+   *
+   * Anchored to the first of the month rather than to the day on show. Counting
+   * from the displayed day looked right and drifted: the view snaps to whole
+   * weeks, so a month forward and a month back landed a week earlier than it
+   * began, every time. The first of a month is a fixed point, so pressing
+   * forward and back returns to the same place.
+   */
+  function scrollMonths(delta: number) {
+    // The visible week can start in the previous month; the month being moved
+    // from is the one the week's later days belong to.
+    const anchor = days[topWeek * 7 + 6].date;
+    const from = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    scrollToDay(new Date(from.getFullYear(), from.getMonth() + delta, 1));
   }
 
   function onRibbonScroll() {
@@ -630,6 +652,17 @@ export default function CalendarPage() {
           </p>
         </div>
         <div className="flex items-center gap-1">
+          {/* Two scales, because the grid spans eight months: the single
+              arrows nudge a week, the double ones step a month. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Back a month"
+            title="Back a month"
+            onClick={() => scrollMonths(-1)}
+          >
+            <ChevronsLeft className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -670,6 +703,15 @@ export default function CalendarPage() {
             onClick={() => scrollWeeks(1)}
           >
             <ChevronRight className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Forward a month"
+            title="Forward a month"
+            onClick={() => scrollMonths(1)}
+          >
+            <ChevronsRight className="size-4" />
           </Button>
         </div>
       </div>
