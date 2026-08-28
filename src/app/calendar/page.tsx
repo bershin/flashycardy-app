@@ -524,20 +524,33 @@ export default function CalendarPage() {
   }
 
   /**
-   * Move to the start of the next or previous month.
+   * Move the day the page is about.
    *
-   * Anchored to the first of the month rather than to the day on show. Counting
-   * from the displayed day looked right and drifted: the view snaps to whole
-   * weeks, so a month forward and a month back landed a week earlier than it
-   * began, every time. The first of a month is a fixed point, so pressing
-   * forward and back returns to the same place.
+   * The field names a day, not a week, so the arrows either side of it move by
+   * one — and the grid follows only when that day falls in a different week,
+   * because the squares are laid out a week at a time. The to-do list below
+   * follows too: it is the same day, and having the header and the list
+   * disagree about which day is in question would be the confusing part.
    */
-  function scrollMonths(delta: number) {
-    // The visible week can start in the previous month; the month being moved
-    // from is the one the week's later days belong to.
-    const anchor = days[topWeek * 7 + 6].date;
-    const from = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-    scrollToDay(new Date(from.getFullYear(), from.getMonth() + delta, 1));
+  function goToDay(key: string) {
+    const [year, month, day] = key.split("-").map(Number);
+    selectDay(key);
+    scrollToDay(new Date(year, month - 1, day));
+  }
+
+  function stepDay(delta: number) {
+    const [year, month, day] = todoDay.split("-").map(Number);
+    goToDay(ymd(new Date(year, month - 1, day + delta)));
+  }
+
+  function stepMonth(delta: number) {
+    const [year, month, day] = todoDay.split("-").map(Number);
+    // Clamped to the month's length, so the 31st stepping into a short month
+    // lands on its last day rather than sliding into the next one.
+    const target = new Date(year, month - 1 + delta, 1);
+    const lastDay = new Date(year, month + delta, 0).getDate();
+    target.setDate(Math.min(day, lastDay));
+    goToDay(ymd(target));
   }
 
   function onRibbonScroll() {
@@ -659,16 +672,16 @@ export default function CalendarPage() {
             size="icon"
             aria-label="Back a month"
             title="Back a month"
-            onClick={() => scrollMonths(-1)}
+            onClick={() => stepMonth(-1)}
           >
             <ChevronsLeft className="size-4" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Back a week"
-            title="Back a week"
-            onClick={() => scrollWeeks(-1)}
+            aria-label="Back a day"
+            title="Back a day"
+            onClick={() => stepDay(-1)}
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -686,21 +699,17 @@ export default function CalendarPage() {
               date in November is not reaching it. */}
           <Input
             type="date"
-            aria-label="Show the week of a particular day"
-            value={ymd(days[topWeek * 7].date)}
-            onChange={(e) => {
-              if (!e.target.value) return;
-              const [year, month, day] = e.target.value.split("-").map(Number);
-              scrollToDay(new Date(year, month - 1, day));
-            }}
+            aria-label="Go to a day"
+            value={todoDay}
+            onChange={(e) => e.target.value && goToDay(e.target.value)}
             className="h-8 w-[9.5rem] px-2 py-0 text-xs"
           />
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Forward a week"
-            title="Forward a week"
-            onClick={() => scrollWeeks(1)}
+            aria-label="Forward a day"
+            title="Forward a day"
+            onClick={() => stepDay(1)}
           >
             <ChevronRight className="size-4" />
           </Button>
@@ -709,7 +718,7 @@ export default function CalendarPage() {
             size="icon"
             aria-label="Forward a month"
             title="Forward a month"
-            onClick={() => scrollMonths(1)}
+            onClick={() => stepMonth(1)}
           >
             <ChevronsRight className="size-4" />
           </Button>
