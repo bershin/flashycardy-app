@@ -174,9 +174,20 @@ export function QuizAnswer({
                   : ""
               }`}
             >
+              {/* The number and the mark share one slot, so the text starts at
+                  the same place before and after answering — a column that
+                  shifts when the marks appear is the thing you notice instead
+                  of the answer. */}
               <span className="flex size-6 shrink-0 items-center justify-center">
-                {answered && isCorrect && <Check className="size-5" />}
-                {answered && isPicked && !isCorrect && <X className="size-5" />}
+                {answered && isCorrect ? (
+                  <Check className="size-5" />
+                ) : answered && isPicked ? (
+                  <X className="size-5" />
+                ) : (
+                  <span className="text-sm font-medium text-muted-foreground tabular-nums">
+                    {position + 1}
+                  </span>
+                )}
               </span>
               <span className="min-w-0 flex-1">{options[optionIndex]}</span>
             </button>
