@@ -13,6 +13,7 @@ import {
   FolderInput,
   Layers,
   Pencil,
+  SpellCheck,
   Plus,
   Sparkles,
   Trash2,
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
 import { AddCardDialog } from "@/components/add-card-dialog";
+import { SpellingCardDialog } from "@/components/spelling-card-dialog";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
 import { MoveDeckDialog } from "@/components/move-deck-dialog";
 import { deleteDeckAction } from "@/app/dashboard/actions";
@@ -79,6 +81,7 @@ export function DeckHeader({
   const [createSubDeckOpen, setCreateSubDeckOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [spellingOpen, setSpellingOpen] = useState(false);
   const [scheduling, startScheduling] = useTransition();
   const [scheduleNote, setScheduleNote] = useState<string | null>(null);
   /** Counted across the deck and its sub-decks — what the menu acts on. */
@@ -219,6 +222,16 @@ export function DeckHeader({
               <Plus className="size-4" />
               Add Card
             </Button>
+            {/* Beside Add Card, not behind a menu: a spelling deck is built a
+                hundred words at a time, and this is how those get written. */}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setSpellingOpen(true)}
+            >
+              <SpellCheck className="size-4" />
+              Spelling
+            </Button>
             {/* Hidden entirely without a key — there is no plan to upsell now,
                 so an always-visible button would just be a dead end. */}
             {canGenerate && (
@@ -266,6 +279,12 @@ export function DeckHeader({
         open={editOpen}
         onOpenChange={setEditOpen}
       />
+      <SpellingCardDialog
+        deckId={deck.id}
+        open={spellingOpen}
+        onOpenChange={setSpellingOpen}
+      />
+
       <AddCardDialog
         deckId={deck.id}
         open={addCardOpen}
