@@ -86,11 +86,16 @@ function escape(text: string): string {
 }
 
 /**
- * The back of the card: the word, then whichever of the three the sheet gave.
+ * The back of the card: the word, then meaning, sentence and tip.
  *
  * Each part is labelled and set apart, because this is read in the second or
  * two after answering — a paragraph of run-together prose would not be.
- * Sections the sheet left empty are left out rather than shown blank.
+ *
+ * All three headings appear whether or not the sheet filled them. An empty
+ * block is an invitation to write one line when the card next comes up, which
+ * is how the missing ones actually get written; leaving the heading out means
+ * opening the editor and building the layout by hand first, so it never
+ * happens.
  */
 export function spellingBackHtml(entry: SpellingEntry): string {
   const parts = [`<p><strong>${escape(entry.word)}</strong></p>`];
@@ -101,9 +106,8 @@ export function spellingBackHtml(entry: SpellingEntry): string {
   ];
 
   for (const [label, value] of sections) {
-    if (!value) continue;
     parts.push(`<p><u>${label}:</u></p>`);
-    parts.push(`<pre><code>${escape(value)}</code></pre>`);
+    parts.push(`<pre><code>${value ? escape(value) : ""}</code></pre>`);
   }
 
   return parts.join("");

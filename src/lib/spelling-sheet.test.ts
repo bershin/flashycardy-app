@@ -49,11 +49,15 @@ test("the back carries the word and every section given", () => {
   assert.match(html, /The thief&#39;s identity was unknown\.|The thief's identity was unknown\./);
 });
 
-test("sections the sheet left empty are left out, not shown blank", () => {
+test("every card gets all three headings, empty ones ready to fill", () => {
   const html = spellingBackHtml({ word: "rhythm", tip: "No vowels except y." });
-  assert.match(html, /<u>Tip:<\/u>/);
-  assert.ok(!html.includes("Meaning:"), "an empty meaning was still labelled");
-  assert.ok(!html.includes("Sentence:"));
+  for (const label of ["Meaning", "Sentence", "Tip"]) {
+    assert.match(html, new RegExp(`<u>${label}:</u>`), `${label} was missing`);
+  }
+  assert.match(html, /No vowels except y\./);
+  // The two the sheet did not fill are present and empty, not filled with a
+  // placeholder that would have to be deleted before writing.
+  assert.equal(html.match(/<pre><code><\/code><\/pre>/g)?.length, 2);
 });
 
 test("angle brackets in a sheet cannot become markup", () => {
