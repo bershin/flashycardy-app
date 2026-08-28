@@ -38,6 +38,17 @@ const CONFIG_KEY = "flashycardy.sync";
  * from one side cannot be told from a record newly added to the other.
  */
 const BASE_KEY = "flashycardy.sync.base";
+/**
+ * The `mutatedAt` of the last document GitHub actually accepted.
+ *
+ * Pushing was driven only by changes: something edits the document, a push is
+ * scheduled. If that push never lands — the tab was hidden and frozen part way
+ * through a long upload — nothing schedules another, because nothing has
+ * changed since. The document then sits unsent indefinitely while the app shows
+ * no error, because none occurred. This is how the app can tell, at any moment,
+ * whether what it holds has ever been sent.
+ */
+const PUSHED_KEY = "flashycardy.sync.pushedAt";
 const SHA_KEY = "flashycardy.sync.sha";
 const LAST_SYNCED_KEY = "flashycardy.sync.lastSyncedAt";
 /** Web Locks name holding pushes to one tab at a time. */
@@ -195,6 +206,19 @@ function writeBase(doc: DbDoc) {
     // Out of quota: the next merge keeps more than it strictly should rather
     // than dropping the sync.
   }
+}
+
+function markPushed(at: Date) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PUSHED_KEY, at.toISOString());
+}
+
+/** Whether this device holds anything GitHub has not accepted. */
+export function hasUnpushedChanges(): boolean {
+  if (typeof window === "undefined") return false;
+  const pushed = window.localStorage.getItem(PUSHED_KEY);
+  if (!pushed) return true;
+  return getSnapshot().mutatedAt.getTime() > new Date(pushed).getTime();
 }
 
 function markSynced() {
@@ -593,6 +617,7 @@ async function pushLocked(
         ) as SerializedDbDoc;
         if (sameContent(remote, serialized)) {
           setSha(meta.sha);
+          markPushed(doc.mutatedAt);
           writeBase(doc);
           markSynced();
           return "ok";
@@ -609,6 +634,7 @@ async function pushLocked(
   // The commit now refers to every blob that was uploaded for it, so they are
   // no longer at risk of being written twice.
   clearPendingBlobs();
+  markPushed(doc.mutatedAt);
   setSha(body.content.sha);
   // GitHub now holds exactly this, so this is what the two have agreed on.
   // Recorded here rather than only on pull, or a record deleted locally and
@@ -776,7 +802,10 @@ export function startSync(): () => void {
       // Anything this device holds that GitHub does not goes back up: left
       // undone, the two would only ever agree in one direction.
       const { owesRemote } = await pullAndMerge(config);
-      if (owesRemote) schedulePush();
+      // Also when this device simply never managed to send what it has: a push
+      // that died leaves no trace in the document, so a change-driven sync
+      // would never try again.
+      if (owesRemote || hasUnpushedChanges()) schedulePush();
       markChecked();
       setState("idle");
     } catch (error) {

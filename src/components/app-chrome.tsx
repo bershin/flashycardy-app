@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
   CalendarDays,
   Check,
   CloudOff,
+  CloudUpload,
   Moon,
   RefreshCw,
   Settings as SettingsIcon,
@@ -25,11 +26,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useStoreBootstrap, useStoreNotice } from "@/lib/store/use-store";
+import {
+  useStore,
+  useStoreBootstrap,
+  useStoreNotice,
+} from "@/lib/store/use-store";
 import { dismissNotice } from "@/lib/store/local-store";
 import { TodoReminders } from "@/components/todo-reminders";
 import {
   getLastCheckedAt,
+  hasUnpushedChanges,
   getSyncError,
   getSyncState,
   subscribeSync,
@@ -171,11 +177,12 @@ function ago(at: Date | null): string {
   return `checked ${hours} hour${hours === 1 ? "" : "s"} ago`;
 }
 
-const LABELS: Record<SyncState, string> = {
+const LABELS: Record<SyncState | "unsent", string> = {
   disabled: "Sync is off — set up a GitHub repo in Settings",
   // Says what it knows rather than what it hopes: the tick means the last
   // attempt succeeded, and the tooltip adds when that was.
   idle: "In step with GitHub as of the last check",
+  unsent: "This device has changes GitHub has not accepted yet",
   pulling: "Checking GitHub for changes…",
   pushing: "Saving to GitHub…",
   conflict: "This file changed on GitHub — resolve in Settings",
@@ -195,6 +202,15 @@ function SyncIndicator() {
     getLastCheckedAt,
     () => null,
   );
+  /**
+   * Whether anything here has never reached GitHub.
+   *
+   * Read through the store so it settles the moment a push lands. A tick that
+   * means "nothing has failed" is not the same as "your work is saved", and
+   * this app has now twice looked synced while holding a day of unsent
+   * changes — including a migration of every card in every deck.
+   */
+  const unsent = useStore(useCallback(() => hasUnpushedChanges(), []));
 
   if (state === "disabled") {
     return (
@@ -207,6 +223,10 @@ function SyncIndicator() {
     );
   }
 
+  // Said before the state, because "no error" is the weaker claim of the two.
+  const shown: SyncState | "unsent" =
+    state === "idle" && unsent ? "unsent" : state;
+
   const icon =
     state === "pushing" || state === "pulling" ? (
       <RefreshCw className="size-3.5 animate-spin" />
@@ -214,6 +234,8 @@ function SyncIndicator() {
       <CloudOff className="size-3.5" />
     ) : state === "conflict" || state === "error" ? (
       <AlertTriangle className="size-3.5 text-amber-500" />
+    ) : shown === "unsent" ? (
+      <CloudUpload className="size-3.5 text-amber-500" />
     ) : (
       <Check className="size-3.5 text-emerald-500" />
     );
@@ -224,7 +246,7 @@ function SyncIndicator() {
         render={
           <Link
             href="/settings"
-            aria-label={LABELS[state]}
+            aria-label={LABELS[shown]}
             className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
           >
             {icon}
@@ -233,8 +255,8 @@ function SyncIndicator() {
       />
       <TooltipContent>
         {error
-          ? `${LABELS[state]} — ${error}`
-          : `${LABELS[state]} · ${ago(checkedAt)}`}
+          ? `${LABELS[shown]} — ${error}`
+          : `${LABELS[shown]} · ${ago(checkedAt)}`}
       </TooltipContent>
     </Tooltip>
   );
