@@ -30,6 +30,7 @@ import {
   type TreeEntry,
 } from "./image-sync";
 import { setRemoteImageLoader } from "../image-urls";
+import { storedHashes } from "../images";
 
 const CONFIG_KEY = "flashycardy.sync";
 /**
@@ -439,6 +440,29 @@ function rememberRemoteImages(index: RemoteImages) {
   for (const [hash, path] of index) knownRemoteImages.set(hash, path);
 }
 
+/**
+ * Whether the repository is missing any picture the document names.
+ *
+ * One listing, on the checks that already talk to GitHub. The document and its
+ * pictures are separate files, so "sent" is two questions and answering only
+ * the first is how a machine came to sit on a green tick holding thirteen
+ * hundred pictures nobody else could see.
+ */
+async function picturesOutstanding(config: SyncConfig): Promise<boolean> {
+  const wanted = referencedImages(getSnapshot().cards);
+  if (wanted.size === 0) return false;
+  if ([...wanted].every((hash) => knownRemoteImages.has(hash))) return false;
+
+  const head = await headCommit(config);
+  if (!head) return false;
+  rememberRemoteImages(await remoteImageIndex(config, head));
+
+  const held = await storedHashes();
+  // Only pictures this device actually has: one it lacks is for another device
+  // to send, and pushing on its account would loop forever.
+  return [...wanted].some((hash) => !knownRemoteImages.has(hash) && held.has(hash));
+}
+
 async function loadRemote(hash: string): Promise<Blob | null> {
   const config = getSyncConfig();
   if (!config) return null;
@@ -831,7 +855,14 @@ export function startSync(): () => void {
       // Also when this device simply never managed to send what it has: a push
       // that died leaves no trace in the document, so a change-driven sync
       // would never try again.
-      if (owesRemote || hasUnpushedChanges()) schedulePush();
+      //
+      // And when the document is up to date but its pictures are not. Being
+      // "unsent" was measured by the document alone, so a device that had
+      // committed the document and then failed to upload the pictures believed
+      // it was finished and never tried again — while the other device, which
+      // did have something to send, sat showing work it could not complete.
+      if (owesRemote || hasUnpushedChanges() || (await picturesOutstanding(config)))
+        schedulePush();
       markChecked();
       setState("idle");
     } catch (error) {
