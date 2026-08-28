@@ -22,6 +22,7 @@ import {
 import { baseOf, mergeDocs, type SyncBase } from "./merge";
 import { referencedImages } from "../card-images";
 import {
+  clearPendingBlobs,
   fetchRemoteImage,
   remoteImageIndex,
   uploadMissingImages,
@@ -605,6 +606,9 @@ async function pushLocked(
   if (!response.ok) throw new Error(await describe(response));
 
   const body = (await response.json()) as { content: { sha: string } };
+  // The commit now refers to every blob that was uploaded for it, so they are
+  // no longer at risk of being written twice.
+  clearPendingBlobs();
   setSha(body.content.sha);
   // GitHub now holds exactly this, so this is what the two have agreed on.
   // Recorded here rather than only on pull, or a record deleted locally and

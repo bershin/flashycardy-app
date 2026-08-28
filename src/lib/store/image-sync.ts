@@ -67,6 +67,73 @@ export async function remoteImageIndex(
   return index;
 }
 
+/**
+ * Blobs written but not yet committed.
+ *
+ * A blob nothing points at is invisible: it is not in any tree, so the next
+ * attempt would upload it again. On a first migration that is a thousand
+ * uploads repeated because the last few hit a rate limit. Their names are kept
+ * here until a commit refers to them.
+ */
+const PENDING_KEY = "flashycardy.pendingBlobs";
+
+function loadPending(): Record<string, string> {
+  try {
+    return JSON.parse(window.localStorage.getItem(PENDING_KEY) ?? "{}") as Record<
+      string,
+      string
+    >;
+  } catch {
+    return {};
+  }
+}
+
+function savePending(pending: Record<string, string>) {
+  try {
+    window.localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+  } catch {
+    // Losing this costs a repeated upload, not correctness.
+  }
+}
+
+export function clearPendingBlobs() {
+  window.localStorage.removeItem(PENDING_KEY);
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Create one blob, waiting out GitHub's throttle rather than failing.
+ *
+ * Uploading a thousand pictures trips the secondary rate limit — it is aimed
+ * exactly at bursts of content creation — and the first migration is the one
+ * time this app ever does that. A refusal is a "come back shortly", so it does.
+ */
+async function createBlob(
+  config: SyncConfig,
+  content: string,
+): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(
+      `${API}/repos/${config.owner}/${config.repo}/git/blobs`,
+      {
+        method: "POST",
+        headers: { ...headers(config), "Content-Type": "application/json" },
+        body: JSON.stringify({ content, encoding: "base64" }),
+      },
+    );
+
+    if (response.ok) return ((await response.json()) as { sha: string }).sha;
+
+    const throttled = response.status === 403 || response.status === 429;
+    if (!throttled || attempt >= 5) throw new Error(await response.text());
+
+    // GitHub says when to come back; when it does not, back off and grow.
+    const after = Number(response.headers.get("retry-after"));
+    await wait(Number.isFinite(after) && after > 0 ? after * 1000 : 20_000 * (attempt + 1));
+  }
+}
+
 export type TreeEntry = {
   path: string;
   mode: "100644";
@@ -92,41 +159,35 @@ export async function uploadMissingImages(
   const missing = [...needed].filter((h) => !present.has(h) && held.has(h));
   if (missing.length === 0) return [];
 
+  const pending = loadPending();
   const entries: TreeEntry[] = [];
-  const BATCH = 6;
 
-  for (let i = 0; i < missing.length; i += BATCH) {
-    const batch = missing.slice(i, i + BATCH);
-    const written = await Promise.all(
-      batch.map(async (hash) => {
-        const blob = await getImage(hash);
-        if (!blob) return null;
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        let binary = "";
-        const BLOCK = 0x8000;
-        for (let j = 0; j < bytes.length; j += BLOCK) {
-          binary += String.fromCharCode(...bytes.subarray(j, j + BLOCK));
-        }
-        const response = await fetch(
-          `${API}/repos/${config.owner}/${config.repo}/git/blobs`,
-          {
-            method: "POST",
-            headers: { ...headers(config), "Content-Type": "application/json" },
-            body: JSON.stringify({ content: btoa(binary), encoding: "base64" }),
-          },
-        );
-        if (!response.ok) throw new Error(await response.text());
-        const { sha } = (await response.json()) as { sha: string };
-        return {
-          path: imagePath(hash, blob.type),
-          mode: "100644" as const,
-          type: "blob" as const,
-          sha,
-        };
-      }),
-    );
-    for (const entry of written) if (entry) entries.push(entry);
-    onProgress?.(Math.min(i + BATCH, missing.length), missing.length);
+  // One at a time, with a gap. GitHub asks for serial writes and a pause
+  // between them; a thousand at once is what tripped the limit. At this pace a
+  // first migration takes a few minutes and every later push takes none,
+  // because by then there is nothing left to upload.
+  for (const [index, hash] of missing.entries()) {
+    const blob = await getImage(hash);
+    if (!blob) continue;
+
+    const path = imagePath(hash, blob.type);
+    let sha = pending[hash];
+
+    if (!sha) {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = "";
+      const BLOCK = 0x8000;
+      for (let j = 0; j < bytes.length; j += BLOCK) {
+        binary += String.fromCharCode(...bytes.subarray(j, j + BLOCK));
+      }
+      sha = await createBlob(config, btoa(binary));
+      pending[hash] = sha;
+      savePending(pending);
+      await wait(120);
+    }
+
+    entries.push({ path, mode: "100644", type: "blob", sha });
+    onProgress?.(index + 1, missing.length);
   }
 
   return entries;
