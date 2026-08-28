@@ -426,6 +426,15 @@ async function headCommit(config: SyncConfig): Promise<string | null> {
  */
 let knownRemoteImages: RemoteImages = new Map();
 
+/**
+ * Only ever what the repository actually holds.
+ *
+ * Recording a picture here when it was uploaded — rather than when a commit
+ * referred to it — is how the document came to be committed alone. An uploaded
+ * blob that nothing points at is invisible: not in any tree, not in the repo.
+ * The next push read this and concluded every picture was already there, so it
+ * sent the document by itself and left every card pointing at nothing.
+ */
 function rememberRemoteImages(index: RemoteImages) {
   for (const [hash, path] of index) knownRemoteImages.set(hash, path);
 }
@@ -574,10 +583,22 @@ async function pushLocked(
     const head = await headCommit(config);
     if (head) rememberRemoteImages(await remoteImageIndex(config, head));
     extra = await uploadMissingImages(config, wanted, knownRemoteImages);
-    for (const entry of extra) {
-      const hash = entry.path.slice("images/".length).split(".")[0];
-      knownRemoteImages.set(hash, entry.path);
-    }
+  }
+
+  // The invariant, checked rather than assumed: a document is never sent
+  // unless every picture it names is either already in the repository or going
+  // up in this same commit. It was assumed once, and the result was a thousand
+  // cards committed pointing at pictures that were nowhere.
+  const carried = new Set(
+    extra.map((e) => e.path.slice("images/".length).split(".")[0]),
+  );
+  const orphans = [...wanted].filter(
+    (hash) => !knownRemoteImages.has(hash) && !carried.has(hash),
+  );
+  if (orphans.length > 0) {
+    throw new Error(
+      `Not sending: ${orphans.length} picture${orphans.length === 1 ? "" : "s"} would be left behind. They upload on the next attempt.`,
+    );
   }
 
   const response = await writeFile(
@@ -633,6 +654,11 @@ async function pushLocked(
   const body = (await response.json()) as { content: { sha: string } };
   // The commit now refers to every blob that was uploaded for it, so they are
   // no longer at risk of being written twice.
+  // Now — and only now — are these pictures in the repository, because this
+  // commit is what puts them there.
+  for (const entry of extra) {
+    knownRemoteImages.set(entry.path.slice("images/".length).split(".")[0], entry.path);
+  }
   clearPendingBlobs();
   markPushed(doc.mutatedAt);
   setSha(body.content.sha);
