@@ -26,6 +26,7 @@ import { isArchiveDeck, startOfDay } from "@/lib/store/selectors";
 import { selectTodoDays } from "@/db/queries/todos";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -499,6 +500,24 @@ export default function CalendarPage() {
     });
   }
 
+  /**
+   * Bring the week holding a date into view.
+   *
+   * Measured from the ribbon's own first day rather than from today, so it
+   * stays right however far the view has been scrolled — and clamped, because
+   * a date outside the eight months rendered has no week to show and should
+   * land on the nearest one rather than nowhere.
+   */
+  function scrollToDay(target: Date) {
+    const start = days[0].date;
+    const week = Math.floor(
+      (startOfDay(target).getTime() - startOfDay(start).getTime()) /
+        (7 * 24 * 60 * 60 * 1000),
+    );
+    const clamped = Math.min(Math.max(week, 0), TOTAL_WEEKS - WINDOW_WEEKS);
+    scrollWeeks(clamped - topWeek);
+  }
+
   function onRibbonScroll() {
     const box = ribbon.current;
     if (!box) return;
@@ -620,14 +639,29 @@ export default function CalendarPage() {
           >
             <ChevronLeft className="size-4" />
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => scrollWeeks(WEEKS_BEFORE - topWeek)}
-            disabled={topWeek === WEEKS_BEFORE}
-          >
-            Today
-          </Button>
+          {topWeek !== WEEKS_BEFORE && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => scrollWeeks(WEEKS_BEFORE - topWeek)}
+            >
+              Today
+            </Button>
+          )}
+          {/* The same control as the dashboard's, between the same arrows: the
+              ribbon reaches eight months, and stepping a week at a time to a
+              date in November is not reaching it. */}
+          <Input
+            type="date"
+            aria-label="Show the week of a particular day"
+            value={ymd(days[topWeek * 7].date)}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              const [year, month, day] = e.target.value.split("-").map(Number);
+              scrollToDay(new Date(year, month - 1, day));
+            }}
+            className="h-8 w-[9.5rem] px-2 py-0 text-xs"
+          />
           <Button
             variant="ghost"
             size="icon"
