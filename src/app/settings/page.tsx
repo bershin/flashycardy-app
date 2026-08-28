@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import { selectLearnedButUnarchived } from "@/db/queries/cards";
+import { inlineImageLoad, migrateInlineImages } from "@/lib/migrate-images";
+import type { MigrationProgress } from "@/lib/migrate-images";
 import { archiveLearnedCardsAction } from "@/app/deck/actions";
 import type { DbDoc } from "@/lib/store/types";
 import {
@@ -105,6 +107,11 @@ export default function SettingsPage() {
    * moment the sweep runs and cannot sit there quoting a number that is no
    * longer true.
    */
+  const [moving, setMoving] = useState<MigrationProgress | null>(null);
+  /** What is still inline, read from the store so it falls to zero as it goes. */
+  const inlineImages = useStore(
+    useCallback((db: DbDoc) => inlineImageLoad(db.cards), []),
+  );
   const learned = useStore(
     useCallback(
       (db: DbDoc) => selectLearnedButUnarchived(db, LOCAL_USER_ID).length,
@@ -445,6 +452,67 @@ export default function SettingsPage() {
             <span className="text-xs text-muted-foreground">
               {usageMb.toFixed(1)} MB used on this device
             </span>
+          )}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold">Pictures</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Pictures pasted into cards used to be stored inside the deck file
+          itself, encoded as text. That costs about a third again in the file,
+          and another third when the file is sent — which is why syncing
+          stopped: GitHub refused the size. Moved out, each picture is a file of
+          its own, uploaded once instead of on every change.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {inlineImages.cards === 0 ? (
+            <span className="text-xs text-muted-foreground">
+              Nothing to move — every picture is already stored on its own.
+            </span>
+          ) : (
+            <>
+              <span className="text-sm">
+                <strong className="tabular-nums">
+                  {(inlineImages.bytes / 1024 / 1024).toFixed(1)} MB
+                </strong>{" "}
+                of pictures inside{" "}
+                <strong className="tabular-nums">{inlineImages.cards}</strong>{" "}
+                card{inlineImages.cards === 1 ? "" : "s"}.
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy || moving !== null}
+                onClick={async () => {
+                  setMoving({ done: 0, total: inlineImages.cards, images: 0 });
+                  try {
+                    const result = await migrateInlineImages(setMoving);
+                    setMessage(
+                      `Moved ${result.images} picture${result.images === 1 ? "" : "s"} out of ${result.cards} card${result.cards === 1 ? "" : "s"} — the deck file is ${(result.freed / 1024 / 1024).toFixed(1)} MB smaller.`,
+                    );
+                  } finally {
+                    setMoving(null);
+                  }
+                }}
+              >
+                Move them out
+              </Button>
+              {moving && (
+                <span
+                  role="status"
+                  className="text-xs text-muted-foreground tabular-nums"
+                >
+                  {moving.done} of {moving.total} cards · {moving.images}{" "}
+                  pictures stored
+                </span>
+              )}
+              <span className="text-xs text-muted-foreground">
+                {/* Said here rather than in a dialog: it is advice, not a
+                    gate, and the work is safe to interrupt. */}
+                Take a backup first, below.
+              </span>
+            </>
           )}
         </div>
       </section>
