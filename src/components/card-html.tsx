@@ -36,15 +36,24 @@ export function CardHtml({
    */
   const [loaded, setLoaded] = useState(0);
 
+  /** Pictures the lookup has come back empty for — not merely pending. */
+  const [failed, setFailed] = useState<Set<string>>(() => new Set());
+
   useEffect(() => {
     const refs = imageRefs(html);
     if (refs.length === 0) return;
     if (refs.every((hash) => cachedUrl(hash))) return;
 
     let live = true;
-    void Promise.all(refs.map(resolveImage)).then(() => {
+    void Promise.all(
+      refs.map(async (hash) => [hash, await resolveImage(hash)] as const),
+    ).then((results) => {
+      if (!live) return;
+      const missing = results.filter(([, url]) => !url).map(([hash]) => hash);
       // One update once they are all in, rather than a re-render per picture.
-      if (live) setLoaded((n) => n + 1);
+      setLoaded((n) => n + 1);
+      if (missing.length > 0)
+        setFailed((prev) => new Set([...prev, ...missing]));
     });
 
     return () => {
@@ -53,10 +62,10 @@ export function CardHtml({
   }, [html]);
 
   const resolved = useMemo(
-    () => substitute(html),
+    () => substitute(html, failed),
     // `loaded` is the signal that the cache has more in it than it did.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [html, loaded],
+    [html, loaded, failed],
   );
 
   return (
@@ -64,19 +73,32 @@ export function CardHtml({
   );
 }
 
-/** Swap every reference this device can already answer for its object URL. */
-function substitute(html: string): string {
+/**
+ * Swap every reference for its picture, or for a stand-in.
+ *
+ * Three states, and they must not be confused. Resolved: the object URL. Still
+ * looking: an empty box that takes up no argument — the lookup is a read from
+ * IndexedDB and usually finishes in a moment. Looked and not found: a caption.
+ *
+ * The first version left the `cue:` reference in the tag while the lookup ran
+ * and let the browser's `onerror` write the caption. But the browser fails on
+ * an unknown scheme instantly, so every picture was declared missing before it
+ * had been looked for — and the caption replaced the element, so the picture
+ * that arrived a moment later had nowhere to go. A whole deck of scans read
+ * "Picture not on this device yet" while every one of them sat in the store.
+ */
+function substitute(html: string, failed: Set<string>): string {
   const withUrls = html.replace(
-    new RegExp(`src="${IMAGE_PREFIX}([0-9a-f]{64})"`, "g"),
-    (whole, hash: string) => {
+    new RegExp(`<img[^>]*src="${IMAGE_PREFIX}([0-9a-f]{64})"[^>]*>`, "g"),
+    (tag, hash: string) => {
       const url = cachedUrl(hash);
-      // Left as it is when missing: `onerror` on the tag turns an unresolvable
-      // picture into a caption instead of a broken image icon.
-      return url ? `src="${url}"` : whole;
+      if (url) return tag.replace(`${IMAGE_PREFIX}${hash}`, url);
+      if (failed.has(hash)) {
+        return `<span class="text-xs text-muted-foreground">Picture not on this device yet</span>`;
+      }
+      // Still being looked up: nothing is claimed either way.
+      return `<span data-pending-image="${hash}"></span>`;
     },
   );
-  return withLazyImages(withUrls).replace(
-    /<img(?![^>]*\bonerror=)/gi,
-    `<img onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'text-xs text-muted-foreground',textContent:'Picture not on this device yet'}))"`,
-  );
+  return withLazyImages(withUrls);
 }
