@@ -20,6 +20,15 @@ import {
   type SerializedDbDoc,
 } from "./types";
 import { baseOf, mergeDocs, type SyncBase } from "./merge";
+import { referencedImages } from "../card-images";
+import {
+  fetchRemoteImage,
+  remoteImageIndex,
+  uploadMissingImages,
+  type RemoteImages,
+  type TreeEntry,
+} from "./image-sync";
+import { setRemoteImageLoader } from "../image-urls";
 
 const CONFIG_KEY = "flashycardy.sync";
 /**
@@ -372,16 +381,57 @@ export function push(
  */
 const CONTENTS_API_LIMIT = 30 * 1024 * 1024;
 
+/** The commit the branch points at, or null when the repo is empty. */
+async function headCommit(config: SyncConfig): Promise<string | null> {
+  const response = await fetch(
+    `${API}/repos/${config.owner}/${config.repo}/git/ref/heads/${encodeURIComponent(config.branch)}`,
+    { headers: headers(config), cache: "no-store" },
+  );
+  if (!response.ok) return null;
+  const ref = (await response.json()) as { object: { sha: string } };
+  return ref.object.sha;
+}
+
+/**
+ * Where the pictures are, for whoever needs one that is not on this device.
+ *
+ * Held for the session rather than fetched per picture: the listing is one
+ * request that answers every miss, and a card whose scan has not arrived is
+ * common right after a sync.
+ */
+let knownRemoteImages: RemoteImages = new Map();
+
+function rememberRemoteImages(index: RemoteImages) {
+  for (const [hash, path] of index) knownRemoteImages.set(hash, path);
+}
+
+async function loadRemote(hash: string): Promise<Blob | null> {
+  const config = getSyncConfig();
+  if (!config) return null;
+
+  if (!knownRemoteImages.has(hash)) {
+    const head = await headCommit(config);
+    if (!head) return null;
+    knownRemoteImages = await remoteImageIndex(config, head);
+  }
+
+  const path = knownRemoteImages.get(hash);
+  return path ? fetchRemoteImage(config, hash, path) : null;
+}
+
 async function writeFile(
   config: SyncConfig,
   json: string,
   sha: string | null,
   force: boolean,
+  extra: TreeEntry[] = [],
 ): Promise<Response> {
   const content = toBase64(json);
   const message = `flashycardy: ${json.length} bytes`;
 
-  if (json.length < CONTENTS_API_LIMIT) {
+  // Anything carrying pictures has to go the long way: the contents endpoint
+  // writes one file per request and cannot commit a picture beside a document.
+  if (json.length < CONTENTS_API_LIMIT && extra.length === 0) {
     return fetch(
       `${API}/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(config.path)}`,
       {
@@ -397,7 +447,7 @@ async function writeFile(
     );
   }
 
-  return writeViaGitData(config, content, message, force);
+  return writeViaGitData(config, content, message, force, extra);
 }
 
 /**
@@ -413,6 +463,7 @@ async function writeViaGitData(
   content: string,
   message: string,
   force: boolean,
+  extra: TreeEntry[] = [],
 ): Promise<Response> {
   const base = `${API}/repos/${config.owner}/${config.repo}/git`;
   const post = (path: string, body: unknown, method = "POST") =>
@@ -437,6 +488,10 @@ async function writeViaGitData(
     base_tree: parent,
     tree: [
       { path: config.path, mode: "100644", type: "blob", sha: blob.sha },
+      // Pictures ride in the same commit as the document that refers to them,
+      // so the repository is never in a state where a card names a file that
+      // is not there yet.
+      ...extra,
     ],
   });
   if (!treeResponse.ok) return treeResponse;
@@ -483,7 +538,30 @@ async function pushLocked(
     sha = (await fetchMeta(config))?.sha ?? null;
   }
 
-  const response = await writeFile(config, json, sha, options.force === true);
+  // Pictures the document refers to but the repository does not hold yet are
+  // uploaded first and committed alongside it.
+  const wanted = referencedImages(doc.cards);
+  let extra: TreeEntry[] = [];
+  // Only when something is referenced that this session has not already seen in
+  // the repository. Otherwise every push — one per card answered — would fetch
+  // a listing of a thousand pictures to learn nothing.
+  if ([...wanted].some((hash) => !knownRemoteImages.has(hash))) {
+    const head = await headCommit(config);
+    if (head) rememberRemoteImages(await remoteImageIndex(config, head));
+    extra = await uploadMissingImages(config, wanted, knownRemoteImages);
+    for (const entry of extra) {
+      const hash = entry.path.slice("images/".length).split(".")[0];
+      knownRemoteImages.set(hash, entry.path);
+    }
+  }
+
+  const response = await writeFile(
+    config,
+    json,
+    sha,
+    options.force === true,
+    extra,
+  );
 
   // 422 is also what GitHub returns for a file it will not take at all, and
   // reading that as a conflict sent everyone to the wrong screen: sync had
@@ -702,6 +780,9 @@ export function startSync(): () => void {
       setState(navigator.onLine ? "error" : "offline", message);
     }
   };
+
+  // Cards can render a picture the repository holds and this device does not.
+  setRemoteImageLoader(loadRemote);
 
   void doPull();
 

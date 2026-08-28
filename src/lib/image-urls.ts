@@ -12,6 +12,21 @@
 
 import { getImage } from "./images";
 
+/**
+ * How to get a picture this device does not have.
+ *
+ * Injected by the sync module rather than imported, so the pieces that draw a
+ * card know nothing about GitHub — and so a build with sync switched off still
+ * renders everything it holds.
+ */
+let loadRemote: ((hash: string) => Promise<Blob | null>) | null = null;
+
+export function setRemoteImageLoader(
+  loader: (hash: string) => Promise<Blob | null>,
+) {
+  loadRemote = loader;
+}
+
 /** Roughly a screenful of cards' worth, well short of a whole deck. */
 const LIMIT = 120;
 
@@ -48,7 +63,10 @@ export async function resolveImage(hash: string): Promise<string | null> {
   if (inFlight) return inFlight;
 
   const work = (async () => {
-    const blob = await getImage(hash);
+    // Local first, then the repository. A card can arrive before its picture:
+    // the document is one file and the pictures are many, so a sync brings the
+    // words first and the scans as they are asked for.
+    const blob = (await getImage(hash)) ?? (await loadRemote?.(hash)) ?? null;
     if (!blob) return null;
     const url = URL.createObjectURL(blob);
     remember(hash, url);
