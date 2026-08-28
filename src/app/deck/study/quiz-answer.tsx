@@ -110,9 +110,22 @@ export function QuizAnswer({
         return;
       }
 
-      // Nothing to walk once the answer is showing: the options are spent and
+      // Nothing to pick once the answer is showing: the options are spent and
       // the only move left is the one right already makes.
       if (answered) return;
+
+      // The numbers on screen are the shortcut. Read as a position in the list
+      // as it reads, which is what the number in front of each option counts,
+      // so 2 always takes the second one down.
+      if (/^[1-9]$/.test(e.key)) {
+        const position = Number(e.key) - 1;
+        if (position >= order.length) return;
+        e.preventDefault();
+        setCursor(position);
+        choose(order[position]);
+        return;
+      }
+
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
 
       e.preventDefault();
