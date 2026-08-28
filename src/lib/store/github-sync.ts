@@ -201,11 +201,22 @@ function headers(config: SyncConfig, accept = "application/vnd.github+json") {
 }
 
 /** UTF-8 safe base64, since card HTML routinely contains non-ASCII. */
+/**
+ * Base64 for a document that is now tens of megabytes.
+ *
+ * A byte at a time built the string with forty million appends and locked the
+ * tab for most of a minute — long enough that the push looked hung and the
+ * window stopped answering. In blocks it is the same answer in a fraction of
+ * the time; the block stays well under the argument limit for `apply`.
+ */
 function toBase64(text: string): string {
   const bytes = new TextEncoder().encode(text);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+  const BLOCK = 0x8000;
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += BLOCK) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, i + BLOCK)));
+  }
+  return btoa(parts.join(""));
 }
 
 type ContentsMeta = { sha: string; size: number };
@@ -343,13 +354,127 @@ export function push(
   return withSyncLock(() => pushLocked(config, options));
 }
 
+/**
+ * Write the document, by whichever route the size allows.
+ *
+ * The simple one — PUT to the contents endpoint — refuses anything much over
+ * forty megabytes, and says so: "Sorry, the file is too large to be processed."
+ * The document passed that line and sync stopped dead, reported as a conflict
+ * because 422 was the status either way.
+ *
+ * So above a threshold it goes the way git itself would: write a blob, hang it
+ * in a tree beside whatever else the repo holds, commit that tree onto the
+ * branch tip, and move the branch. More round trips, but the blob endpoint
+ * takes what the contents endpoint will not.
+ *
+ * The small path is kept because it is one request rather than six, and most
+ * people's decks will never need the other.
+ */
+const CONTENTS_API_LIMIT = 30 * 1024 * 1024;
+
+async function writeFile(
+  config: SyncConfig,
+  json: string,
+  sha: string | null,
+  force: boolean,
+): Promise<Response> {
+  const content = toBase64(json);
+  const message = `flashycardy: ${json.length} bytes`;
+
+  if (json.length < CONTENTS_API_LIMIT) {
+    return fetch(
+      `${API}/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(config.path)}`,
+      {
+        method: "PUT",
+        headers: { ...headers(config), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          content,
+          branch: config.branch,
+          ...(sha ? { sha } : {}),
+        }),
+      },
+    );
+  }
+
+  return writeViaGitData(config, content, message, force);
+}
+
+/**
+ * blob → tree → commit → move the branch.
+ *
+ * The last step is the one that can conflict: moving the branch is refused
+ * unless the commit being replaced is the parent of the new one, which is the
+ * same protection the contents endpoint gives by demanding the file's SHA. A
+ * forced write moves it anyway, which is what "keep this device" means.
+ */
+async function writeViaGitData(
+  config: SyncConfig,
+  content: string,
+  message: string,
+  force: boolean,
+): Promise<Response> {
+  const base = `${API}/repos/${config.owner}/${config.repo}/git`;
+  const post = (path: string, body: unknown, method = "POST") =>
+    fetch(`${base}${path}`, {
+      method,
+      headers: { ...headers(config), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  const refUrl = `${base}/ref/heads/${encodeURIComponent(config.branch)}`;
+  const refResponse = await fetch(refUrl, { headers: headers(config), cache: "no-store" });
+  if (!refResponse.ok) return refResponse;
+  const ref = (await refResponse.json()) as { object: { sha: string } };
+  const parent = ref.object.sha;
+
+  const blobResponse = await post("/blobs", { content, encoding: "base64" });
+  if (!blobResponse.ok) return blobResponse;
+  const blob = (await blobResponse.json()) as { sha: string };
+
+  const treeResponse = await post("/trees", {
+    // Based on the current commit's tree, so nothing else in the repo is lost.
+    base_tree: parent,
+    tree: [
+      { path: config.path, mode: "100644", type: "blob", sha: blob.sha },
+    ],
+  });
+  if (!treeResponse.ok) return treeResponse;
+  const tree = (await treeResponse.json()) as { sha: string };
+
+  const commitResponse = await post("/commits", {
+    message,
+    tree: tree.sha,
+    parents: [parent],
+  });
+  if (!commitResponse.ok) return commitResponse;
+  const commit = (await commitResponse.json()) as { sha: string };
+
+  const moved = await post(
+    `/refs/heads/${encodeURIComponent(config.branch)}`,
+    { sha: commit.sha, force },
+    "PATCH",
+  );
+  if (!moved.ok) return moved;
+
+  // The caller wants the file's blob SHA, which is what the contents endpoint
+  // would have returned, so the two paths are interchangeable above here.
+  return new Response(JSON.stringify({ content: { sha: blob.sha } }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 async function pushLocked(
   config: SyncConfig,
   options: { force?: boolean },
 ): Promise<"ok" | "conflict"> {
   const doc = getSnapshot();
   const serialized = serializeDoc(doc);
-  const json = JSON.stringify(serialized, null, 2);
+  // No longer pretty-printed. Indenting a forty-megabyte document adds several
+  // megabytes of spaces to something no one reads, and the size is the reason
+  // the old write path stopped working at all.
+  const json = JSON.stringify(serialized);
 
   // Read inside the lock: another tab may have pushed while this one queued.
   let sha = getSha();
@@ -358,19 +483,21 @@ async function pushLocked(
     sha = (await fetchMeta(config))?.sha ?? null;
   }
 
-  const url = `${API}/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(
-    config.path,
-  )}`;
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: { ...headers(config), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: `flashycardy: ${doc.decks.length} decks, ${doc.cards.length} cards`,
-      content: toBase64(json),
-      branch: config.branch,
-      ...(sha ? { sha } : {}),
-    }),
-  });
+  const response = await writeFile(config, json, sha, options.force === true);
+
+  // 422 is also what GitHub returns for a file it will not take at all, and
+  // reading that as a conflict sent everyone to the wrong screen: sync had
+  // stopped because the document had outgrown the endpoint, while the app said
+  // the file had changed elsewhere and offered to pick a version. The message
+  // is the only thing that tells them apart, so it is read rather than assumed.
+  if (response.status === 422) {
+    const detail = await response.clone().text();
+    if (/too large/i.test(detail)) {
+      throw new Error(
+        "GitHub refused the file as too large. Your decks have outgrown what it will accept in one piece — see Settings for the size.",
+      );
+    }
+  }
 
   // 409 is the documented conflict; 422 is what you get when the supplied SHA
   // is stale or when a SHA was required but omitted.
