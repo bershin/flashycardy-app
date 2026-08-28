@@ -89,6 +89,15 @@ interface StudySessionProps {
 
 type Rating = "got_it" | "missed";
 
+/** One key on the hint lines, so they all wear the same face. */
+function Key({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
+      {children}
+    </kbd>
+  );
+}
+
 /** Card fronts are rich text; the summary list wants one plain line of it. */
 function plainText(html: string): string {
   return html
@@ -240,6 +249,13 @@ export function StudySession({
 
   /** Answered in its own surface rather than by flipping and self-rating. */
   const interactive = current?.type === "quiz" || current?.type === "generated";
+  /**
+   * How many options the card in hand shows — the last number the hint offers.
+   * A card with two spellings answers to 1 and 2 only, and a hint that promised
+   * 4 would be advertising two keys that do nothing.
+   */
+  const optionCount =
+    (rolled?.options ?? current?.quiz?.options ?? []).length || 0;
 
   /**
    * A click on a picture opens the picture, not the card behind it.
@@ -939,13 +955,26 @@ export function StudySession({
             <ArrowLeft className="size-4" />
             Previous
           </Button>
-          <p className="text-xs text-muted-foreground">
-            Use{" "}
-            <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
-              &uarr;
-            </kbd>{" "}
-            to go back
-          </p>
+          {/* A quiz card answers to its own keys: up and down walk the options
+              there, so the card underneath cannot also step back on up, and
+              saying it could was the one hint on this screen that was wrong. */}
+          {interactive ? (
+            <p className="text-xs text-muted-foreground">
+              <Key>1</Key>
+              {optionCount > 1 && (
+                <>
+                  &ndash;<Key>{optionCount}</Key>
+                </>
+              )}{" "}
+              or <Key>&uarr;</Key> <Key>&darr;</Key> to choose,{" "}
+              <Key>&rarr;</Key> to continue
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Use <Key>&uarr;</Key> to go back, <Key>space</Key> to turn the
+              card over
+            </p>
+          )}
         </div>
       )}
 
