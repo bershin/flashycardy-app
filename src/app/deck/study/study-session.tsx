@@ -131,6 +131,19 @@ export function StudySession({
     () => new Map(initialDurations ?? []),
   );
   const [round, setRound] = useState(initialRound);
+  /**
+   * Bumped whenever the deck is started again, so a quiz card's options are
+   * dealt afresh.
+   *
+   * Round already changes when reviewing what was missed, but starting over
+   * leaves it at one — so the same card came back with its options in exactly
+   * the places they were a minute ago, which is how you learn "the answer is
+   * the third one" instead of the spelling.
+   *
+   * Not the card index: stepping back to a card you have answered should show
+   * the answer you gave, and re-dealing it would wipe that.
+   */
+  const [deal, setDeal] = useState(0);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, startDeleting] = useTransition();
@@ -357,6 +370,7 @@ export function StudySession({
   }, [current, currentIndex, bankTime, readElapsed]);
 
   const restart = useCallback(() => {
+    setDeal((n) => n + 1);
     setStudyCards(cards);
     setCurrentIndex(0);
     setRevealed(false);
@@ -367,6 +381,7 @@ export function StudySession({
   }, [cards]);
 
   const shuffleAndRestart = useCallback(() => {
+    setDeal((n) => n + 1);
     setStudyCards(shuffleArray(cards));
     setCurrentIndex(0);
     setRevealed(false);
@@ -377,6 +392,7 @@ export function StudySession({
   }, [cards]);
 
   const reviewMissed = useCallback(() => {
+    setDeal((n) => n + 1);
     setStudyCards(shuffleArray(missedCards));
     setCurrentIndex(0);
     setRevealed(false);
@@ -837,7 +853,7 @@ export function StudySession({
             other two. `key` resets each answer surface between cards. */}
         {(current.type === "quiz" || current.type === "generated") && (
           <QuizAnswer
-            key={`${current.id}:${round}`}
+            key={`${current.id}:${round}:${deal}`}
             card={current}
             rolled={rolled ?? undefined}
             onResolved={rate}

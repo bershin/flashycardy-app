@@ -63,10 +63,10 @@ export function QuizAnswer({
     if (answered) return;
     setPicked(index);
     onRevealed();
-    if (index === correctIndex) {
-      // Right: a beat to register the tick, then straight on.
-      setTimeout(() => onResolved("got_it"), 550);
-    }
+    // Right or wrong, the card stays until it is dismissed. Being right is
+    // often the moment the explanation is worth reading — a guess between two
+    // spellings that happened to land on the correct one teaches nothing if the
+    // screen moves on before you see why.
   }
 
   return (
@@ -102,7 +102,7 @@ export function QuizAnswer({
         })}
       </div>
 
-      {answered && !wasCorrect && (
+      {answered && (
         <div className="shrink-0 space-y-3">
           {/* A generated card explains this roll's numbers; a hand-written one
               shows whatever was typed on the back. */}
@@ -119,7 +119,11 @@ export function QuizAnswer({
             )
           )}
           <div className="flex justify-center">
-            <Button size="lg" onClick={() => onResolved("missed")}>
+            <Button
+              size="lg"
+              autoFocus
+              onClick={() => onResolved(wasCorrect ? "got_it" : "missed")}
+            >
               Continue
             </Button>
           </div>
