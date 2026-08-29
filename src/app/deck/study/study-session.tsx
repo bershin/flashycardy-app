@@ -518,16 +518,25 @@ export function StudySession({
       // user didn't intend.
       if (interactive) return;
 
-      // Down turns the card over, left and right answer it — the same shape as
-      // the buttons underneath, where Missed sits on the left of Got it.
+      // Down turns the card over, left steps back, and once it is over left and
+      // right answer it — the same shape as the buttons underneath, where
+      // Missed sits on the left of Got it.
       switch (e.key) {
         case " ":
         case "ArrowDown":
           e.preventDefault();
           if (!finished && !revealed) reveal();
           break;
-        case "1":
         case "ArrowLeft":
+          e.preventDefault();
+          // Left reads as backwards until the card is turned over, at which
+          // point the buttons underneath take the horizontal pair and left is
+          // Missed. Nothing is lost by the swap: stepping back from a card you
+          // have already read means giving up the answer in front of you.
+          if (!finished && !revealed) goPrev();
+          else if (!finished) rate("missed");
+          break;
+        case "1":
           if (!finished && revealed) {
             e.preventDefault();
             rate("missed");
@@ -1000,8 +1009,8 @@ export function StudySession({
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              <Key>space</Key> to turn the card over, <Key>&uarr;</Key> to
-              delete
+              <Key>space</Key> to turn the card over, <Key>&larr;</Key> for the
+              card before, <Key>&uarr;</Key> to delete
             </p>
           )}
         </div>
