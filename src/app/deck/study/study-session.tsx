@@ -494,6 +494,27 @@ export function StudySession({
         return;
       }
 
+      // The confirmation owns the keyboard while it is up: Escape and Enter are
+      // its business, and nothing behind it should flip or rate.
+      if (deleteOpen) return;
+
+      // Left asks to delete the card in hand. Asks, rather than does — a
+      // session runs at finger speed and a deleted card does not come back.
+      //
+      // The exception is a turned-over basic card, where left already means
+      // Missed and says so on screen. A rating reflex must never delete, so
+      // there left stays Missed and the button above remains the way out.
+      if (
+        e.key === "ArrowLeft" &&
+        !finished &&
+        current !== undefined &&
+        !(revealed && !interactive)
+      ) {
+        e.preventDefault();
+        setDeleteOpen(true);
+        return;
+      }
+
       // Quiz cards are answered in their own surface, so the flip and
       // self-rate shortcuts would either do nothing or record a rating the
       // user didn't intend.
@@ -531,7 +552,18 @@ export function StudySession({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [reveal, goPrev, rate, finished, revealed, interactive, editOpen, zoomed]);
+  }, [
+    reveal,
+    goPrev,
+    rate,
+    finished,
+    revealed,
+    interactive,
+    editOpen,
+    zoomed,
+    current,
+    deleteOpen,
+  ]);
 
   if (finished) {
     const scorePercent = total > 0 ? Math.round((gotItCount / total) * 100) : 0;
@@ -967,12 +999,12 @@ export function StudySession({
                 </>
               )}{" "}
               or <Key>&uarr;</Key> <Key>&darr;</Key> to choose,{" "}
-              <Key>&rarr;</Key> to continue
+              <Key>&rarr;</Key> to continue, <Key>&larr;</Key> to delete
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
               Use <Key>&uarr;</Key> to go back, <Key>space</Key> to turn the
-              card over
+              card over, <Key>&larr;</Key> to delete
             </p>
           )}
         </div>
