@@ -498,18 +498,16 @@ export function StudySession({
       // its business, and nothing behind it should flip or rate.
       if (deleteOpen) return;
 
-      // Left asks to delete the card in hand. Asks, rather than does — a
-      // session runs at finger speed and a deleted card does not come back.
+      // Delete asks first, whichever key raises it — a session runs at finger
+      // speed and a deleted card does not come back.
       //
-      // The exception is a turned-over basic card, where left already means
-      // Missed and says so on screen. A rating reflex must never delete, so
-      // there left stays Missed and the button above remains the way out.
-      if (
-        e.key === "ArrowLeft" &&
-        !finished &&
-        current !== undefined &&
-        !(revealed && !interactive)
-      ) {
+      // Which key that is depends on the card, because the arrows are already
+      // spoken for and differently on each. A quiz card walks its options with
+      // up and down, so left does it there; a basic card keeps left for Missed,
+      // where a rating reflex must never delete, so up does it there. Up on a
+      // basic card used to step back a card, which the button above still does.
+      const deleteKey = interactive ? "ArrowLeft" : "ArrowUp";
+      if (e.key === deleteKey && !finished && current !== undefined) {
         e.preventDefault();
         setDeleteOpen(true);
         return;
@@ -521,17 +519,12 @@ export function StudySession({
       if (interactive) return;
 
       // Down turns the card over, left and right answer it — the same shape as
-      // the buttons underneath, where Missed sits on the left of Got it. Up is
-      // the way back, which leaves the horizontal pair to mean one thing only.
+      // the buttons underneath, where Missed sits on the left of Got it.
       switch (e.key) {
         case " ":
         case "ArrowDown":
           e.preventDefault();
           if (!finished && !revealed) reveal();
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          if (!finished && !revealed) goPrev();
           break;
         case "1":
         case "ArrowLeft":
@@ -973,7 +966,11 @@ export function StudySession({
             <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
               &rarr;
             </kbd>{" "}
-            for Got it
+            for Got it,{" "}
+            <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[0.7rem]">
+              &uarr;
+            </kbd>{" "}
+            to delete
           </p>
         </div>
       ) : (
@@ -1003,8 +1000,8 @@ export function StudySession({
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Use <Key>&uarr;</Key> to go back, <Key>space</Key> to turn the
-              card over, <Key>&larr;</Key> to delete
+              <Key>space</Key> to turn the card over, <Key>&uarr;</Key> to
+              delete
             </p>
           )}
         </div>
