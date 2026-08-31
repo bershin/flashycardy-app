@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useSyncExternalStore,
   useTransition,
 } from "react";
@@ -156,6 +157,14 @@ export function StudySession({
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, startDeleting] = useTransition();
+  /**
+   * The confirmation's Delete button, so it can take focus when the dialog
+   * opens. Deleting is reached by a key press mid-session, and the hands are
+   * already on the keyboard: landing on Delete makes it Enter to go through,
+   * Escape to back out. Cancel is the safer default in general, but here the
+   * card has already been judged worth removing and Escape is right there.
+   */
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
 
   /**
    * Remove the card on screen and carry on with the rest.
@@ -1034,7 +1043,7 @@ export function StudySession({
       )}
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent initialFocus={deleteButtonRef}>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this card?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1047,7 +1056,11 @@ export function StudySession({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep it</AlertDialogCancel>
-            <AlertDialogAction disabled={deleting} onClick={deleteCurrent}>
+            <AlertDialogAction
+              ref={deleteButtonRef}
+              disabled={deleting}
+              onClick={deleteCurrent}
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
