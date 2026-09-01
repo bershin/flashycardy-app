@@ -8,6 +8,7 @@ import {
   Check,
   CloudOff,
   CloudUpload,
+  ListTodo,
   Moon,
   RefreshCw,
   Settings as SettingsIcon,
@@ -68,6 +69,25 @@ export function AppChrome() {
       <TodoReminders />
       <header className="flex items-center justify-end gap-2 p-4">
         <SyncIndicator />
+        {/* Beside the calendar because it lands on the same page — the list of
+            things to do sits above the grid there. What it adds over the
+            calendar's own icon is the cursor: `?todo=new` opens with today's
+            add field focused, so jotting something down is one press from
+            anywhere in the app rather than a page and a click. */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Link
+                href="/calendar?todo=new"
+                aria-label="Add a todo for today"
+                className={buttonVariants({ variant: "ghost", size: "icon" })}
+              >
+                <ListTodo className="size-4" />
+              </Link>
+            }
+          />
+          <TooltipContent>Add a todo for today</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={

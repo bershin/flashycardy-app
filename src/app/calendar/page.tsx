@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Suspense,
   useCallback,
   useMemo,
   useRef,
@@ -8,6 +9,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   CalendarArrowUp,
   ChevronLeft,
@@ -195,8 +197,9 @@ function selectActiveCards(db: DbDoc): ActiveCards {
   return { cards: db.cards.filter((c) => deckOf.has(c.deckId)), deckOf };
 }
 
-export default function CalendarPage() {
+function CalendarPageContent() {
   const ready = useStoreReady();
+  const searchParams = useSearchParams();
   const { cards, deckOf } = useStore(
     useCallback((db: DbDoc) => selectActiveCards(db), []),
   );
@@ -231,8 +234,18 @@ export default function CalendarPage() {
     }
   }
 
-  /** Bumped whenever a square asks for the cursor in the add field. */
-  const [addSignal, setAddSignal] = useState(0);
+  /**
+   * Bumped whenever a square asks for the cursor in the add field.
+   *
+   * Starts at one when the header's todo icon sent us here with `?todo=new`,
+   * so arriving that way lands in the add field for today rather than at the
+   * top of a page that still needs a click. Read once, as the initial value:
+   * the signal is a request made on arrival, not a piece of state the URL
+   * keeps owning, and re-reading it would put the cursor back every render.
+   */
+  const [addSignal, setAddSignal] = useState(
+    searchParams.get("todo") === "new" ? 1 : 0,
+  );
   /** The topmost week in view, as an index into the rendered range. */
   const [topWeek, setTopWeek] = useState(WEEKS_BEFORE);
   const ribbon = useRef<HTMLDivElement | null>(null);
@@ -1275,5 +1288,14 @@ export default function CalendarPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function CalendarPage() {
+  // `useSearchParams` suspends during prerender, so the boundary is required.
+  return (
+    <Suspense>
+      <CalendarPageContent />
+    </Suspense>
   );
 }
