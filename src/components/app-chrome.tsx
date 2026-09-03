@@ -34,6 +34,7 @@ import {
 } from "@/lib/store/use-store";
 import { dismissNotice } from "@/lib/store/local-store";
 import { TodoReminders } from "@/components/todo-reminders";
+import { ProfileMenu } from "@/components/profile-menu";
 import {
   getLastCheckedAt,
   hasUnpushedChanges,
@@ -103,6 +104,7 @@ export function AppChrome() {
           <TooltipContent>Review calendar</TooltipContent>
         </Tooltip>
         <ThemeToggle />
+        <ProfileMenu />
         <Tooltip>
           <TooltipTrigger
             render={

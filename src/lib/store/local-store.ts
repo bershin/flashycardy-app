@@ -17,6 +17,7 @@ import {
   type DbDoc,
   type SerializedDbDoc,
 } from "./types";
+import { scopedKey, scopedKeyFor } from "./profiles";
 
 const DB_NAME = "flashycardy";
 /**
@@ -27,10 +28,23 @@ const DB_VERSION = 2;
 const STORE_NAME = "doc";
 /** Raw image bytes, keyed by the hash of those bytes. */
 export const IMAGE_STORE = "images";
-const DOC_KEY = "current";
-const DEVICE_ID_KEY = "flashycardy.deviceId";
+/**
+ * The document's key in the `doc` store — one per profile, so two people
+ * sharing a browser hold two documents rather than overwriting one.
+ *
+ * A function rather than a constant because the profile is only knowable in the
+ * browser, and this module is imported during prerender too.
+ */
+function docKey(): string {
+  return scopedKey("current");
+}
+function deviceIdKey(): string {
+  return scopedKey("flashycardy.deviceId");
+}
 /** Tabs announce their writes here so the others can catch up. */
-const CHANNEL_NAME = "flashycardy.doc";
+function channelName(): string {
+  return scopedKey("flashycardy.doc");
+}
 
 export type StoreStatus = "idle" | "loading" | "ready" | "error";
 
@@ -126,10 +140,10 @@ function emit() {
 
 export function getDeviceId(): string {
   if (typeof window === "undefined") return "server";
-  let id = window.localStorage.getItem(DEVICE_ID_KEY);
+  let id = window.localStorage.getItem(deviceIdKey());
   if (!id) {
     id = crypto.randomUUID();
-    window.localStorage.setItem(DEVICE_ID_KEY, id);
+    window.localStorage.setItem(deviceIdKey(), id);
   }
   return id;
 }
@@ -157,10 +171,33 @@ export function openDb(): Promise<IDBDatabase> {
 function idbGet(database: IDBDatabase): Promise<SerializedDbDoc | undefined> {
   return new Promise((resolve, reject) => {
     const tx = database.transaction(STORE_NAME, "readonly");
-    const request = tx.objectStore(STORE_NAME).get(DOC_KEY);
+    const request = tx.objectStore(STORE_NAME).get(docKey());
     request.onsuccess = () => resolve(request.result as SerializedDbDoc | undefined);
     request.onerror = () => reject(request.error);
   });
+}
+
+/**
+ * Drop another profile's document.
+ *
+ * Lives here rather than in `profiles.ts` because that module must not import
+ * this one — this one imports it, and a cycle between the store and the thing
+ * that names its keys is not worth having. Takes an id because a profile is
+ * always deleted from some *other* profile's session.
+ */
+export async function deleteDocumentFor(profileId: string): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const database = await openDb();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = database.transaction(STORE_NAME, "readwrite");
+      tx.objectStore(STORE_NAME).delete(scopedKeyFor("current", profileId));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    database.close();
+  }
 }
 
 type PutResult =
@@ -183,7 +220,7 @@ function idbCompareAndPut(
   return new Promise((resolve, reject) => {
     const tx = database.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
-    const request = store.get(DOC_KEY);
+    const request = store.get(docKey());
     let conflict: SerializedDbDoc | null | undefined;
 
     request.onsuccess = () => {
@@ -194,7 +231,7 @@ function idbCompareAndPut(
         conflict = stored ?? null;
         return;
       }
-      store.put(value, DOC_KEY);
+      store.put(value, docKey());
     };
 
     tx.oncomplete = () =>
@@ -261,7 +298,7 @@ function watchOtherTabs(): void {
   if (typeof window === "undefined" || channel !== null) return;
 
   if (typeof BroadcastChannel !== "undefined") {
-    channel = new BroadcastChannel(CHANNEL_NAME);
+    channel = new BroadcastChannel(channelName());
     channel.onmessage = (event: MessageEvent<string>) => {
       if (event.data !== baseStamp) void queue(refreshFromDisk);
     };

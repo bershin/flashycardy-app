@@ -1,5 +1,7 @@
 "use client";
 
+import { scopedKey } from "./store/profiles";
+
 /**
  * Crash recovery for study sessions.
  *
@@ -18,7 +20,9 @@
  * would be misleading.
  */
 
-const KEY = "flashycardy.sessions";
+function storageKey(): string {
+  return scopedKey("flashycardy.sessions");
+}
 
 export type SavedRating = "got_it" | "missed";
 
@@ -49,7 +53,7 @@ function startOfToday(): number {
 
 function readAll(): SessionMap {
   if (typeof window === "undefined") return {};
-  const raw = window.localStorage.getItem(KEY);
+  const raw = window.localStorage.getItem(storageKey());
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw) as SessionMap;
@@ -71,7 +75,7 @@ function readAll(): SessionMap {
 function writeAll(sessions: SessionMap) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(sessions));
+    window.localStorage.setItem(storageKey(), JSON.stringify(sessions));
   } catch {
     // A full or unavailable localStorage must never break studying — the
     // ratings themselves are safe regardless.

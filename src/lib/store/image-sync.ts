@@ -15,6 +15,7 @@
 
 import type { SyncConfig } from "./github-sync";
 import { getImage, hashImage, putImage, storedHashes } from "../images";
+import { scopedKey } from "./profiles";
 
 const API = "https://api.github.com";
 
@@ -75,11 +76,13 @@ export async function remoteImageIndex(
  * uploads repeated because the last few hit a rate limit. Their names are kept
  * here until a commit refers to them.
  */
-const PENDING_KEY = "flashycardy.pendingBlobs";
+function storageKey(): string {
+  return scopedKey("flashycardy.pendingBlobs");
+}
 
 function loadPending(): Record<string, string> {
   try {
-    return JSON.parse(window.localStorage.getItem(PENDING_KEY) ?? "{}") as Record<
+    return JSON.parse(window.localStorage.getItem(storageKey()) ?? "{}") as Record<
       string,
       string
     >;
@@ -90,14 +93,14 @@ function loadPending(): Record<string, string> {
 
 function savePending(pending: Record<string, string>) {
   try {
-    window.localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+    window.localStorage.setItem(storageKey(), JSON.stringify(pending));
   } catch {
     // Losing this costs a repeated upload, not correctness.
   }
 }
 
 export function clearPendingBlobs() {
-  window.localStorage.removeItem(PENDING_KEY);
+  window.localStorage.removeItem(storageKey());
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

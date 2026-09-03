@@ -26,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { ProfileSettings } from "@/components/profile-settings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -222,6 +223,8 @@ export default function SettingsPage() {
         &larr; Back to decks
       </Link>
       <h1 className="mt-4 text-3xl font-bold tracking-tight">Settings</h1>
+
+      <ProfileSettings />
 
       <section className="mt-8">
         <h2 className="text-lg font-semibold">GitHub sync</h2>

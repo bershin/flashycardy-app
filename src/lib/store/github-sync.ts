@@ -20,6 +20,7 @@ import {
   type SerializedDbDoc,
 } from "./types";
 import { baseOf, mergeDocs, type SyncBase } from "./merge";
+import { scopedKey, scopedKeyFor } from "./profiles";
 import { referencedImages } from "../card-images";
 import {
   clearPendingBlobs,
@@ -32,13 +33,17 @@ import {
 import { setRemoteImageLoader } from "../image-urls";
 import { storedHashes } from "../images";
 
-const CONFIG_KEY = "flashycardy.sync";
+function configKey(): string {
+  return scopedKey("flashycardy.sync");
+}
 /**
  * What this device and GitHub last agreed the document contained — ids and
  * their timestamps, not contents. See `merge.ts`: without it, a record missing
  * from one side cannot be told from a record newly added to the other.
  */
-const BASE_KEY = "flashycardy.sync.base";
+function baseKey(): string {
+  return scopedKey("flashycardy.sync.base");
+}
 /**
  * The `mutatedAt` of the last document GitHub actually accepted.
  *
@@ -49,9 +54,15 @@ const BASE_KEY = "flashycardy.sync.base";
  * no error, because none occurred. This is how the app can tell, at any moment,
  * whether what it holds has ever been sent.
  */
-const PUSHED_KEY = "flashycardy.sync.pushedAt";
-const SHA_KEY = "flashycardy.sync.sha";
-const LAST_SYNCED_KEY = "flashycardy.sync.lastSyncedAt";
+function pushedKey(): string {
+  return scopedKey("flashycardy.sync.pushedAt");
+}
+function shaKey(): string {
+  return scopedKey("flashycardy.sync.sha");
+}
+function lastSyncedKey(): string {
+  return scopedKey("flashycardy.sync.lastSyncedAt");
+}
 /** Web Locks name holding pushes to one tab at a time. */
 const SYNC_LOCK = "flashycardy.sync.push";
 const PUSH_DEBOUNCE_MS = 3000;
@@ -138,13 +149,13 @@ function markChecked() {
 
 export function getLastSyncedAt(): Date | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(LAST_SYNCED_KEY);
+  const raw = window.localStorage.getItem(lastSyncedKey());
   return raw ? new Date(raw) : null;
 }
 
 export function getSyncConfig(): SyncConfig | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(CONFIG_KEY);
+  const raw = window.localStorage.getItem(configKey());
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<SyncConfig>;
@@ -161,34 +172,59 @@ export function getSyncConfig(): SyncConfig | null {
   }
 }
 
+/**
+ * What another profile syncs to, as `owner/repo/path@branch`, or null.
+ *
+ * Two profiles pointed at the same file would pull each other's decks in and
+ * merge them — the one way separate profiles can still run together, and
+ * silent if nothing looks for it. Settings uses this to say so. Reads that
+ * profile's own key rather than the active one's, which is why it takes an id.
+ */
+export function getSyncTargetFor(profileId: string): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(
+    scopedKeyFor("flashycardy.sync", profileId),
+  );
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<SyncConfig>;
+    if (!parsed.owner || !parsed.repo) return null;
+    const path = parsed.path || "data.json";
+    const branch = parsed.branch || "main";
+    return `${parsed.owner}/${parsed.repo}/${path}@${branch}`;
+  } catch {
+    return null;
+  }
+}
+
 export function setSyncConfig(config: SyncConfig | null) {
   if (typeof window === "undefined") return;
   if (config === null) {
-    window.localStorage.removeItem(CONFIG_KEY);
-    window.localStorage.removeItem(SHA_KEY);
+    window.localStorage.removeItem(configKey());
+    window.localStorage.removeItem(shaKey());
     setState("disabled");
     return;
   }
-  window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  window.localStorage.setItem(configKey(), JSON.stringify(config));
   // A different file means the cached SHA no longer refers to anything.
-  window.localStorage.removeItem(SHA_KEY);
+  window.localStorage.removeItem(shaKey());
   setState("idle");
 }
 
 function getSha(): string | null {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(SHA_KEY);
+  return window.localStorage.getItem(shaKey());
 }
 
 function setSha(sha: string | null) {
   if (typeof window === "undefined") return;
-  if (sha === null) window.localStorage.removeItem(SHA_KEY);
-  else window.localStorage.setItem(SHA_KEY, sha);
+  if (sha === null) window.localStorage.removeItem(shaKey());
+  else window.localStorage.setItem(shaKey(), sha);
 }
 
 function readBase(): SyncBase | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(BASE_KEY);
+  const raw = window.localStorage.getItem(baseKey());
   if (!raw) return null;
   try {
     return JSON.parse(raw) as SyncBase;
@@ -202,7 +238,7 @@ function readBase(): SyncBase | null {
 function writeBase(doc: DbDoc) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(BASE_KEY, JSON.stringify(baseOf(doc)));
+    window.localStorage.setItem(baseKey(), JSON.stringify(baseOf(doc)));
   } catch {
     // Out of quota: the next merge keeps more than it strictly should rather
     // than dropping the sync.
@@ -211,20 +247,20 @@ function writeBase(doc: DbDoc) {
 
 function markPushed(at: Date) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(PUSHED_KEY, at.toISOString());
+  window.localStorage.setItem(pushedKey(), at.toISOString());
 }
 
 /** Whether this device holds anything GitHub has not accepted. */
 export function hasUnpushedChanges(): boolean {
   if (typeof window === "undefined") return false;
-  const pushed = window.localStorage.getItem(PUSHED_KEY);
+  const pushed = window.localStorage.getItem(pushedKey());
   if (!pushed) return true;
   return getSnapshot().mutatedAt.getTime() > new Date(pushed).getTime();
 }
 
 function markSynced() {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(LAST_SYNCED_KEY, new Date().toISOString());
+  window.localStorage.setItem(lastSyncedKey(), new Date().toISOString());
 }
 
 function headers(config: SyncConfig, accept = "application/vnd.github+json") {
