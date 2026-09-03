@@ -155,7 +155,7 @@ export default function SettingsPage() {
     setSyncConfig(config);
     setMessage(
       result.exists
-        ? `Connected. Found ${config.path} (${(result.size / 1024 / 1024).toFixed(2)} MB). Reload to pull it in.`
+        ? `Connected. Found ${config.path} (${(result.size / 1024 / 1024).toFixed(2)} MB) — pulling it in now.`
         : `Connected. ${config.path} doesn't exist yet — it will be created on the first save.`,
     );
     setBusy(false);

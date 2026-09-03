@@ -202,13 +202,21 @@ export function setSyncConfig(config: SyncConfig | null) {
   if (config === null) {
     window.localStorage.removeItem(configKey());
     window.localStorage.removeItem(shaKey());
+    stopLoop();
     setState("disabled");
     return;
   }
   window.localStorage.setItem(configKey(), JSON.stringify(config));
   // A different file means the cached SHA no longer refers to anything.
   window.localStorage.removeItem(shaKey());
-  setState("idle");
+  // Start the loop against what was just saved, rather than waiting for the
+  // next page load. `startSync` runs once, from the bootstrap effect, and takes
+  // its no-op path when there is no configuration yet — so setting one up used
+  // to leave nothing running: the state said "idle", nothing was listening for
+  // changes, nothing ever pushed, and the header sat on "changes GitHub has not
+  // accepted yet · not yet checked" until the page was reloaded. Rare when sync
+  // was set up once ever; routine now that each profile sets up its own.
+  restartLoop();
 }
 
 function getSha(): string | null {
@@ -862,13 +870,46 @@ export function flushPush() {
 }
 
 /**
+ * Teardown for the loop currently running, or null when none is.
+ *
+ * Module-level so that saving a configuration can restart the loop without a
+ * reference to whatever the bootstrap effect is holding.
+ */
+let disposeLoop: (() => void) | null = null;
+
+function stopLoop(): void {
+  disposeLoop?.();
+  disposeLoop = null;
+}
+
+/** Bring the loop into line with the configuration now stored. */
+function restartLoop(): void {
+  stopLoop();
+  disposeLoop = runLoop();
+}
+
+/**
  * Pull on boot, then keep the remote in step with local edits.
  *
- * On boot the remote wins when the local document has never been synced or is
- * older, which is the common case of opening the app on a second device. If
- * local is newer, we leave it alone and let the next push carry it up.
+ * Called once from the bootstrap effect. The work is in `runLoop`, so that
+ * `setSyncConfig` can stand it back up when sync is configured mid-session.
  */
 export function startSync(): () => void {
+  restartLoop();
+  return stopLoop;
+}
+
+/**
+ * Pull now, then keep the remote in step with local edits.
+ *
+ * On the first pull the remote wins when the local document has never been
+ * synced or is older, which is the common case of opening the app on a second
+ * device. If local is newer, we leave it alone and let the next push carry it
+ * up. With no configuration there is nothing to run: state goes to `disabled`
+ * and the disposer is a no-op, and `setSyncConfig` calls back here the moment
+ * one is saved.
+ */
+function runLoop(): () => void {
   const config = getSyncConfig();
   if (!config) {
     setState("disabled");
