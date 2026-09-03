@@ -46,8 +46,9 @@ export type QuizPayload = {
 /**
  * How far apart a card's reviews spread as its streak grows.
  *
- *  - `incremental` — a day, then weeks, then months, then a year. Intervals
- *    widen, so something learned cleanly is seen less and less.
+ *  - `incremental` — every other day, the whole way. Named for the widening
+ *    ladder it used to be, a day out to a year; the stored value is on every
+ *    card, so it stays as it is.
  *  - `weekly` — a day, then every five days. Holds a steady cadence instead of
  *    backing off, for material worth keeping warm. Named for the seven days it
  *    used to wait; the stored value is on every card, so it stays as it is.
@@ -63,8 +64,10 @@ export type ReviewSchedule = (typeof REVIEW_SCHEDULES)[number];
  * What a stored card gets when its document doesn't name a schedule.
  *
  * Stays `incremental` no matter what new cards default to: cards written before
- * schedules existed were being scheduled on the widening ladder, so reading them
- * as anything else would quietly rewrite how they behave.
+ * schedules existed were being scheduled on that ladder, so reading them as
+ * anything else would put them on a cadence they were never given. What the
+ * ladder itself says has changed since — it alternates days now rather than
+ * widening — but that is a change to the schedule, not to which one they are on.
  */
 export const LEGACY_REVIEW_SCHEDULE: ReviewSchedule = "incremental";
 

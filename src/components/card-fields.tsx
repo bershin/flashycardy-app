@@ -118,8 +118,8 @@ const SCHEDULES: Array<{
 }> = [
   {
     value: "incremental",
-    label: "Widening",
-    hint: "1 day, then 1–3 weeks, 1–6 months, a year",
+    label: "Alternating",
+    hint: "Every 2 days",
   },
   {
     value: "weekly",
@@ -270,8 +270,8 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
       <div className="grid gap-2">
         <Label>Review schedule</Label>
         <p className="-mt-1 text-xs text-muted-foreground">
-          How far apart reviews spread as you keep getting it right. Clearing the
-          whole ladder archives the card.
+          How long the card waits between reviews while you keep getting it
+          right. Clearing the whole ladder archives the card.
         </p>
         <div className="grid grid-cols-2 gap-2">
           {SCHEDULES.map((option) => (

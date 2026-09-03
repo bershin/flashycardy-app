@@ -54,7 +54,7 @@ import {
 } from "@/lib/store/types";
 
 const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
-  incremental: "Widening",
+  incremental: "Alternating",
   weekly: "Steady",
 };
 

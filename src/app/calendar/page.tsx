@@ -82,7 +82,7 @@ const WEEKS_AFTER = 30;
 const TOTAL_WEEKS = WEEKS_BEFORE + WEEKS_AFTER;
 
 const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
-  incremental: "Widening",
+  incremental: "Alternating",
   weekly: "Steady",
 };
 
