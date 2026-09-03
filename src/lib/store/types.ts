@@ -182,9 +182,34 @@ export type DbDoc = {
   nextCardId: number;
   /** Absent in documents written before day items existed; starts from 1. */
   nextTodoId: number;
+  /** Absent in documents written before notes existed; starts from 1. */
+  nextMemoId: number;
   decks: DeckRow[];
   cards: CardRow[];
   todos: DayTodo[];
+  memos: Memo[];
+};
+
+/**
+ * A written note, as opposed to a thing to do on a day.
+ *
+ * Stored under `memos` rather than `notes` because `notes` is already taken:
+ * day items were called that for an hour early on, and `deserializeDoc` still
+ * reads that field so anything typed then survives. Two meanings for one key in
+ * the same document is how a migration silently eats someone's writing, so the
+ * stored name and the word on screen differ here — the same trade the review
+ * schedules make.
+ */
+export type Memo = {
+  id: number;
+  userId: string;
+  /** May be empty: a note is worth keeping before it has been named. */
+  title: string;
+  body: string;
+  /** Kept at the top of the list, above the by-date ordering. */
+  pinned: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 /** The JSON-safe form of {@link DbDoc}, with ISO strings instead of Dates. */
@@ -196,6 +221,17 @@ export type SerializedDbDoc = {
   nextDeckId: number;
   nextCardId: number;
   nextTodoId?: number;
+  /** Absent in documents written before notes existed; reads as none. */
+  nextMemoId?: number;
+  /** Absent in documents written before notes existed; reads as an empty list. */
+  memos?: Array<
+    Omit<Memo, "pinned" | "createdAt" | "updatedAt"> & {
+      /** Absent before notes could be pinned; reads as unpinned. */
+      pinned?: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }
+  >;
   /**
    * What day items were called for the hour they were one note per day.
    *
@@ -318,9 +354,11 @@ export function emptyDoc(deviceId: string): DbDoc {
     nextDeckId: 1,
     nextCardId: 1,
     nextTodoId: 1,
+    nextMemoId: 1,
     decks: [],
     cards: [],
     todos: [],
+    memos: [],
   };
 }
 
@@ -351,6 +389,16 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
     deviceId: raw.deviceId,
     nextDeckId: raw.nextDeckId,
     nextCardId: raw.nextCardId,
+    nextMemoId: raw.nextMemoId ?? (raw.memos?.length ?? 0) + 1,
+    memos: (raw.memos ?? []).map((m) => ({
+      id: m.id,
+      userId: m.userId,
+      title: m.title,
+      body: m.body,
+      pinned: m.pinned ?? false,
+      createdAt: new Date(m.createdAt),
+      updatedAt: new Date(m.updatedAt),
+    })),
     nextTodoId:
       raw.nextTodoId ??
       raw.nextNoteId ??
@@ -404,6 +452,12 @@ export function serializeDoc(doc: DbDoc): SerializedDbDoc {
     nextDeckId: doc.nextDeckId,
     nextCardId: doc.nextCardId,
     nextTodoId: doc.nextTodoId,
+    nextMemoId: doc.nextMemoId,
+    memos: doc.memos.map((m) => ({
+      ...m,
+      createdAt: toIso(m.createdAt),
+      updatedAt: toIso(m.updatedAt),
+    })),
     todos: doc.todos.map((t) => ({
       ...t,
       doneAt: toIso(t.doneAt),

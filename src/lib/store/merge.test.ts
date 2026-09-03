@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { baseOf, mergeDocs } from "./merge.ts";
-import type { CardRow, DbDoc, DeckRow } from "./types.ts";
+import type { CardRow, DbDoc, DeckRow, Memo } from "./types.ts";
 
 const T0 = new Date("2026-08-01T10:00:00Z");
 const at = (minutes: number) => new Date(T0.getTime() + minutes * 60_000);
@@ -24,7 +24,8 @@ function card(id: number, deckId: number, front: string, updated: Date, created 
 function doc(parts: Partial<DbDoc> = {}): DbDoc {
   return {
     version: 2, mutatedAt: T0, deviceId: "dev", nextDeckId: 100,
-    nextCardId: 100, nextTodoId: 100, decks: [], cards: [], todos: [], ...parts,
+    nextCardId: 100, nextTodoId: 100, nextMemoId: 100,
+    decks: [], cards: [], todos: [], memos: [], ...parts,
   };
 }
 
@@ -204,4 +205,69 @@ test("an unsynced document does not clear a populated one", () => {
   const { doc: merged } = mergeDocs(null, fresh, populated);
   assert.equal(merged.cards.length, 2);
   assert.equal(merged.decks.length, 1);
+});
+
+function memo(id: number, title: string, updated: Date, created = T0): Memo {
+  return {
+    id, userId: "local-user", title, body: title.toLowerCase(),
+    pinned: false, createdAt: created, updatedAt: updated,
+  };
+}
+
+const titles = (d: DbDoc) => d.memos.map((m) => m.title).sort();
+
+test("notes written on two machines both survive", () => {
+  const shared = doc({ memos: [memo(1, "Shopping", T0)] });
+  const base = baseOf(shared);
+
+  const local = doc({ memos: [memo(1, "Shopping", T0), memo(2, "Recipes", at(5))] });
+  const remote = doc({ memos: [memo(1, "Shopping", T0), memo(3, "Songs", at(6))] });
+
+  const { doc: merged } = mergeDocs(base, local, remote);
+  assert.deepEqual(titles(merged), ["Recipes", "Shopping", "Songs"]);
+});
+
+test("the later edit of the same note wins", () => {
+  const shared = doc({ memos: [memo(1, "Draft", T0)] });
+  const base = baseOf(shared);
+
+  const local = doc({ memos: [memo(1, "Mine", at(5))] });
+  const remote = doc({ memos: [memo(1, "Theirs", at(9))] });
+
+  const { doc: merged } = mergeDocs(base, local, remote);
+  assert.deepEqual(titles(merged), ["Theirs"]);
+});
+
+test("a note deleted on one machine stays deleted", () => {
+  const shared = doc({ memos: [memo(1, "Gone", T0), memo(2, "Kept", T0)] });
+  const base = baseOf(shared);
+
+  // Deleted here, untouched there.
+  const local = doc({ memos: [memo(2, "Kept", T0)] });
+  const remote = doc({ memos: [memo(1, "Gone", T0), memo(2, "Kept", T0)] });
+
+  const { doc: merged } = mergeDocs(base, local, remote);
+  assert.deepEqual(titles(merged), ["Kept"]);
+});
+
+test("a base agreed before notes existed does not delete every note", () => {
+  // What `baseOf` produced before `memos` was part of the document.
+  const base = { ...baseOf(doc()), memos: undefined };
+
+  const local = doc({ memos: [memo(1, "Mine", T0)] });
+  const remote = doc({ memos: [memo(2, "Theirs", T0)] });
+
+  const { doc: merged } = mergeDocs(base, local, remote);
+  assert.deepEqual(titles(merged), ["Mine", "Theirs"]);
+});
+
+test("two notes given the same id apart are both kept, renumbered", () => {
+  // Never synced, so both machines allocated id 1 for different notes.
+  const local = doc({ memos: [memo(1, "Mine", T0, at(1))] });
+  const remote = doc({ memos: [memo(1, "Theirs", T0, at(2))] });
+
+  const { doc: merged, report } = mergeDocs(null, local, remote);
+  assert.deepEqual(titles(merged), ["Mine", "Theirs"]);
+  assert.equal(report.renumbered, 1);
+  assert.equal(new Set(merged.memos.map((m) => m.id)).size, 2);
 });

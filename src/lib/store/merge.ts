@@ -23,7 +23,7 @@
  * survives, and it should be possible to test every branch of it directly.
  */
 
-import type { CardRow, DayTodo, DbDoc, DeckRow } from "./types";
+import type { CardRow, DayTodo, DbDoc, DeckRow, Memo } from "./types";
 
 /**
  * What the last agreed version held: each record's id against the `updatedAt`
@@ -33,6 +33,8 @@ export type SyncBase = {
   decks: Record<number, number>;
   cards: Record<number, number>;
   todos: Record<number, number>;
+  /** Absent in a base written before notes existed; reads as "none known". */
+  memos?: Record<number, number>;
 };
 
 type Row = { id: number; createdAt: Date; updatedAt: Date };
@@ -67,6 +69,7 @@ export function baseOf(doc: DbDoc): SyncBase {
     decks: stamps(doc.decks, deckStamp),
     cards: stamps(doc.cards, rowStamp),
     todos: stamps(doc.todos, rowStamp),
+    memos: stamps(doc.memos, rowStamp),
   };
 }
 
@@ -210,8 +213,14 @@ function renumberRemote(
     remote.todos,
     base?.todos,
   );
+  const memoMap = collides(
+    new Map(local.memos.map((m) => [m.id, m])),
+    remote.memos,
+    base?.memos,
+  );
 
-  if (deckMap.size + cardMap.size + todoMap.size === 0) return remote;
+  if (deckMap.size + cardMap.size + todoMap.size + memoMap.size === 0)
+    return remote;
 
   const next = (rows: readonly Row[], ...counters: number[]) =>
     Math.max(...counters, ...rows.map((r) => r.id + 1), 1);
@@ -231,12 +240,19 @@ function renumberRemote(
     local.nextTodoId,
     remote.nextTodoId,
   );
+  let nextMemo = next(
+    [...local.memos, ...remote.memos],
+    local.nextMemoId,
+    remote.nextMemoId,
+  );
 
   for (const id of deckMap.keys()) deckMap.set(id, nextDeck++);
   for (const id of cardMap.keys()) cardMap.set(id, nextCard++);
   for (const id of todoMap.keys()) todoMap.set(id, nextTodo++);
+  for (const id of memoMap.keys()) memoMap.set(id, nextMemo++);
 
-  report.renumbered = deckMap.size + cardMap.size + todoMap.size;
+  report.renumbered =
+    deckMap.size + cardMap.size + todoMap.size + memoMap.size;
 
   const decks: DeckRow[] = remote.decks.map((deck) => ({
     ...deck,
@@ -256,15 +272,21 @@ function renumberRemote(
     ...todo,
     id: todoMap.get(todo.id) ?? todo.id,
   }));
+  const memos: Memo[] = remote.memos.map((memo) => ({
+    ...memo,
+    id: memoMap.get(memo.id) ?? memo.id,
+  }));
 
   return {
     ...remote,
     decks,
     cards,
     todos,
+    memos,
     nextDeckId: nextDeck,
     nextCardId: nextCard,
     nextTodoId: nextTodo,
+    nextMemoId: nextMemo,
   };
 }
 
@@ -322,6 +344,17 @@ export function mergeDocs(
     report,
     tally,
   );
+  // `?? null` matters more here than elsewhere: a base agreed before notes
+  // existed has no `memos` key at all, and treating that as "nothing existed"
+  // would read every note on both sides as newly deleted.
+  const memos = mergeRows(
+    base?.memos ?? null,
+    local.memos,
+    remote.memos,
+    rowStamp,
+    report,
+    tally,
+  );
 
   report.fromLocal = tally.fromLocal;
   report.fromRemote = tally.fromRemote;
@@ -343,9 +376,11 @@ export function mergeDocs(
     nextDeckId: Math.max(local.nextDeckId, remote.nextDeckId, highest(decks)),
     nextCardId: Math.max(local.nextCardId, remote.nextCardId, highest(cards)),
     nextTodoId: Math.max(local.nextTodoId, remote.nextTodoId, highest(todos)),
+    nextMemoId: Math.max(local.nextMemoId, remote.nextMemoId, highest(memos)),
     decks,
     cards,
     todos,
+    memos,
   };
 
   return { doc, report };

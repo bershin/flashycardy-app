@@ -398,6 +398,14 @@ export function allocateCardId(draft: DbDoc): number {
   return id;
 }
 
+export function allocateMemoId(draft: DbDoc): number {
+  // Same defaulting as todos: a document written before notes existed carries
+  // neither the counter nor the list, and is read with both filled in.
+  const id = draft.nextMemoId ?? 1;
+  draft.nextMemoId = id + 1;
+  return id;
+}
+
 export function allocateTodoId(draft: DbDoc): number {
   // Documents written before day items existed have neither the counter nor the
   // list, and are read with both defaulted rather than migrated.

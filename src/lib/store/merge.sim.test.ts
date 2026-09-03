@@ -20,7 +20,8 @@ function card(id: number, front: string, updated: Date, created = T0): CardRow {
 }
 const doc = (cards: CardRow[], parts: Partial<DbDoc> = {}): DbDoc => ({
   version: 2, mutatedAt: T0, deviceId: "d", nextDeckId: 100, nextCardId: 100,
-  nextTodoId: 100, decks: [], cards, todos: [], ...parts,
+  nextTodoId: 100, nextMemoId: 100,
+    decks: [], cards, todos: [], memos: [], ...parts,
 });
 
 /** A machine: its own document and its own memory of the last agreement. */

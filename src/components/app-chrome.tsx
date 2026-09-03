@@ -10,6 +10,7 @@ import {
   CloudUpload,
   ListTodo,
   Moon,
+  NotebookPen,
   RefreshCw,
   Settings as SettingsIcon,
   Sun,
@@ -88,6 +89,20 @@ export function AppChrome() {
             }
           />
           <TooltipContent>Add a todo for today</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Link
+                href="/notes"
+                aria-label="Notes"
+                className={buttonVariants({ variant: "ghost", size: "icon" })}
+              >
+                <NotebookPen className="size-4" />
+              </Link>
+            }
+          />
+          <TooltipContent>Notes</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger
