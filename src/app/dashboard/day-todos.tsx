@@ -15,6 +15,7 @@ import { useStore } from "@/lib/store/use-store";
 import { selectTodosByUser } from "@/db/queries/todos";
 import { updateDayTodoAction } from "@/app/calendar/actions";
 import { AddTodo } from "@/components/add-todo";
+import { ConfirmDoneDialog } from "@/components/confirm-done-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { DayTodo, DbDoc } from "@/lib/store/types";
@@ -66,6 +67,8 @@ export function DashboardTodos() {
     useCallback((db: DbDoc) => selectTodosByUser(db, LOCAL_USER_ID), []),
   );
   const [pending, startWriting] = useTransition();
+  /** The item waiting on "Mark this as done?", or null. */
+  const [confirming, setConfirming] = useState<DayTodo | null>(null);
   /** The day on show. Starts on today and stays where it is put. */
   const [viewDay, setViewDay] = useState(todayKey);
   const open = all.filter((t) => !t.done);
@@ -172,11 +175,7 @@ export function DashboardTodos() {
                 aria-checked={false}
                 aria-label={`Mark "${todo.text}" as done`}
                 disabled={pending}
-                onClick={() =>
-                  startWriting(async () => {
-                    await updateDayTodoAction({ id: todo.id, done: true });
-                  })
-                }
+                onClick={() => setConfirming(todo)}
                 className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border border-input transition-colors hover:border-emerald-500 hover:bg-emerald-500/10"
               >
                 <Check className="size-3 opacity-0 hover:opacity-40" />
@@ -241,6 +240,17 @@ export function DashboardTodos() {
             : `Add something for ${onToday ? "today" : label.toLowerCase()}`
         }
         placeholder={`Something to do ${onToday ? "today" : `on ${label.toLowerCase()}`}…`}
+      />
+
+      <ConfirmDoneDialog
+        todo={confirming}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        onConfirm={(todo) => {
+          setConfirming(null);
+          startWriting(async () => {
+            await updateDayTodoAction({ id: todo.id, done: true });
+          });
+        }}
       />
     </div>
   );

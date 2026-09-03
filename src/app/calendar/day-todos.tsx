@@ -27,11 +27,12 @@ import {
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import { selectTodosForDay } from "@/db/queries/todos";
-import type { DbDoc } from "@/lib/store/types";
+import type { DayTodo, DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isTodoDrag, readTodoDrag, startTodoDrag } from "./todo-drag";
 import { EnableNotifications } from "@/components/todo-reminders";
+import { ConfirmDoneDialog } from "@/components/confirm-done-dialog";
 import {
   addDayTodoAction,
   deleteDayTodoAction,
@@ -139,6 +140,8 @@ export function DayTodos({ date, label, focusSignal = 0 }: DayTodosProps) {
   const [dropOn, setDropOn] = useState<{ id: number; below: boolean } | null>(
     null,
   );
+  /** The item waiting on "Mark this as done?", or null. */
+  const [confirming, setConfirming] = useState<DayTodo | null>(null);
   /** Set when the whole day's open items are being carried somewhere. */
   const [carrying, setCarrying] = useState(false);
   const [carryTo, setCarryTo] = useState(() => shiftDay(date, 1));
@@ -284,14 +287,17 @@ export function DayTodos({ date, label, focusSignal = 0 }: DayTodosProps) {
                 aria-checked={todo.done}
                 aria-label={todo.done ? "Mark as not done" : "Mark as done"}
                 disabled={pending}
-                onClick={() =>
+                onClick={() => {
+                  // Ticking asks first; un-ticking is the correction for a
+                  // mis-hit and happens straight away.
+                  if (!todo.done) {
+                    setConfirming(todo);
+                    return;
+                  }
                   startWriting(async () => {
-                    await updateDayTodoAction({
-                      id: todo.id,
-                      done: !todo.done,
-                    });
-                  })
-                }
+                    await updateDayTodoAction({ id: todo.id, done: false });
+                  });
+                }}
                 className={`flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors ${
                   todo.done
                     ? "border-emerald-500 bg-emerald-500 text-white"
@@ -685,6 +691,17 @@ export function DayTodos({ date, label, focusSignal = 0 }: DayTodosProps) {
             Carry what&rsquo;s left to another day…
           </button>
         ))}
+
+      <ConfirmDoneDialog
+        todo={confirming}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        onConfirm={(todo) => {
+          setConfirming(null);
+          startWriting(async () => {
+            await updateDayTodoAction({ id: todo.id, done: true });
+          });
+        }}
+      />
     </div>
   );
 }
