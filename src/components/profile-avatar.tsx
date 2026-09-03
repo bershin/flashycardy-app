@@ -16,8 +16,8 @@ export function ProfileAvatar({
   size = "sm",
 }: {
   profile: Profile;
-  /** `sm` for menus and rows, `md` for the header trigger. */
-  size?: "sm" | "md";
+  /** `sm` in menus, `md` in settings rows, `lg` for the header trigger. */
+  size?: "sm" | "md" | "lg";
 }) {
   const accent = profileAccent(profile.id);
   const initial = profile.name.trim().charAt(0).toUpperCase() || "?";
@@ -26,7 +26,11 @@ export function ProfileAvatar({
     <span
       aria-hidden="true"
       className={`inline-flex shrink-0 items-center justify-center rounded-full font-medium ${
-        size === "md" ? "size-6 text-[0.8rem]" : "size-5 text-[0.7rem]"
+        size === "lg"
+          ? "size-8 text-base"
+          : size === "md"
+            ? "size-6 text-[0.8rem]"
+            : "size-5 text-[0.7rem]"
       }`}
       style={{
         // Tinted rather than solid so the emoji and the letter both stay

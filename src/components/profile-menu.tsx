@@ -52,18 +52,26 @@ export function ProfileMenu() {
       <DropdownMenuTrigger
         aria-label={`Profile: ${active?.name ?? "Main"}`}
         title={`Profile: ${active?.name ?? "Main"}`}
-        className={buttonVariants({ variant: "ghost", size: "icon" })}
+        // Bigger than the icons beside it, and with the ring the avatar
+        // already carries doing the work a button border would.
+        className={buttonVariants({
+          variant: "ghost",
+          size: "icon-lg",
+          className: "size-10",
+        })}
       >
         {/* The avatar rather than a generic person icon: the point of the
             control is which of you is looking at it, and that is the one thing
             a shared glyph cannot say. */}
         {active ? (
-          <ProfileAvatar profile={active} size="md" />
+          <ProfileAvatar profile={active} size="lg" />
         ) : (
-          <span className="size-6" />
+          <span className="size-8" />
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      {/* Wide enough that the longest item fits on one line, rather than the
+          item forcing itself wider than the panel it sits in. */}
+      <DropdownMenuContent align="end" className="min-w-44">
         {/* The label is a *group* label in Base UI and throws outside one, so
             the profiles are a group rather than loose items. */}
         <DropdownMenuGroup>
@@ -86,11 +94,7 @@ export function ProfileMenu() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          render={
-            <Link href="/settings#profiles" className="whitespace-nowrap">
-              Manage profiles
-            </Link>
-          }
+          render={<Link href="/settings#profiles">Manage profiles</Link>}
         />
       </DropdownMenuContent>
     </DropdownMenu>

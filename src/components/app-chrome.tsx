@@ -82,9 +82,9 @@ export function AppChrome() {
               <Link
                 href="/calendar?todo=new"
                 aria-label="Add a todo for today"
-                className={buttonVariants({ variant: "ghost", size: "icon" })}
+                className={buttonVariants({ variant: "ghost", size: "icon-lg" })}
               >
-                <ListTodo className="size-4" />
+                <ListTodo className="size-5" />
               </Link>
             }
           />
@@ -96,9 +96,9 @@ export function AppChrome() {
               <Link
                 href="/notes"
                 aria-label="Notes"
-                className={buttonVariants({ variant: "ghost", size: "icon" })}
+                className={buttonVariants({ variant: "ghost", size: "icon-lg" })}
               >
-                <NotebookPen className="size-4" />
+                <NotebookPen className="size-5" />
               </Link>
             }
           />
@@ -110,30 +110,34 @@ export function AppChrome() {
               <Link
                 href="/calendar"
                 aria-label="Review calendar"
-                className={buttonVariants({ variant: "ghost", size: "icon" })}
+                className={buttonVariants({ variant: "ghost", size: "icon-lg" })}
               >
-                <CalendarDays className="size-4" />
+                <CalendarDays className="size-5" />
               </Link>
             }
           />
           <TooltipContent>Review calendar</TooltipContent>
         </Tooltip>
         <ThemeToggle />
-        <ProfileMenu />
         <Tooltip>
           <TooltipTrigger
             render={
               <Link
                 href="/settings"
                 aria-label="Settings"
-                className={buttonVariants({ variant: "ghost", size: "icon" })}
+                className={buttonVariants({ variant: "ghost", size: "icon-lg" })}
               >
-                <SettingsIcon className="size-4" />
+                <SettingsIcon className="size-5" />
               </Link>
             }
           />
           <TooltipContent>Settings</TooltipContent>
         </Tooltip>
+        {/* Last, in the corner. It is the only control here that answers a
+            different question from the rest — not "where does this go" but
+            "who is this" — and it is deliberately the largest thing in the
+            row. */}
+        <ProfileMenu />
       </header>
     </>
   );
@@ -182,12 +186,12 @@ function ThemeToggle() {
             type="button"
             aria-label={`Switch to ${next} mode`}
             onClick={() => setTheme(next)}
-            className={buttonVariants({ variant: "ghost", size: "icon" })}
+            className={buttonVariants({ variant: "ghost", size: "icon-lg" })}
           >
             {theme === "dark" ? (
-              <Sun className="size-4" />
+              <Sun className="size-5" />
             ) : (
-              <Moon className="size-4" />
+              <Moon className="size-5" />
             )}
           </button>
         }
@@ -266,15 +270,15 @@ function SyncIndicator() {
 
   const icon =
     state === "pushing" || state === "pulling" ? (
-      <RefreshCw className="size-3.5 animate-spin" />
+      <RefreshCw className="size-4 animate-spin" />
     ) : state === "offline" ? (
-      <CloudOff className="size-3.5" />
+      <CloudOff className="size-4" />
     ) : state === "conflict" || state === "error" ? (
-      <AlertTriangle className="size-3.5 text-amber-500" />
+      <AlertTriangle className="size-4 text-amber-500" />
     ) : shown === "unsent" ? (
-      <CloudUpload className="size-3.5 text-amber-500" />
+      <CloudUpload className="size-4 text-amber-500" />
     ) : (
-      <Check className="size-3.5 text-emerald-500" />
+      <Check className="size-4 text-emerald-500" />
     );
 
   return (
