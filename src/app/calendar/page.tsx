@@ -592,48 +592,22 @@ function CalendarPageContent() {
   }, []);
 
   /**
-   * The heaviest single deck-day on the grid, which the tints are scaled to.
+   * How heavy a whole day is, 0 to 1, against the heaviest day on the grid.
    *
-   * Per band rather than per day: the bands are what carry the colour now, and
-   * scaling them against a day's combined total would leave the smaller deck
-   * permanently pale however busy its own week was.
+   * Separate from `intensity`, which scales a single deck's band against the
+   * heaviest *band*. The number in a square is now the day's total, and reading
+   * it on the band scale would paint an ordinary day as a crisis whenever one
+   * deck happened to be the biggest thing on the grid.
    */
-  const bandMax = useMemo(() => {
-    let most = 0;
-    for (const day of days) {
-      for (const parent of byParent.get(day.key)?.values() ?? []) {
-        most = Math.max(most, parent.count);
-      }
-    }
-    return most;
-  }, [days, byParent]);
-
-  /**
-   * How strongly a band is tinted, 0 to 1.
-   *
-   * Square-rooted, not linear. One heavy day is typically several times any
-   * other, and against a linear scale every ordinary day collapses into the
-   * same pale wash — the shape of a normal week disappears behind the spike.
-   */
-  function intensity(count: number): number {
-    if (count === 0 || bandMax === 0) return 0;
-    return Math.sqrt(count / bandMax);
+  function dayIntensity(count: number): number {
+    if (count === 0 || max === 0) return 0;
+    return Math.sqrt(count / max);
   }
 
-  /**
-   * A band's fill: its deck's colour, deepening with its own count.
-   *
-   * Hue says which deck, depth says how much — one swatch answering both, which
-   * is what a square this small has room for.
-   */
-  function bandFill(deckId: number, count: number): string {
-    const strength = 10 + intensity(count) * 80;
-    return `color-mix(in oklab, ${accentVar(deckId)} ${strength}%, transparent)`;
-  }
-
-  /** White once the fill is deep enough to swallow ordinary text. */
-  function bandText(count: number): string {
-    return intensity(count) > 0.62 ? "text-white" : "text-foreground";
+  /** The square's own wash: violet, deepening with the day's total. */
+  function dayFill(count: number): string {
+    const strength = 8 + dayIntensity(count) * 62;
+    return `color-mix(in oklab, var(--accent-4) ${strength}%, transparent)`;
   }
 
   if (!ready) {
@@ -797,15 +771,24 @@ function CalendarPageContent() {
           // snapping them individually snaps the row.
           const className = `group/day relative flex aspect-square snap-start flex-col overflow-hidden rounded-lg border bg-transparent transition-colors ${outline}`;
 
-          // Every deck on this month's grid gets a band, whether or not it has
-          // cards today: the bands are how a deck is identified at a glance, so
-          // they cannot move about from square to square. A deck with nothing
-          // due reads 0 and is not clickable — there is no list behind it.
-          const bands = clickable
-            ? gridParents.map((parent) => ({
-                ...parent,
-                count: byParent.get(day.key)?.get(parent.id)?.count ?? 0,
-              }))
+          // The day's split by top-level deck, for the strip along the bottom.
+          // Only decks that actually have cards on this day: the strip is
+          // proportional, so a deck with none has no width to occupy, and
+          // reserving one for it would shrink the decks that do.
+          //
+          // A band each with its own number is what this used to be, and it
+          // could not hold a household's worth of decks — six of them left
+          // every number too short to read, and the square never said what the
+          // day came to in total. The total is the headline now and the split
+          // is the strip; the full list, with each deck's overdue count, is a
+          // click away in the panel below.
+          const split = clickable
+            ? gridParents
+                .map((parent) => ({
+                  ...parent,
+                  count: byParent.get(day.key)?.get(parent.id)?.count ?? 0,
+                }))
+                .filter((parent) => parent.count > 0)
             : [];
 
           const dropping = dropDay === day.key;
@@ -917,54 +900,76 @@ function CalendarPageContent() {
                 </button>
               )}
 
-              {/* The square is divided between the decks, one band each,
-                  separated by a hairline. The day's total is deliberately gone:
-                  it was the sum of two collections studied separately, so it
-                  was never a number to act on — these are. */}
-              {clickable &&
-                bands.map((band, index) => {
-                  const active = isSelected && selectedParent === band.id;
-                  return (
-                    <button
-                      key={band.id}
-                      type="button"
-                      disabled={band.count === 0}
-                      aria-pressed={active}
-                      title={
-                        band.count === 0
-                          ? `${band.title} — nothing due`
-                          : `${band.title} — ${band.count} due. Click for its sub-decks`
-                      }
-                      style={{ background: bandFill(band.id, band.count) }}
-                      onClick={() =>
-                        selectDay(active ? null : day.key, band.id)
-                      }
-                      // The first band starts below the date in the corner
-                      // rather than under it, so nothing is read through the
-                      // day number.
-                      className={`group/band relative flex min-w-0 flex-1 flex-col items-center justify-center px-1 leading-none tabular-nums transition-[filter] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
-                        index > 0 ? "border-t border-black/10" : "pt-3"
-                      } ${bandText(band.count)} ${
-                        band.count === 0
-                          ? "opacity-60"
-                          : active
-                            ? "cursor-pointer brightness-90"
-                            : "cursor-pointer hover:brightness-95"
-                      }`}
-                    >
-                      {/* The name is a hover away rather than always present:
-                          the fill already says which deck this is, and at rest
-                          the number should have the band to itself. */}
-                      <span className="pointer-events-none absolute inset-x-1 top-0.5 hidden truncate text-center text-[0.55rem] leading-tight font-semibold tracking-tight opacity-80 group-hover/band:block group-focus-visible/band:block sm:text-[0.65rem]">
-                        {band.title}
-                      </span>
-                      <span className="sr-only">{band.title} </span>
-                      <span className="text-lg font-bold sm:text-2xl">
-                        {band.count}
-                      </span>
-                    </button>
-                  );
-                })}
+              {/* The day's total, big enough to read at a glance across a
+                  whole grid. It was deliberately absent while each deck had a
+                  band of its own — the sum of collections studied separately
+                  was not a number to act on. With the bands gone it is the one
+                  thing the square can say completely, and every card behind it
+                  is one click away below. */}
+              {clickable && (
+                <button
+                  type="button"
+                  aria-pressed={isSelected && selectedParent === null}
+                  title={`${day.count} due${day.overdue > 0 ? `, including ${day.overdue} overdue` : ""} — click for every deck`}
+                  onClick={() =>
+                    selectDay(
+                      isSelected && selectedParent === null ? null : day.key,
+                    )
+                  }
+                  style={{ background: dayFill(day.count) }}
+                  className={`absolute inset-0 flex cursor-pointer items-center justify-center pt-3 pb-2 leading-none tabular-nums transition-[filter] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
+                    dayIntensity(day.count) > 0.62
+                      ? "text-white"
+                      : "text-foreground"
+                  } ${
+                    isSelected && selectedParent === null
+                      ? "brightness-90"
+                      : "hover:brightness-95"
+                  }`}
+                >
+                  <span className="text-xl font-bold sm:text-3xl">
+                    {day.count}
+                  </span>
+                  <span className="sr-only">
+                    {" "}
+                    due across {split.length} deck
+                    {split.length === 1 ? "" : "s"}
+                  </span>
+                </button>
+              )}
+
+              {/* Which decks the day is made of, in proportion. Each segment
+                  still opens that deck's sub-decks, which is what clicking its
+                  band used to do — the affordance moved, the action did not. */}
+              {split.length > 0 && (
+                <span className="absolute inset-x-0 bottom-0 z-10 flex h-2 overflow-hidden">
+                  {split.map((parent) => {
+                    const active = isSelected && selectedParent === parent.id;
+                    return (
+                      <button
+                        key={parent.id}
+                        type="button"
+                        aria-pressed={active}
+                        title={`${parent.title} — ${parent.count} due. Click for its sub-decks`}
+                        onClick={() =>
+                          selectDay(active ? null : day.key, parent.id)
+                        }
+                        style={{
+                          flexGrow: parent.count,
+                          background: accentVar(parent.id),
+                        }}
+                        className={`min-w-0 basis-0 cursor-pointer transition-opacity focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
+                          active ? "opacity-100" : "opacity-80 hover:opacity-100"
+                        }`}
+                      >
+                        <span className="sr-only">
+                          {parent.title}: {parent.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </span>
+              )}
             </div>
           );
         })}
@@ -1253,31 +1258,26 @@ function CalendarPageContent() {
       )}
 
       <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
-        {/* The names are behind a hover now, so the key carries them: each
-            deck's colour, and the scale that colour is read on. */}
+        {/* One solid swatch each now that the strip is solid: depth used to
+            mean quantity when the colour filled the square, and it is the
+            square's own wash that carries that. */}
         {gridParents.map((parent) => (
-          <div key={parent.id} className="flex items-center gap-2">
+          <div key={parent.id} className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="size-3 rounded-sm"
+              style={{ background: accentVar(parent.id) }}
+            />
             <span className="font-medium text-foreground">{parent.title}</span>
-            <span className="flex gap-0.5">
-              {[0.15, 0.4, 0.7, 1].map((step) => (
-                <span
-                  key={step}
-                  className="size-4 rounded-sm"
-                  style={{
-                    background: `color-mix(in oklab, ${accentVar(parent.id)} ${10 + step * 80}%, transparent)`,
-                  }}
-                />
-              ))}
-            </span>
           </div>
         ))}
-        {bandMax > 0 && (
-          <span>Deeper is heavier, up to {bandMax} in a day</span>
+        {max > 0 && (
+          <span>Deeper is heavier, up to {max} due in a day</span>
         )}
         {max > 0 && (
           <span>
-            Scroll the grid to move through the weeks · Click a count for its
-            sub-decks, or the date for the day
+            Scroll the grid to move through the weeks · Click a day for every
+            deck, or a colour along its foot for one of them
           </span>
         )}
         {overdueTotal > 0 && (
