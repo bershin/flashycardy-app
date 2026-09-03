@@ -25,6 +25,15 @@
 export type Profile = {
   id: string;
   name: string;
+  /**
+   * A face for the profile, if one was picked.
+   *
+   * Optional because a profile is useful the moment it has a name, and because
+   * every profile stored before avatars existed has none — `readList` leaves it
+   * undefined rather than inventing one, and the avatar falls back to the first
+   * letter of the name over the profile's own colour.
+   */
+  emoji?: string;
 };
 
 /** The list of profiles, and which one is in use. Both device-level. */
@@ -89,7 +98,11 @@ function readList(): Profile[] {
           typeof (p as Profile).id === "string" &&
           typeof (p as Profile).name === "string",
       )
-      .map((p) => ({ id: p.id, name: p.name }));
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        ...(typeof p.emoji === "string" && p.emoji ? { emoji: p.emoji } : {}),
+      }));
     // The default is always present: it owns the unsuffixed keys, so a list
     // that had lost it would strand the data those keys hold.
     return profiles.some((p) => p.id === DEFAULT_PROFILE_ID)
@@ -130,6 +143,56 @@ export function getActiveProfile(): Profile {
   const id = getActiveProfileId();
   return listProfiles().find((p) => p.id === id) ?? DEFAULT_PROFILE;
 }
+
+/**
+ * How many identity colours there are, matching `accentVar` for decks.
+ *
+ * The same five slots from `globals.css`, so a profile's circle sits in the
+ * palette the rest of the app already uses rather than introducing a sixth
+ * colour language for one control.
+ */
+const ACCENT_SLOTS = 5;
+
+/**
+ * A profile's colour, stable for its lifetime.
+ *
+ * Hashed from the id rather than the name, so renaming someone does not change
+ * the colour they have learned to recognise in the header. The default profile
+ * is pinned to the first slot: it exists on every device, and letting it drift
+ * would mean the same "Main" looked different from one machine to the next.
+ */
+export function profileAccent(id: string): string {
+  if (id === DEFAULT_PROFILE_ID) return "var(--accent-1)";
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  const slot = ((hash % ACCENT_SLOTS) + ACCENT_SLOTS) % ACCENT_SLOTS;
+  return `var(--accent-${slot + 1})`;
+}
+
+/** Set or clear a profile's emoji. Passing null goes back to the initial. */
+export function setProfileEmoji(id: string, emoji: string | null): void {
+  writeList(
+    listProfiles().map((p) => {
+      if (p.id !== id) return p;
+      // Rebuilt rather than spread-and-overwrite so clearing actually removes
+      // the key: `{...p, emoji: undefined}` still serialises the field.
+      const cleared: Profile = { id: p.id, name: p.name };
+      return emoji ? { ...cleared, emoji } : cleared;
+    }),
+  );
+}
+
+/**
+ * The faces on offer.
+ *
+ * A fixed short list rather than the system emoji picker: the picker is a
+ * different control on every platform, some of them absent, and the whole job
+ * here is telling two or three people apart at a glance.
+ */
+export const PROFILE_EMOJI = [
+  "🦊", "🐼", "🐙", "🦕", "🐝", "🐢",
+  "🚀", "🌟", "🍀", "🎧", "🎸", "🍁",
+] as const;
 
 /**
  * The name a key takes for the profile in use.

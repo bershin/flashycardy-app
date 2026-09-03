@@ -18,6 +18,8 @@ import {
 import {
   addProfile,
   DEFAULT_PROFILE_ID,
+  PROFILE_EMOJI,
+  setProfileEmoji,
   deleteProfile,
   getActiveProfileId,
   getProfilesServerSnapshot,
@@ -27,6 +29,7 @@ import {
   switchProfile,
   type Profile,
 } from "@/lib/store/profiles";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { deleteDocumentFor } from "@/lib/store/local-store";
 import { getSyncTargetFor } from "@/lib/store/github-sync";
 
@@ -140,7 +143,8 @@ export function ProfileSettings() {
               className="flex items-center gap-2 rounded-lg border border-border/60 px-3 py-2"
             >
               {editingId === profile.id ? (
-                <>
+                <div className="grid flex-1 gap-2">
+                 <div className="flex items-center gap-2">
                   <Input
                     autoFocus
                     value={editText}
@@ -161,7 +165,38 @@ export function ProfileSettings() {
                   >
                     Cancel
                   </Button>
-                </>
+                 </div>
+                 {/* Chosen from a fixed row rather than the system emoji
+                     picker, which is a different control on every platform and
+                     missing on some. Clearing goes back to the initial. */}
+                 <div className="flex flex-wrap items-center gap-1">
+                  {PROFILE_EMOJI.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      aria-label={`Use ${emoji} for ${profile.name}`}
+                      aria-pressed={profile.emoji === emoji}
+                      onClick={() => setProfileEmoji(profile.id, emoji)}
+                      className={`rounded-md px-1.5 py-0.5 text-base hover:bg-muted ${
+                        profile.emoji === emoji ? "bg-muted ring-1 ring-ring" : ""
+                      }`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    aria-label={`Use the initial for ${profile.name}`}
+                    aria-pressed={!profile.emoji}
+                    onClick={() => setProfileEmoji(profile.id, null)}
+                    className={`rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted ${
+                      !profile.emoji ? "bg-muted ring-1 ring-ring" : ""
+                    }`}
+                  >
+                    Initial
+                  </button>
+                 </div>
+                </div>
               ) : (
                 <>
                   <span className="flex flex-1 items-center gap-2 text-sm">
@@ -170,6 +205,7 @@ export function ProfileSettings() {
                         profile.id === activeId ? "" : "invisible"
                       }`}
                     />
+                    <ProfileAvatar profile={profile} size="md" />
                     <span className="font-medium">{profile.name}</span>
                     <span className="text-xs text-muted-foreground">
                       {target ?? "no sync repo set"}

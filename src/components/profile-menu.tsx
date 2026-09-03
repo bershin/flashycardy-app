@@ -2,8 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
-import { Check, UserRound } from "lucide-react";
+import { Check } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,7 +54,14 @@ export function ProfileMenu() {
         title={`Profile: ${active?.name ?? "Main"}`}
         className={buttonVariants({ variant: "ghost", size: "icon" })}
       >
-        <UserRound className="size-4" />
+        {/* The avatar rather than a generic person icon: the point of the
+            control is which of you is looking at it, and that is the one thing
+            a shared glyph cannot say. */}
+        {active ? (
+          <ProfileAvatar profile={active} size="md" />
+        ) : (
+          <span className="size-6" />
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {/* The label is a *group* label in Base UI and throws outside one, so
@@ -71,13 +79,18 @@ export function ProfileMenu() {
               <Check
                 className={`size-3.5 ${profile.id === activeId ? "" : "invisible"}`}
               />
+              <ProfileAvatar profile={profile} />
               {profile.name}
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          render={<Link href="/settings#profiles">Manage profiles</Link>}
+          render={
+            <Link href="/settings#profiles" className="whitespace-nowrap">
+              Manage profiles
+            </Link>
+          }
         />
       </DropdownMenuContent>
     </DropdownMenu>
