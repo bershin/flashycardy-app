@@ -71,8 +71,16 @@ export type ReviewSchedule = (typeof REVIEW_SCHEDULES)[number];
  */
 export const LEGACY_REVIEW_SCHEDULE: ReviewSchedule = "incremental";
 
-/** What a newly created card starts on. */
-export const NEW_CARD_SCHEDULE: ReviewSchedule = "weekly";
+/**
+ * What a newly created card starts on: the daily ladder.
+ *
+ * Same value as {@link LEGACY_REVIEW_SCHEDULE} at the moment, and deliberately
+ * a separate constant — they answer different questions. That one says how to
+ * read a card written before schedules existed and must never move; this one is
+ * a preference about new cards and is expected to. Collapsing them would tie a
+ * change of default to a rewrite of every old card's behaviour.
+ */
+export const NEW_CARD_SCHEDULE: ReviewSchedule = "incremental";
 
 /**
  * Something written against a day rather than against a card.
