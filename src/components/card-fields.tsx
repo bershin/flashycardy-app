@@ -123,8 +123,8 @@ const SCHEDULES: Array<{
   },
   {
     value: "weekly",
-    label: "Steady",
-    hint: "1 day, then every 5 days",
+    label: "Widening",
+    hint: "1 day, 1 day, then a week out to a year",
   },
 ];
 

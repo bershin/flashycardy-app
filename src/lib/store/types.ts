@@ -49,9 +49,9 @@ export type QuizPayload = {
  *  - `incremental` — the next day, every time. Named for the widening ladder it
  *    used to be, a day out to a year; the stored value is on every card, so it
  *    stays as it is.
- *  - `weekly` — a day, then every five days. Holds a steady cadence instead of
- *    backing off, for material worth keeping warm. Named for the seven days it
- *    used to wait; the stored value is on every card, so it stays as it is.
+ *  - `weekly` — a day, a day, then a week widening out to a year, so something
+ *    learned cleanly is seen less and less. Named for the seven days it used to
+ *    wait; the stored value is on every card, so it stays as it is.
  *
  * The actual day counts live in `REVIEW_SCHEDULES` in `src/db/queries/cards.ts`,
  * next to the code that applies them.

@@ -55,7 +55,7 @@ import {
 
 const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
   incremental: "Daily",
-  weekly: "Steady",
+  weekly: "Widening",
 };
 
 interface DeckHeaderProps {

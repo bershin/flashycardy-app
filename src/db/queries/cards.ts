@@ -160,17 +160,18 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
  * Days until the next review, indexed by streak — element 0 is the wait after
  * the first correct answer, element 1 after the second, and so on.
  *
- * Neither ladder widens. They hold a fixed cadence and differ in its size and
- * in how long they run:
+ * Both stored names are historical and neither describes what its ladder does
+ * now — they are kept because every card carries one, and renaming a stored
+ * value is a migration for a word. Read them as arbitrary labels:
  *
  *  - `incremental` comes back the next day, every time. Eight rungs, so it
  *    graduates on the ninth correct answer, a little over a week after the card
- *    was first seen. It used to widen out to a year, which is what the stored
- *    value is named for; the name stays because every card already carries it,
- *    and a rename would be a migration for a word.
- *  - `weekly` holds at five days and stops after four, since a card meant to
- *    come back at a fixed cadence has nothing to prove by running longer. Its
- *    name is kept for the same reason.
+ *    was first seen. Named for the widening ladder it used to be.
+ *  - `weekly` is the widening one now: two nights in a row to get it in, then a
+ *    week, a fortnight, a month and on out to a year, so something learned
+ *    cleanly drops out of the way while still being checked occasionally. Eight
+ *    rungs as well, graduating on the ninth correct answer about twenty months
+ *    after the card was first seen. Named for the seven days it once waited.
  *
  * Running off the end of a ladder means the card has been learned and is
  * archived, so adding a rung extends that schedule rather than needing a second
@@ -182,9 +183,10 @@ const REVIEW_SCHEDULES: Record<ReviewSchedule, readonly number[]> = {
   // again is the shortest gap that still tests recall rather than memory of the
   // last few minutes, and this schedule is for material wanted at that pace.
   incremental: [1, 1, 1, 1, 1, 1, 1, 1],
-  // Three rungs, so the fourth correct answer archives the card: a day to see
-  // it again, then two five-day gaps to prove it stuck.
-  weekly: [1, 5, 5],
+  // Two single nights before the gaps open up: the second day is what settles
+  // a card that was only just recalled on the first, and widening straight from
+  // one day to a week asks it to survive a jump it has not earned yet.
+  weekly: [1, 1, 7, 14, 30, 90, 180, 360],
 };
 
 /** How soon a missed card comes back round. */
@@ -337,9 +339,10 @@ function archiveCard(cardId: number, userId: string): CardRow | undefined {
  *
  *  - `missed`  → streak resets, review again in a few minutes
  *  - `got_it`  → streak + 1, next review taken from the card's own ladder in
- *                `REVIEW_SCHEDULES` — the next day, or a steady five
+ *                `REVIEW_SCHEDULES` — the next day, or a widening gap
  *  - clearing that ladder → the card is **archived** (see `archiveCard`), which
- *    takes nine correct answers on the daily schedule and four on steady
+ *    takes nine correct answers on either schedule; they differ in how long
+ *    those nine take, not in how many there are
  *
  * The streak moves at most one step a day. A card answered correctly a second
  * time today is rescheduled but not promoted: the ladder is built on the idea

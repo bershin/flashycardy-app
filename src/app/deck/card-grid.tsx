@@ -200,7 +200,7 @@ function boundsNow(): Bounds {
 
 const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
   incremental: "Daily",
-  weekly: "Steady",
+  weekly: "Widening",
 };
 
 /** "Today", "Tomorrow", or a short date — relative where it is most read. */

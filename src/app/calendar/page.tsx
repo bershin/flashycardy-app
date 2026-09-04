@@ -82,7 +82,7 @@ const TOTAL_WEEKS = WEEKS_BEFORE + WEEKS_AFTER;
 
 const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
   incremental: "Daily",
-  weekly: "Steady",
+  weekly: "Widening",
 };
 
 /** Monday-first, matching how a week is read here. */
