@@ -118,8 +118,8 @@ const SCHEDULES: Array<{
 }> = [
   {
     value: "incremental",
-    label: "Alternating",
-    hint: "Every 2 days",
+    label: "Daily",
+    hint: "Every day",
   },
   {
     value: "weekly",

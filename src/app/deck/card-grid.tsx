@@ -199,7 +199,7 @@ function boundsNow(): Bounds {
 }
 
 const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
-  incremental: "Alternating",
+  incremental: "Daily",
   weekly: "Steady",
 };
 
