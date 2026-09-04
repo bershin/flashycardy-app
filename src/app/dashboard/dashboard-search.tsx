@@ -8,7 +8,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { FolderInput } from "lucide-react";
+import { FolderInput, ListTodo, NotebookPen } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -29,9 +29,12 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import Link from "next/link";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import { selectDeckMoveOptions } from "@/lib/store/selectors";
+import { selectMemosMatching } from "@/db/queries/memos";
+import { selectTodosMatching } from "@/db/queries/todos";
 import type { DbDoc } from "@/lib/store/types";
 import { DeckCard } from "./deck-card";
 import { moveDeckAction, reorderDecksAction } from "./actions";
@@ -148,6 +151,29 @@ export function DashboardSearch({ decks, query }: DashboardSearchProps) {
 
   const isSearching = query.trim().length > 0;
 
+  /**
+   * The same words, against everything else the app holds.
+   *
+   * Searched from here rather than each surface having its own box: a thing you
+   * half remember is a thing you do not remember *where* you put — whether it
+   * was a card, a note, or something you wrote down to do. Empty while the box
+   * is empty, so an idle dashboard does nothing extra.
+   */
+  const matchingNotes = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        isSearching ? selectMemosMatching(db, LOCAL_USER_ID, query) : [],
+      [query, isSearching],
+    ),
+  );
+  const matchingTodos = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        isSearching ? selectTodosMatching(db, LOCAL_USER_ID, query) : [],
+      [query, isSearching],
+    ),
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q)
@@ -248,10 +274,80 @@ export function DashboardSearch({ decks, query }: DashboardSearchProps) {
     <>
       {isSearching && (
         <p className="text-muted-foreground mt-3 text-sm">
-          {filtered.length === 0
+          {filtered.length + matchingNotes.length + matchingTodos.length === 0
             ? "No results found."
-            : `${filtered.length} deck${filtered.length === 1 ? "" : "s"} matched`}
+            : [
+                filtered.length > 0 &&
+                  `${filtered.length} deck${filtered.length === 1 ? "" : "s"}`,
+                matchingNotes.length > 0 &&
+                  `${matchingNotes.length} note${matchingNotes.length === 1 ? "" : "s"}`,
+                matchingTodos.length > 0 &&
+                  `${matchingTodos.length} todo${matchingTodos.length === 1 ? "" : "s"}`,
+              ]
+                .filter(Boolean)
+                .join(" · ") + " matched"}
         </p>
+      )}
+
+      {/* Below the decks, which are what the dashboard is for; these are what
+          you came looking for when the decks were not it. */}
+      {isSearching && matchingNotes.length > 0 && (
+        <section className="mt-4">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+            <NotebookPen className="size-4" />
+            Notes
+          </h2>
+          <ul className="mt-2 grid gap-1">
+            {matchingNotes.map((memo) => (
+              <li key={memo.id}>
+                <Link
+                  href={`/notes/?note=${memo.id}`}
+                  className="block rounded-lg border border-border/60 px-3 py-2 hover:bg-muted"
+                >
+                  <span className="block truncate text-sm font-medium">
+                    {memo.title.trim() || "Untitled"}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {memo.body.split("\n").find((l) => l.trim()) ?? "Empty"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {isSearching && matchingTodos.length > 0 && (
+        <section className="mt-4">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+            <ListTodo className="size-4" />
+            {/* Not "To do": the strip above the results already carries that
+                heading for today's list, and two of them on one screen reads
+                as one section having been repeated. */}
+            Things to do
+          </h2>
+          <ul className="mt-2 grid gap-1">
+            {matchingTodos.map((todo) => (
+              <li key={todo.id}>
+                {/* The day it belongs to, because that is where it can be
+                    ticked off, moved or rewritten. */}
+                <Link
+                  href={`/calendar/?day=${todo.date}`}
+                  className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2 hover:bg-muted"
+                >
+                  <span
+                    className={`min-w-0 flex-1 truncate text-sm ${todo.done ? "text-muted-foreground line-through" : ""}`}
+                  >
+                    {todo.text}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {todo.date}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {isSearching ? (

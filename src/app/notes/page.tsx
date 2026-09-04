@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Pin, PinOff, Plus, Search, Trash2 } from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
@@ -51,10 +52,22 @@ function heading(memo: Memo): string {
   return memo.title.trim() || preview(memo) || "Untitled";
 }
 
-export default function NotesPage() {
+function NotesPageContent() {
   const ready = useStoreReady();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  /**
+   * Which note is open.
+   *
+   * Seeded from `?note=` so a search result on the dashboard opens the note it
+   * names rather than the list. Read once, as the initial value: it is a
+   * request made on arrival, and re-reading it every render would drag you back
+   * to that note each time you picked another.
+   */
+  const [selectedId, setSelectedId] = useState<number | null>(() => {
+    const asked = Number(searchParams.get("note"));
+    return Number.isInteger(asked) && asked > 0 ? asked : null;
+  });
   const [doomed, setDoomed] = useState<Memo | null>(null);
 
   const memos = useStore(
@@ -331,5 +344,14 @@ function NoteEditor({
         className="min-h-[24rem] w-full resize-y rounded-md bg-transparent p-1 text-sm outline-none placeholder:text-muted-foreground"
       />
     </div>
+  );
+}
+
+export default function NotesPage() {
+  // `useSearchParams` suspends during prerender, so the boundary is required.
+  return (
+    <Suspense>
+      <NotesPageContent />
+    </Suspense>
   );
 }

@@ -64,6 +64,30 @@ export function selectTodoDays(
   return byDay;
 }
 
+/**
+ * Items whose words or note contain every word typed, in any order.
+ *
+ * Words rather than the whole phrase, matching how notes are searched: finding
+ * something half-remembered means recalling two words from it, not the sentence
+ * they sat in. Newest day first, because a search that turns up "buy the tickets"
+ * on four different days wants the one still ahead of you at the top.
+ */
+export function selectTodosMatching(
+  db: DbDoc,
+  userId: string,
+  query: string,
+): DayTodo[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  return db.todos
+    .filter((todo) => {
+      if (todo.userId !== userId) return false;
+      const haystack = `${todo.text}\n${todo.note}`.toLowerCase();
+      return words.every((word) => haystack.includes(word));
+    })
+    .sort((a, b) => b.date.localeCompare(a.date) || a.position - b.position);
+}
+
 export async function getTodosByUser(userId: string) {
   return selectTodosByUser(getSnapshot(), userId);
 }

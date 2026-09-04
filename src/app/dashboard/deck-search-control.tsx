@@ -33,7 +33,7 @@ export function DeckSearchControl({ query, onChange }: DeckSearchControlProps) {
     return (
       <button
         type="button"
-        aria-label="Search decks and cards"
+        aria-label="Search decks, cards, notes and todos"
         onClick={() => setOpen(true)}
         className={buttonVariants({ variant: "outline", size: "icon" })}
       >
@@ -49,7 +49,11 @@ export function DeckSearchControl({ query, onChange }: DeckSearchControlProps) {
         ref={inputRef}
         type="search"
         value={query}
-        placeholder="Search decks and cards…"
+        // Named as well as prompted: a placeholder disappears the moment
+        // anything is typed, so on its own it leaves the field nameless to a
+        // screen reader exactly when it has content worth describing.
+        aria-label="Search decks, cards, notes and todos"
+        placeholder="Search decks, cards, notes, todos…"
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => {
           if (query.length === 0) setOpen(false);

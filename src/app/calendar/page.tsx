@@ -233,13 +233,25 @@ function CalendarPageContent() {
    * the signal is a request made on arrival, not a piece of state the URL
    * keeps owning, and re-reading it would put the cursor back every render.
    */
+  /**
+   * A day asked for in the address, `YYYY-MM-DD`, or null.
+   *
+   * How a todo found in the dashboard's search opens where it can be acted on.
+   * Validated rather than trusted: anything else in the query string opens the
+   * calendar as usual instead of selecting a day that does not exist.
+   */
+  const askedDay = (() => {
+    const value = searchParams.get("day");
+    return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+  })();
+
   const [addSignal, setAddSignal] = useState(
     searchParams.get("todo") === "new" ? 1 : 0,
   );
   /** The topmost week in view, as an index into the rendered range. */
   const [topWeek, setTopWeek] = useState(WEEKS_BEFORE);
   const ribbon = useRef<HTMLDivElement | null>(null);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(askedDay);
   const [expanded, setExpanded] = useState(false);
 
   /** A day's breakdown opens short; a long tail is a click away. */
