@@ -24,7 +24,6 @@ import {
   X,
 } from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
-import { accentVar } from "@/lib/deck-accent";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import { isArchiveDeck, startOfDay } from "@/lib/store/selectors";
 import { selectTodoDays } from "@/db/queries/todos";
@@ -109,15 +108,6 @@ type DeckRef = {
   rootId: number;
   rootTitle: string;
   rootPosition: number;
-};
-
-/** A top-level deck's share of one day, as shown in the grid cell. */
-type ParentCount = {
-  id: number;
-  title: string;
-  /** Dashboard ordering, so the same deck keeps the same half of every cell. */
-  position: number;
-  count: number;
 };
 
 /**
@@ -255,21 +245,12 @@ function CalendarPageContent() {
   /** A day's breakdown opens short; a long tail is a click away. */
   const DECK_LIMIT = 8;
 
-  /**
-   * Which top-level deck the open breakdown is narrowed to, or null for all.
-   *
-   * Set by clicking a parent's count in a cell, which is the whole point of
-   * splitting the cell: the number you pressed is the list you get.
-   */
-  const [selectedParent, setSelectedParent] = useState<number | null>(null);
-
-  function selectDay(key: string | null, parentId: number | null = null) {
+  function selectDay(key: string | null) {
     setSelectedKey(key);
-    setSelectedParent(key === null ? null : parentId);
     setExpanded(false);
   }
 
-  const { days, max, overdueTotal, byDeck, byParent, counts } = useMemo(() => {
+  const { days, max, overdueTotal, byDeck, counts } = useMemo(() => {
     const today = startOfDay(new Date());
 
     // Everything already past shows on today, which is where the app will
@@ -279,10 +260,6 @@ function CalendarPageContent() {
     // The same tally split by deck, so a heavy day can be read as "which
     // decks is this?" without opening each one.
     const byDeck = new Map<string, Map<number, DeckCount>>();
-    // And rolled up again to top level, which is what a cell has room to
-    // show: a day of 67 is legible as 60 of one collection and 7 of another
-    // without opening anything at all.
-    const byParent = new Map<string, Map<number, ParentCount>>();
     let overdueTotal = 0;
     for (const card of cards) {
       const due = startOfDay(new Date(card.nextReviewAt));
@@ -308,20 +285,6 @@ function CalendarPageContent() {
       if (overdue) entry.overdue += 1;
       entry.cards.push({ id: card.id, streak: card.consecutiveCorrect });
       decks.set(deck.id, entry);
-
-      let parents = byParent.get(key);
-      if (!parents) {
-        parents = new Map();
-        byParent.set(key, parents);
-      }
-      const parent = parents.get(deck.rootId) ?? {
-        id: deck.rootId,
-        title: deck.rootTitle,
-        position: deck.rootPosition,
-        count: 0,
-      };
-      parent.count += 1;
-      parents.set(deck.rootId, parent);
     }
 
     // One long ribbon of weeks that scrolls, rather than a month you page
@@ -350,7 +313,7 @@ function CalendarPageContent() {
 
     const max = Math.max(...days.map((d) => d.count), 0);
 
-    return { days, max, overdueTotal, byDeck, byParent, counts };
+    return { days, max, overdueTotal, byDeck, counts };
   }, [cards, deckOf]);
 
   /**
@@ -404,43 +367,11 @@ function CalendarPageContent() {
   const selectedDecks = useMemo(() => {
     if (!selected) return [];
     return [...(byDeck.get(selected.key)?.values() ?? [])]
-      .filter((d) => selectedParent === null || d.rootId === selectedParent)
       .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title));
-  }, [byDeck, selected, selectedParent]);
+  }, [byDeck, selected]);
 
   /** What the open panel is counting: the whole day, or one parent's share. */
-  const selectedCount =
-    selectedParent === null
-      ? (selected?.count ?? 0)
-      : selectedDecks.reduce((sum, d) => sum + d.count, 0);
-
-  /**
-   * The top-level decks with anything on the visible weeks.
-   *
-   * Every cell is divided between these in this order, so a deck keeps the same
-   * half of every square — the position becomes as good a label as the letter,
-   * and a row of cells can be scanned without reading either. Dashboard order,
-   * so the two screens agree on which deck comes first.
-   */
-  const gridParents = useMemo(() => {
-    const seen = new Map<number, ParentCount>();
-    for (const day of days) {
-      for (const parent of byParent.get(day.key)?.values() ?? []) {
-        const entry = seen.get(parent.id) ?? { ...parent, count: 0 };
-        entry.count += parent.count;
-        seen.set(parent.id, entry);
-      }
-    }
-    return [...seen.values()].sort(
-      (a, b) => a.position - b.position || a.title.localeCompare(b.title),
-    );
-  }, [days, byParent]);
-
-  /** The name of the deck being narrowed to, for the panel's own heading. */
-  const selectedParentTitle =
-    selectedParent === null
-      ? null
-      : (byParent.get(selected?.key ?? "")?.get(selectedParent)?.title ?? null);
+  const selectedCount = selected?.count ?? 0;
 
   const visibleDecks = expanded
     ? selectedDecks
@@ -771,26 +702,6 @@ function CalendarPageContent() {
           // snapping them individually snaps the row.
           const className = `group/day relative flex aspect-square snap-start flex-col overflow-hidden rounded-lg border bg-transparent transition-colors ${outline}`;
 
-          // The day's split by top-level deck, for the strip along the bottom.
-          // Only decks that actually have cards on this day: the strip is
-          // proportional, so a deck with none has no width to occupy, and
-          // reserving one for it would shrink the decks that do.
-          //
-          // A band each with its own number is what this used to be, and it
-          // could not hold a household's worth of decks — six of them left
-          // every number too short to read, and the square never said what the
-          // day came to in total. The total is the headline now and the split
-          // is the strip; the full list, with each deck's overdue count, is a
-          // click away in the panel below.
-          const split = clickable
-            ? gridParents
-                .map((parent) => ({
-                  ...parent,
-                  count: byParent.get(day.key)?.get(parent.id)?.count ?? 0,
-                }))
-                .filter((parent) => parent.count > 0)
-            : [];
-
           const dropping = dropDay === day.key;
 
           return (
@@ -872,12 +783,10 @@ function CalendarPageContent() {
               {clickable ? (
                 <button
                   type="button"
-                  aria-pressed={isSelected && selectedParent === null}
+                  aria-pressed={isSelected}
                   title={`${day.count} due — every deck`}
                   onClick={() =>
-                    selectDay(
-                      isSelected && selectedParent === null ? null : day.key,
-                    )
+                    selectDay(isSelected ? null : day.key)
                   }
                   className="absolute top-0.5 left-0.5 z-10 cursor-pointer rounded px-1 text-[0.65rem] opacity-70 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
                 >
@@ -909,12 +818,10 @@ function CalendarPageContent() {
               {clickable && (
                 <button
                   type="button"
-                  aria-pressed={isSelected && selectedParent === null}
+                  aria-pressed={isSelected}
                   title={`${day.count} due${day.overdue > 0 ? `, including ${day.overdue} overdue` : ""} — click for every deck`}
                   onClick={() =>
-                    selectDay(
-                      isSelected && selectedParent === null ? null : day.key,
-                    )
+                    selectDay(isSelected ? null : day.key)
                   }
                   style={{ background: dayFill(day.count) }}
                   className={`absolute inset-0 flex cursor-pointer items-center justify-center pt-3 pb-2 leading-none tabular-nums transition-[filter] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
@@ -922,54 +829,16 @@ function CalendarPageContent() {
                       ? "text-white"
                       : "text-foreground"
                   } ${
-                    isSelected && selectedParent === null
-                      ? "brightness-90"
-                      : "hover:brightness-95"
+                    isSelected ? "brightness-90" : "hover:brightness-95"
                   }`}
                 >
                   <span className="text-xl font-bold sm:text-3xl">
                     {day.count}
                   </span>
-                  <span className="sr-only">
-                    {" "}
-                    due across {split.length} deck
-                    {split.length === 1 ? "" : "s"}
-                  </span>
+                  <span className="sr-only"> due</span>
                 </button>
               )}
 
-              {/* Which decks the day is made of, in proportion. Each segment
-                  still opens that deck's sub-decks, which is what clicking its
-                  band used to do — the affordance moved, the action did not. */}
-              {split.length > 0 && (
-                <span className="absolute inset-x-0 bottom-0 z-10 flex h-2 overflow-hidden">
-                  {split.map((parent) => {
-                    const active = isSelected && selectedParent === parent.id;
-                    return (
-                      <button
-                        key={parent.id}
-                        type="button"
-                        aria-pressed={active}
-                        title={`${parent.title} — ${parent.count} due. Click for its sub-decks`}
-                        onClick={() =>
-                          selectDay(active ? null : day.key, parent.id)
-                        }
-                        style={{
-                          flexGrow: parent.count,
-                          background: accentVar(parent.id),
-                        }}
-                        className={`min-w-0 basis-0 cursor-pointer transition-opacity focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 focus-visible:outline-none ${
-                          active ? "opacity-100" : "opacity-80 hover:opacity-100"
-                        }`}
-                      >
-                        <span className="sr-only">
-                          {parent.title}: {parent.count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </span>
-              )}
             </div>
           );
         })}
@@ -1027,25 +896,10 @@ function CalendarPageContent() {
                   day: "numeric",
                   month: "long",
                 })}
-                {selectedParentTitle && (
-                  <>
-                    <span className="text-muted-foreground"> · </span>
-                    <span
-                      aria-hidden
-                      className="mr-1.5 inline-block size-2 rounded-full align-middle"
-                      style={{
-                        background: accentVar(selectedParent ?? 0),
-                      }}
-                    />
-                    {selectedParentTitle}
-                  </>
-                )}
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {/* When narrowed, the totals are that deck's — quoting the
-                    day's full count next to one deck's sub-decks would not
-                    add up. A free day is opened for its note, so it says so
-                    rather than reporting "0 cards across 0 decks". */}
+                {/* A free day is opened for its note, so it says so rather
+                    than reporting "0 cards across 0 decks". */}
                 {selectedCount === 0 ? (
                   "Nothing due"
                 ) : (
@@ -1053,21 +907,11 @@ function CalendarPageContent() {
                     {selectedCount} card{selectedCount === 1 ? "" : "s"} across{" "}
                     {selectedDecks.length} deck
                     {selectedDecks.length === 1 ? "" : "s"}
-                    {selectedParent === null &&
-                      selected.overdue > 0 &&
+                    {selected.overdue > 0 &&
                       `, including ${selected.overdue} overdue`}
                   </>
                 )}
               </p>
-              {selectedParent !== null && (
-                <button
-                  type="button"
-                  onClick={() => selectDay(selected.key)}
-                  className="mt-1 cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground"
-                >
-                  Show every deck for this day
-                </button>
-              )}
             </div>
             <Button
               variant="ghost"
@@ -1258,26 +1102,13 @@ function CalendarPageContent() {
       )}
 
       <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
-        {/* One solid swatch each now that the strip is solid: depth used to
-            mean quantity when the colour filled the square, and it is the
-            square's own wash that carries that. */}
-        {gridParents.map((parent) => (
-          <div key={parent.id} className="flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className="size-3 rounded-sm"
-              style={{ background: accentVar(parent.id) }}
-            />
-            <span className="font-medium text-foreground">{parent.title}</span>
-          </div>
-        ))}
         {max > 0 && (
           <span>Deeper is heavier, up to {max} due in a day</span>
         )}
         {max > 0 && (
           <span>
-            Scroll the grid to move through the weeks · Click a day for every
-            deck, or a colour along its foot for one of them
+            Scroll the grid to move through the weeks · Click a day for its
+            decks
           </span>
         )}
         {overdueTotal > 0 && (
