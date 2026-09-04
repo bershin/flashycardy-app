@@ -363,6 +363,24 @@ export function mergeDocs(
   const highest = (rows: readonly Row[]) =>
     rows.reduce((max, row) => Math.max(max, row.id + 1), 1);
 
+  /**
+   * The collection's own name and face.
+   *
+   * One record rather than a list, so there is nothing to match up by id and
+   * nothing to delete: whichever side named it more recently wins, and a side
+   * that has never named it loses to one that has. No base is consulted for the
+   * same reason — absence here means "not yet named", never "deleted".
+   */
+  const profile = ((): DbDoc["profile"] => {
+    if (!local.profile) return remote.profile;
+    if (!remote.profile) return local.profile;
+    return remote.profile.updatedAt.getTime() > local.profile.updatedAt.getTime()
+      ? remote.profile
+      : local.profile;
+  })();
+  if (profile !== local.profile) report.localChanged = true;
+  if (profile !== remote.profile) report.remoteChanged = true;
+
   const doc: DbDoc = {
     // Carried from the local document rather than the constant: this decides
     // nothing about versions, and importing one would make the module depend on
@@ -381,6 +399,7 @@ export function mergeDocs(
     cards,
     todos,
     memos,
+    profile,
   };
 
   return { doc, report };

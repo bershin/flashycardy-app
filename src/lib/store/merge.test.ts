@@ -25,7 +25,7 @@ function doc(parts: Partial<DbDoc> = {}): DbDoc {
   return {
     version: 2, mutatedAt: T0, deviceId: "dev", nextDeckId: 100,
     nextCardId: 100, nextTodoId: 100, nextMemoId: 100,
-    decks: [], cards: [], todos: [], memos: [], ...parts,
+    decks: [], cards: [], todos: [], memos: [], profile: null, ...parts,
   };
 }
 
@@ -270,4 +270,40 @@ test("two notes given the same id apart are both kept, renumbered", () => {
   assert.deepEqual(titles(merged), ["Mine", "Theirs"]);
   assert.equal(report.renumbered, 1);
   assert.equal(new Set(merged.memos.map((m) => m.id)).size, 2);
+});
+
+const identity = (name: string, at: Date, emoji: string | null = null) => ({
+  name, emoji, updatedAt: at,
+});
+
+test("a collection's name reaches a device that has never named it", () => {
+  const local = doc();
+  const remote = doc({ profile: identity("Arjun", at(5), "\u{1F680}") });
+
+  const { doc: merged } = mergeDocs(baseOf(local), local, remote);
+  assert.deepEqual(merged.profile, identity("Arjun", at(5), "\u{1F680}"));
+});
+
+test("the later renaming of a collection wins", () => {
+  const local = doc({ profile: identity("Mine", at(5)) });
+  const remote = doc({ profile: identity("Theirs", at(9)) });
+
+  const { doc: merged } = mergeDocs(baseOf(local), local, remote);
+  assert.equal(merged.profile?.name, "Theirs");
+});
+
+test("a named collection is not blanked by one that was never named", () => {
+  const local = doc({ profile: identity("Mine", at(5)) });
+  const remote = doc();
+
+  const { doc: merged } = mergeDocs(baseOf(local), local, remote);
+  assert.equal(merged.profile?.name, "Mine");
+});
+
+test("clearing the emoji travels, rather than reading as no opinion", () => {
+  const local = doc({ profile: identity("Mine", at(5), "\u{1F98A}") });
+  const remote = doc({ profile: identity("Mine", at(9), null) });
+
+  const { doc: merged } = mergeDocs(baseOf(local), local, remote);
+  assert.equal(merged.profile?.emoji, null);
 });

@@ -196,6 +196,8 @@ export type DbDoc = {
   cards: CardRow[];
   todos: DayTodo[];
   memos: Memo[];
+  /** Null until this collection has been named from a Profiles section. */
+  profile: DocProfile | null;
 };
 
 /**
@@ -220,6 +222,29 @@ export type Memo = {
   updatedAt: Date;
 };
 
+/**
+ * What this collection calls itself, carried inside the document.
+ *
+ * Profiles are otherwise device-local — the list, and each one's sync repo and
+ * token, live in localStorage and must stay there, because a token has no
+ * business in a synced file and because each profile syncs to a *different*
+ * repo, so there is no shared place a list of them could live.
+ *
+ * The name and face are the part that can travel, because they belong to the
+ * collection rather than to the browser looking at it. A second device still
+ * has to add the profile and paste its token; once it syncs, it learns what to
+ * call it instead of the owner retyping the name and picking the emoji again.
+ *
+ * `updatedAt` is what the merge compares — there is only ever one of these per
+ * document, so later simply wins.
+ */
+export type DocProfile = {
+  name: string;
+  /** Null rather than absent for "no emoji", so clearing one is a real value. */
+  emoji: string | null;
+  updatedAt: Date;
+};
+
 /** The JSON-safe form of {@link DbDoc}, with ISO strings instead of Dates. */
 export type SerializedDbDoc = {
   /** Reads accept 1 and migrate it; writes are always the current version. */
@@ -231,6 +256,8 @@ export type SerializedDbDoc = {
   nextTodoId?: number;
   /** Absent in documents written before notes existed; reads as none. */
   nextMemoId?: number;
+  /** Absent until the collection has been named; reads as unnamed. */
+  profile?: { name: string; emoji?: string | null; updatedAt: string };
   /** Absent in documents written before notes existed; reads as an empty list. */
   memos?: Array<
     Omit<Memo, "pinned" | "createdAt" | "updatedAt"> & {
@@ -367,6 +394,7 @@ export function emptyDoc(deviceId: string): DbDoc {
     cards: [],
     todos: [],
     memos: [],
+    profile: null,
   };
 }
 
@@ -398,6 +426,13 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
     nextDeckId: raw.nextDeckId,
     nextCardId: raw.nextCardId,
     nextMemoId: raw.nextMemoId ?? (raw.memos?.length ?? 0) + 1,
+    profile: raw.profile
+      ? {
+          name: raw.profile.name,
+          emoji: raw.profile.emoji ?? null,
+          updatedAt: new Date(raw.profile.updatedAt),
+        }
+      : null,
     memos: (raw.memos ?? []).map((m) => ({
       id: m.id,
       userId: m.userId,
@@ -461,6 +496,9 @@ export function serializeDoc(doc: DbDoc): SerializedDbDoc {
     nextCardId: doc.nextCardId,
     nextTodoId: doc.nextTodoId,
     nextMemoId: doc.nextMemoId,
+    profile: doc.profile
+      ? { ...doc.profile, updatedAt: toIso(doc.profile.updatedAt) }
+      : undefined,
     memos: doc.memos.map((m) => ({
       ...m,
       createdAt: toIso(m.createdAt),

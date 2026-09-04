@@ -32,6 +32,7 @@ import {
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { deleteDocumentFor } from "@/lib/store/local-store";
 import { getSyncTargetFor } from "@/lib/store/github-sync";
+import { saveProfileIdentity } from "@/db/queries/profile";
 
 /**
  * Whether the browser has taken over from the prerendered HTML.
@@ -101,8 +102,23 @@ export function ProfileSettings() {
   }
 
   function commitRename(id: string) {
-    renameProfile(id, editText);
+    const name = editText.trim();
+    renameProfile(id, name);
     setEditingId(null);
+    // Also into the document, so the collection carries its own name to any
+    // other device syncing the same repo. Only for the profile in use: the
+    // others' documents are not open, and writing to one would mean loading it.
+    if (name && id === activeId) {
+      const emoji = profiles.find((p) => p.id === id)?.emoji ?? null;
+      void saveProfileIdentity(name, emoji);
+    }
+  }
+
+  function chooseEmoji(profile: Profile, emoji: string | null) {
+    setProfileEmoji(profile.id, emoji);
+    if (profile.id === activeId) {
+      void saveProfileIdentity(profile.name, emoji);
+    }
   }
 
   async function handleDelete(profile: Profile) {
@@ -129,9 +145,14 @@ export function ProfileSettings() {
         settings and its own unfinished sessions, and switching reloads the page.
       </p>
       <p className="mt-2 text-sm text-muted-foreground">
-        This lives on this device only — it is not part of what syncs. If you
-        each have your own computer or browser profile you do not need this at
-        all, since the browser is already keeping you apart.
+        The list itself lives on this device — a profile is mostly a pointer to
+        a GitHub repo and its token, and a token has no business in a synced
+        file. The name and face do travel: add the profile on another device,
+        point it at the same repo, and it will call itself the same thing.
+      </p>
+      <p className="mt-2 text-sm text-muted-foreground">
+        If you each have your own computer or browser profile you do not need
+        this at all, since the browser is already keeping you apart.
       </p>
 
       <div className="mt-4 grid gap-2">
@@ -176,7 +197,7 @@ export function ProfileSettings() {
                       type="button"
                       aria-label={`Use ${emoji} for ${profile.name}`}
                       aria-pressed={profile.emoji === emoji}
-                      onClick={() => setProfileEmoji(profile.id, emoji)}
+                      onClick={() => chooseEmoji(profile, emoji)}
                       className={`rounded-md px-1.5 py-0.5 text-base hover:bg-muted ${
                         profile.emoji === emoji ? "bg-muted ring-1 ring-ring" : ""
                       }`}
@@ -188,7 +209,7 @@ export function ProfileSettings() {
                     type="button"
                     aria-label={`Use the initial for ${profile.name}`}
                     aria-pressed={!profile.emoji}
-                    onClick={() => setProfileEmoji(profile.id, null)}
+                    onClick={() => chooseEmoji(profile, null)}
                     className={`rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted ${
                       !profile.emoji ? "bg-muted ring-1 ring-ring" : ""
                     }`}

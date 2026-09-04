@@ -36,6 +36,7 @@ import {
 import { dismissNotice } from "@/lib/store/local-store";
 import { TodoReminders } from "@/components/todo-reminders";
 import { ProfileMenu } from "@/components/profile-menu";
+import { ProfileIdentity } from "@/components/profile-identity";
 import {
   getLastCheckedAt,
   hasUnpushedChanges,
@@ -69,6 +70,7 @@ export function AppChrome() {
     <>
       <TabNotice />
       <TodoReminders />
+      <ProfileIdentity />
       <header className="flex items-center justify-end gap-2 p-4">
         <SyncIndicator />
         {/* Beside the calendar because it lands on the same page — the list of
