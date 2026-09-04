@@ -26,7 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { ProfileSettings } from "@/components/profile-settings";
+import { ProfileSettings, SyncPathHint } from "@/components/profile-settings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -282,6 +282,7 @@ export default function SettingsPage() {
                     setConfig({ ...config, path: e.target.value.trim() })
                   }
                 />
+                <SyncPathHint />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="branch">Branch</Label>

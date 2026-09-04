@@ -129,11 +129,29 @@ export function ProfileSettings() {
     deleteProfile(profile.id);
   }
 
-  /** Targets claimed by more than one profile — see the warning below. */
-  const shared = new Set(
-    Object.values(targets)
-      .filter((t): t is string => t !== null)
-      .filter((t, i, all) => all.indexOf(t) !== i),
+  /**
+   * Targets claimed by more than one profile, and who claims them.
+   *
+   * Grouped rather than counted so the warning can name the profiles and the
+   * file, which is the difference between "something is wrong somewhere" and
+   * knowing which two rows to go and change.
+   */
+  const clashes = Object.entries(
+    profiles.reduce<Record<string, string[]>>((acc, profile) => {
+      const target = targets[profile.id];
+      if (target) (acc[target] ??= []).push(profile.name);
+      return acc;
+    }, {}),
+  ).filter(([, names]) => names.length > 1);
+
+  /** Ids sitting on a shared file, so their rows can say so too. */
+  const clashing = new Set(
+    profiles
+      .filter((p) => {
+        const target = targets[p.id];
+        return target ? clashes.some(([t]) => t === target) : false;
+      })
+      .map((p) => p.id),
   );
 
   return (
@@ -228,9 +246,21 @@ export function ProfileSettings() {
                     />
                     <ProfileAvatar profile={profile} size="md" />
                     <span className="font-medium">{profile.name}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span
+                      className={`text-xs ${
+                        clashing.has(profile.id)
+                          ? "font-medium text-amber-700 dark:text-amber-300"
+                          : "text-muted-foreground"
+                      }`}
+                    >
                       {target ?? "no sync repo set"}
                     </span>
+                    {clashing.has(profile.id) && (
+                      <AlertTriangle
+                        aria-label="Shares a file with another profile"
+                        className="size-3.5 shrink-0 text-amber-500"
+                      />
+                    )}
                   </span>
                   {profile.id !== activeId && (
                     <Button
@@ -275,15 +305,52 @@ export function ProfileSettings() {
         })}
       </div>
 
-      {shared.size > 0 && (
-        <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+      {clashes.length > 0 && (
+        <div
+          role="alert"
+          className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-900 dark:text-amber-100"
+        >
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <span>
-            Two profiles are syncing to the same file. A pull merges rather than
-            replaces, so those decks will run together in both directions — give
-            each profile its own repo, or its own path within one.
-          </span>
-        </p>
+          <div className="min-w-0">
+            {clashes.map(([target, names]) => {
+              // `owner/repo/path@branch` — the file is what has to change, so
+              // it is worth pulling out and showing on its own.
+              const path = target.split("@")[0].split("/").slice(2).join("/");
+              const repo = target.split("/").slice(0, 2).join("/");
+              return (
+                <p key={target} className="font-medium">
+                  {names.join(" and ")} are both syncing to{" "}
+                  <code className="rounded bg-amber-500/20 px-1">{path}</code> in{" "}
+                  <code className="rounded bg-amber-500/20 px-1">{repo}</code>.
+                </p>
+              );
+            })}
+            <p className="mt-1.5">
+              They will run into each other. Syncing <em>merges</em>{" "}
+              rather than replaces, so each will pull in the other&rsquo;s
+              decks, cards,
+              notes and todos and keep them — in both directions, and in both
+              copies of the file. That is the one way separate profiles can
+              still end up as one pile.
+            </p>
+            <p className="mt-1.5">
+              Fix it under <strong>GitHub sync</strong>{" "}
+              above: switch to the profile that should move, and give it a{" "}
+              <strong>File path</strong>{" "}
+              of its own &mdash; the same repository is fine, and one token
+              covers both. So{" "}
+              <code className="rounded bg-amber-500/20 px-1">data.json</code>{" "}
+              for one and{" "}
+              <code className="rounded bg-amber-500/20 px-1">
+                {profiles.find((p) => clashing.has(p.id) && p.id !== activeId)
+                  ?.name.toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-") || "second"}
+                .json
+              </code>{" "}
+              for the other.
+            </p>
+          </div>
+        </div>
       )}
 
       <div className="mt-4 flex items-end gap-2">
@@ -331,5 +398,30 @@ export function ProfileSettings() {
         </AlertDialogContent>
       </AlertDialog>
     </section>
+  );
+}
+
+/**
+ * Said where the mistake is actually made, rather than only diagnosed
+ * afterwards in the Profiles section below.
+ *
+ * Only once a second profile exists: on a device with one, "give each profile
+ * its own file" is advice about a situation that does not exist, and the field
+ * is already the hardest one on this form to be confident about.
+ */
+export function SyncPathHint() {
+  const profiles = useSyncExternalStore(
+    subscribeProfiles,
+    listProfiles,
+    getProfilesServerSnapshot,
+  );
+  if (profiles.length < 2) return null;
+
+  return (
+    <p className="text-xs text-muted-foreground">
+      One file per profile. Sharing a repository is fine — give each profile its
+      own path, such as <code>data.json</code> and <code>arjun.json</code> — but
+      two profiles on the <em>same</em> file will merge into each other.
+    </p>
   );
 }
