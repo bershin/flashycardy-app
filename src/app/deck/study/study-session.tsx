@@ -394,6 +394,26 @@ export function StudySession({
     }
   }, [current, currentIndex, bankTime, readElapsed]);
 
+  /**
+   * Forward a card without answering it.
+   *
+   * The counterpart to `goPrev`, which until now had none: stepping back was
+   * possible but coming forward again meant rating cards you had only gone back
+   * to look at. Records nothing — a card skipped keeps whatever schedule it
+   * already had, which is the honest outcome for a card you did not answer.
+   *
+   * Stops at the last card rather than ending the session. Finishing is
+   * something the ratings do; running off the end by skipping would report a
+   * session you had not actually sat.
+   */
+  const goNext = useCallback(() => {
+    if (currentIndex < total - 1) {
+      bankTime(current.id, readElapsed());
+      setCurrentIndex((i) => i + 1);
+      setRevealed(false);
+    }
+  }, [current, currentIndex, total, bankTime, readElapsed]);
+
   const restart = useCallback(() => {
     setDeal((n) => n + 1);
     setStudyCards(cards);
@@ -551,8 +571,16 @@ export function StudySession({
             rate("missed");
           }
           break;
-        case "2":
         case "ArrowRight":
+          e.preventDefault();
+          // The mirror of left: back before the card is turned over, and the
+          // right-hand rating once it is. Left made that swap already; right
+          // did nothing at all until the answer was showing, so there was no
+          // way forward from a card you had stepped back to.
+          if (!finished && !revealed) goNext();
+          else if (!finished) rate("got_it");
+          break;
+        case "2":
           if (!finished && revealed) {
             e.preventDefault();
             rate("got_it");
@@ -566,6 +594,7 @@ export function StudySession({
   }, [
     reveal,
     goPrev,
+    goNext,
     rate,
     finished,
     revealed,
@@ -1018,8 +1047,9 @@ export function StudySession({
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              <Key>space</Key> to turn the card over, <Key>&larr;</Key> for the
-              card before, <Key>&uarr;</Key> to delete
+              <Key>space</Key> to turn the card over, <Key>&larr;</Key>{" "}
+              <Key>&rarr;</Key> for the card before and after,{" "}
+              <Key>&uarr;</Key> to delete
             </p>
           )}
         </div>
