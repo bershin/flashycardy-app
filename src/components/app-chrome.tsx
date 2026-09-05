@@ -8,7 +8,7 @@ import {
   Check,
   CloudOff,
   CloudUpload,
-  Layers,
+  House,
   ListTodo,
   Moon,
   NotebookPen,
@@ -76,25 +76,26 @@ export function AppChrome() {
         {/* Alone on the left, away from the row of places to go: this is the
             way back rather than another destination, and the corner is where a
             reader looks for it. `mr-auto` does the separating, so the rest of
-            the header stays exactly where it was. `Layers` because that is
-            already how a deck is drawn on the dashboard's own cards. */}
+            the header stays exactly where it was.
+            
+            Tinted rather than ghost, and larger than the icons opposite. Drawn
+            the same way as the profile avatar in the other corner, so the two
+            ends of the header are a matched pair holding the row between them —
+            and so the one control that goes *back* does not look like one more
+            place to go. */}
         <Tooltip>
           <TooltipTrigger
             render={
               <Link
                 href="/dashboard"
-                aria-label="Decks"
-                className={buttonVariants({
-                  variant: "ghost",
-                  size: "icon-lg",
-                  className: "mr-auto",
-                })}
+                aria-label="Home"
+                className="mr-auto flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/25 transition-colors hover:bg-primary/20 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
-                <Layers className="size-5" />
+                <House className="size-6" />
               </Link>
             }
           />
-          <TooltipContent>Decks</TooltipContent>
+          <TooltipContent>Home &mdash; all your decks</TooltipContent>
         </Tooltip>
         <SyncIndicator />
         {/* Beside the calendar because it lands on the same page — the list of
