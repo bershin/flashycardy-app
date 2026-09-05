@@ -8,6 +8,7 @@ import {
   Check,
   CloudOff,
   CloudUpload,
+  Layers,
   ListTodo,
   Moon,
   NotebookPen,
@@ -72,6 +73,29 @@ export function AppChrome() {
       <TodoReminders />
       <ProfileIdentity />
       <header className="flex items-center justify-end gap-2 p-4">
+        {/* Alone on the left, away from the row of places to go: this is the
+            way back rather than another destination, and the corner is where a
+            reader looks for it. `mr-auto` does the separating, so the rest of
+            the header stays exactly where it was. `Layers` because that is
+            already how a deck is drawn on the dashboard's own cards. */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Link
+                href="/dashboard"
+                aria-label="Decks"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "icon-lg",
+                  className: "mr-auto",
+                })}
+              >
+                <Layers className="size-5" />
+              </Link>
+            }
+          />
+          <TooltipContent>Decks</TooltipContent>
+        </Tooltip>
         <SyncIndicator />
         {/* Beside the calendar because it lands on the same page — the list of
             things to do sits above the grid there. What it adds over the
