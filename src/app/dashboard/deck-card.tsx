@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -10,6 +10,7 @@ import {
   ChevronRight,
   CheckCircle,
   CircleCheckBig,
+  Flame,
   Layers,
   Pencil,
   Trash2,
@@ -36,6 +37,11 @@ import { EditDeckDialog } from "@/components/edit-deck-dialog";
 import { ProgressRing } from "@/components/progress-ring";
 import { badgeClass } from "@/components/deck-badge";
 import { accentStyle } from "@/lib/deck-accent";
+import { LOCAL_USER_ID } from "@/lib/auth";
+import { useStore } from "@/lib/store/use-store";
+import { HARD_MISS_THRESHOLD, selectHardCards } from "@/db/queries/cards";
+import { setStudyPicks } from "@/lib/study-picks";
+import type { DbDoc } from "@/lib/store/types";
 import { deleteDeckAction } from "./actions";
 
 interface DeckCardProps {
@@ -54,6 +60,20 @@ interface DeckCardProps {
 
 export function DeckCard({ deck }: DeckCardProps) {
   const router = useRouter();
+  /**
+   * The cards under this deck that keep being missed, worst first.
+   *
+   * Read on the card rather than passed down, so the sub-deck list gets it from
+   * the same place if it ever grows one. An archive deck is skipped: everything
+   * in it is learned and out of rotation, and its misses are history.
+   */
+  const hardCards = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        deck.isArchive ? [] : selectHardCards(db, deck.id, LOCAL_USER_ID),
+      [deck.id, deck.isArchive],
+    ),
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -140,7 +160,37 @@ export function DeckCard({ deck }: DeckCardProps) {
               )
             ) : (
               deck.totalCards > 0 && (
-              deck.dueCount > 0 ? (
+              <>
+              {/* First, before today's work. It is the smaller number and the
+                  older problem: what is due changes every morning, while a card
+                  missed seven times has been wrong for weeks. */}
+              {hardCards.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStudyPicks(
+                      deck.id,
+                      hardCards.map((c) => c.id),
+                    );
+                    router.push(`/deck/study/?id=${deck.id}`);
+                  }}
+                  className={badgeClass(
+                    "hard",
+                    "group/hard cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-rose-500/25 hover:shadow-md hover:shadow-rose-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 dark:hover:bg-rose-400/25",
+                  )}
+                  aria-label={`Study the ${hardCards.length} card${hardCards.length === 1 ? "" : "s"} in ${deck.title} missed ${HARD_MISS_THRESHOLD} or more times, worst first`}
+                >
+                  <Flame className="size-3.5" />
+                  <span>
+                    <span className="font-semibold tabular-nums">
+                      {hardCards.length}
+                    </span>{" "}
+                    hard
+                  </span>
+                  <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/hard:translate-x-0.5 group-hover/hard:opacity-100" />
+                </button>
+              )}
+              {deck.dueCount > 0 ? (
                 <button
                   type="button"
                   onClick={() =>
@@ -176,7 +226,8 @@ export function DeckCard({ deck }: DeckCardProps) {
                   <CheckCircle className="size-3.5" />
                   All caught up
                 </span>
-              )
+              )}
+              </>
               )
             )}
             {/* Tomorrow's workload, stated quietly beside today's. Deliberately

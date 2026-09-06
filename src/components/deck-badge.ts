@@ -7,11 +7,21 @@
  * Tone carries meaning, but never on its own — every badge is labelled, so the
  * colour is reinforcement rather than the message.
  */
-export type BadgeTone = "due" | "tomorrow" | "done" | "studied" | "muted";
+export type BadgeTone =
+  | "due"
+  | "hard"
+  | "tomorrow"
+  | "done"
+  | "studied"
+  | "muted";
 
 const TONES: Record<BadgeTone, string> = {
-  // The only actionable one, so it is the strongest.
+  // The one you are meant to act on today, so it is the strongest.
   due: "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:bg-amber-400/15 dark:text-amber-300 dark:ring-amber-300/25",
+  // Also actionable, and deliberately not amber: these are not today's work,
+  // they are the cards that keep coming back however often they are answered.
+  // Rose rather than red — a standing weakness, not an error.
+  hard: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:bg-rose-400/15 dark:text-rose-300 dark:ring-rose-300/25",
   // Deliberately quieter: a heads-up, not something to act on yet.
   tomorrow:
     "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:bg-sky-400/10 dark:text-sky-300 dark:ring-sky-300/20",
