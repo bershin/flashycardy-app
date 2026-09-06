@@ -5,11 +5,8 @@ import {
   BookOpen,
   Filter,
   CalendarClock,
-  CheckSquare,
-  Dices,
   FolderInput,
   Layers,
-  Shuffle,
   Trash2,
   X,
 } from "lucide-react";
@@ -57,6 +54,19 @@ interface CardGridProps {
    */
   selecting: boolean;
   onSelectingChange: (selecting: boolean) => void;
+  /** Whether the "make every card vary" dialog is open. */
+  varyOpen: boolean;
+  onVaryOpenChange: (open: boolean) => void;
+  /**
+   * Bumped by the header's Features menu to reshuffle.
+   *
+   * A nonce rather than the order itself: a shuffle is state that cannot be
+   * recomputed, and it belongs beside the cards it reorders. Lifting it to the
+   * page would have put it next to a `cards` array that is rebuilt on every
+   * render, where the grid's own "cards changed, drop the shuffle" rule could
+   * no longer tell a real change from a re-read.
+   */
+  shuffleNonce: number;
 }
 
 /** Today as `YYYY-MM-DD`, in the reader's own calendar. */
@@ -193,6 +203,9 @@ export function CardGrid({
   cards,
   selecting,
   onSelectingChange,
+  varyOpen,
+  onVaryOpenChange,
+  shuffleNonce,
 }: CardGridProps) {
   const router = useRouter();
   /** Every card here belongs to one deck, so the first one names it. */
@@ -215,8 +228,7 @@ export function CardGrid({
    * list that visibly shortens.
    */
   const [filter, setFilter] = useState("all");
-  const [varyDeckOpen, setVaryDeckOpen] = useState(false);
-  /** Which bulk edit is open, if any — only one at a time in the toolbar. */
+    /** Which bulk edit is open, if any — only one at a time in the toolbar. */
   const [editing, setEditing] = useState<"schedule" | "due" | null>(null);
   const [dueDate, setDueDate] = useState(() => todayKey());
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -254,9 +266,11 @@ export function CardGrid({
     });
   }
 
-  const handleShuffle = useCallback(() => {
+  const [prevShuffleNonce, setPrevShuffleNonce] = useState(shuffleNonce);
+  if (shuffleNonce !== prevShuffleNonce) {
+    setPrevShuffleNonce(shuffleNonce);
     setShuffled((current) => shuffleArray(current ?? cards));
-  }, [cards]);
+  }
 
   const toggle = useCallback((id: number) => {
     setSelected((prev) => {
@@ -488,26 +502,7 @@ export function CardGrid({
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setVaryDeckOpen(true)}
-            >
-              <Dices className="size-3.5" />
-              Make all vary…
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onSelectingChange(true)}
-            >
-              <CheckSquare className="size-3.5" />
-              Select
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleShuffle}>
-              <Shuffle className="size-3.5" />
-              Shuffle
-            </Button>
+
           </>
         )}
       </div>
@@ -579,8 +574,8 @@ export function CardGrid({
         </AlertDialogContent>
       </AlertDialog>
 
-      {varyDeckOpen && (
-        <VaryDeckDialog cards={cards} open onOpenChange={setVaryDeckOpen} />
+      {varyOpen && (
+        <VaryDeckDialog cards={cards} open onOpenChange={onVaryOpenChange} />
       )}
 
       <MoveCardDialog

@@ -11,11 +11,13 @@ import Link from "next/link";
 import {
   BookOpen,
   ChevronDown,
+  Dices,
   Flame,
   ListChecks,
   Shuffle,
   Sprout,
   Timer,
+  Wand2,
   FolderInput,
   Layers,
   Pencil,
@@ -87,13 +89,16 @@ interface DeckHeaderProps {
   hasChildren?: boolean;
   canAddSubDeck?: boolean;
   /**
-   * Turn on the grid's selection mode.
+   * The grid's own actions, reached from the Features menu here.
    *
-   * The grid is a sibling on the deck page, not a child, so the page owns the
-   * flag and hands each of us our half of it. A signal through the store or an
-   * effect would both be more machinery than one boolean deserves.
+   * The grid is a sibling on the deck page, not a child, so the page holds
+   * whatever the two of us share and hands each of us our half. A signal
+   * through the store, or an effect, would both be more machinery than these
+   * deserve.
    */
   onSelectCards?: () => void;
+  onVaryAll?: () => void;
+  onShuffleCards?: () => void;
 }
 
 export function DeckHeader({
@@ -102,6 +107,8 @@ export function DeckHeader({
   hasChildren = false,
   canAddSubDeck = false,
   onSelectCards,
+  onVaryAll,
+  onShuffleCards,
 }: DeckHeaderProps) {
   const router = useRouter();
   /**
@@ -325,29 +332,65 @@ export function DeckHeader({
               <Plus className="size-4" />
               Add Card
             </Button>
-            {/* Beside Add Card, not behind a menu: a spelling deck is built a
-                hundred words at a time, and this is how those get written. */}
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setSpellingOpen(true)}
-            >
-              <SpellCheck className="size-4" />
-              Spelling
-            </Button>
-            {/* Hidden entirely without a key — there is no plan to upsell now,
-                so an always-visible button would just be a dead end. */}
-            {canGenerate && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleGenerateAI}
-                disabled={isGenerating}
+            {/* Everything that acts on the deck as a whole, in one place.
+                These were five buttons across two rows — three of them down in
+                the grid's toolbar — which read as a row of equally likely
+                things to do when in fact you want Add Card or Study almost
+                every time. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={buttonVariants({ size: "sm", variant: "outline" })}
               >
-                <Sparkles className="size-4" />
-                {isGenerating ? "Generating…" : "Generate with AI"}
-              </Button>
-            )}
+                <Wand2 className="size-3.5" />
+                {isGenerating ? "Generating…" : "Features"}
+                <ChevronDown className="size-3.5 opacity-60" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-52">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Add cards</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => setSpellingOpen(true)}>
+                    <SpellCheck className="size-3.5" />
+                    Spelling&hellip;
+                  </DropdownMenuItem>
+                  {/* Hidden entirely without a key — there is no plan to upsell
+                      now, so a visible-but-dead item would just be a dead end. */}
+                  {canGenerate && (
+                    <DropdownMenuItem
+                      disabled={isGenerating}
+                      onClick={handleGenerateAI}
+                    >
+                      <Sparkles className="size-3.5" />
+                      {isGenerating ? "Generating…" : "Generate with AI"}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>This deck&rsquo;s cards</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    disabled={!onVaryAll || cardCount === 0}
+                    onClick={() => onVaryAll?.()}
+                  >
+                    <Dices className="size-3.5" />
+                    Make all vary&hellip;
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!onSelectCards || cardCount === 0}
+                    onClick={() => onSelectCards?.()}
+                  >
+                    <ListChecks className="size-3.5" />
+                    Select cards
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!onShuffleCards || cardCount === 0}
+                    onClick={() => onShuffleCards?.()}
+                  >
+                    <Shuffle className="size-3.5" />
+                    Shuffle the grid
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {/* A split control: Study still opens what is due in one click,
                 and the chevron holds the other ways in. Making Study itself a
                 menu would have charged the common case an extra click to reach

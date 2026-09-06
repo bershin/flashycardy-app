@@ -36,6 +36,10 @@ function DeckPageContent() {
    * cards are picked stays inside the grid.
    */
   const [selecting, setSelecting] = useState(false);
+  /** Whether the grid's "make every card vary" dialog is open. */
+  const [varyOpen, setVaryOpen] = useState(false);
+  /** Bumped to ask the grid to reshuffle; the order itself stays down there. */
+  const [shuffleNonce, setShuffleNonce] = useState(0);
   const searchParams = useSearchParams();
   const ready = useStoreReady();
   const deckId = Number(searchParams.get("id"));
@@ -106,6 +110,8 @@ function DeckPageContent() {
         hasChildren={hasChildren}
         canAddSubDeck={isTopLevel && cards.length === 0}
         onSelectCards={() => setSelecting(true)}
+        onVaryAll={() => setVaryOpen(true)}
+        onShuffleCards={() => setShuffleNonce((n) => n + 1)}
       />
 
       {/* Sitting under the deck's own heading, because the thought this
@@ -158,6 +164,9 @@ function DeckPageContent() {
           cards={cards}
           selecting={selecting}
           onSelectingChange={setSelecting}
+          varyOpen={varyOpen}
+          onVaryOpenChange={setVaryOpen}
+          shuffleNonce={shuffleNonce}
         />
       )}
     </div>
