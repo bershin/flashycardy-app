@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from "react";
 import {
-  ArrowDownWideNarrow,
   BookOpen,
   Filter,
   CalendarClock,
@@ -49,56 +48,6 @@ import { FlashCard } from "./flash-card";
 
 interface CardGridProps {
   cards: CardRow[];
-}
-
-/**
- * The orders a deck can be read in.
- *
- * `recent` is the order the cards arrive in — last edited first, which is what
- * the deck has always shown — and stays the default so the page opens the way
- * it used to. Note that it tracks editing, not creation: a card written a year
- * ago and fixed this morning is at the top, which is why the two are separate
- * options rather than one.
- *
- * The rest each answer a question. Due first: what is coming, and how soon.
- * Missed most: what keeps catching you out, which is the list worth an extra
- * pass before an exam. Newest first: what you have just written, for when you
- * are still adding and want to check what you typed. Longest streak is the
- * mirror of missed — what is nearly learned, and can be skimmed.
- */
-const SORTS = [
-  { value: "recent", label: "Last edited" },
-  { value: "due", label: "Due soonest" },
-  { value: "missed", label: "Missed most" },
-  { value: "streak", label: "Longest streak" },
-  { value: "newest", label: "Newest first" },
-  { value: "oldest", label: "Oldest first" },
-] as const;
-
-type SortKey = (typeof SORTS)[number]["value"];
-
-/**
- * Sorted copies, never in place: `cards` is the store's array, and reordering
- * it would be reordering the deck itself.
- */
-function sortCards(cards: CardRow[], sort: SortKey): CardRow[] {
-  const by = (fn: (c: CardRow) => number) =>
-    [...cards].sort((a, b) => fn(a) - fn(b) || a.id - b.id);
-
-  switch (sort) {
-    case "due":
-      return by((c) => c.nextReviewAt.getTime());
-    case "missed":
-      return by((c) => -c.timesMissed);
-    case "streak":
-      return by((c) => -c.consecutiveCorrect);
-    case "newest":
-      return by((c) => -c.createdAt.getTime());
-    case "oldest":
-      return by((c) => c.createdAt.getTime());
-    default:
-      return cards;
-  }
 }
 
 /** Today as `YYYY-MM-DD`, in the reader's own calendar. */
@@ -235,7 +184,6 @@ export function CardGrid({ cards }: CardGridProps) {
   const router = useRouter();
   /** Every card here belongs to one deck, so the first one names it. */
   const deckId = cards[0]?.deckId ?? 0;
-  const [sort, setSort] = useState<SortKey>("recent");
   /**
    * A shuffle is an order that cannot be recomputed, so it is held rather than
    * derived. Choosing a sort drops it; the two are the same control by another
@@ -314,7 +262,9 @@ export function CardGrid({ cards }: CardGridProps) {
 
   if (cards.length === 0) return null;
 
-  const displayCards = shuffled ?? sortCards(cards, sort);
+  // Last edited first, which is the order the store already holds them in and
+  // the order this page has always opened on. Shuffle still overrides it.
+  const displayCards = shuffled ?? cards;
   const varying = cards.filter((c) => c.type === "generated").length;
   const bounds = boundsNow();
   const counts = new Map(
@@ -542,37 +492,6 @@ export function CardGrid({ cards }: CardGridProps) {
               <CheckSquare className="size-3.5" />
               Select
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                <ArrowDownWideNarrow className="size-3.5" />
-                {/* The current order is on the button, not hidden inside the
-                    menu: which way a few hundred cards are stacked is not
-                    something you can tell by looking at them. */}
-                {shuffled
-                  ? "Shuffled"
-                  : (SORTS.find((s) => s.value === sort)?.label ?? "Sort")}
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuRadioGroup
-                  value={shuffled ? "" : sort}
-                  onValueChange={(value) => {
-                    setShuffled(null);
-                    setSort(value as SortKey);
-                  }}
-                >
-                  {SORTS.map((option) => (
-                    <DropdownMenuRadioItem
-                      key={option.value}
-                      value={option.value}
-                    >
-                      {option.label}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
             <Button variant="outline" size="sm" onClick={handleShuffle}>
               <Shuffle className="size-3.5" />
               Shuffle
@@ -611,9 +530,6 @@ export function CardGrid({ cards }: CardGridProps) {
           <FlashCard
             key={card.id}
             card={card}
-            dueLabel={
-              sort === "due" && !shuffled ? dueLabel(card.nextReviewAt) : null
-            }
             selecting={selecting}
             selected={selected.has(card.id)}
             onToggleSelected={toggle}
