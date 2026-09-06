@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   BookOpen,
+  Flame,
   FolderInput,
   Layers,
   Pencil,
@@ -21,6 +22,8 @@ import {
 import { hasAIKey } from "@/lib/settings";
 import { accentStyle } from "@/lib/deck-accent";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { HARD_MISS_THRESHOLD, selectHardCards } from "@/db/queries/cards";
+import { setStudyPicks } from "@/lib/study-picks";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,6 +79,21 @@ export function DeckHeader({
   canAddSubDeck = false,
 }: DeckHeaderProps) {
   const router = useRouter();
+  /**
+   * The cards under this deck that keep being missed, worst first.
+   *
+   * Read here rather than on the grid below because this is where studying
+   * starts. Finding them was already possible — filter to the missed ones, sort
+   * by most missed, select all, study — but four steps is enough to mean nobody
+   * does it, and the cards that need the extra pass are exactly the ones that
+   * never get one.
+   */
+  const hardCards = useStore(
+    useCallback(
+      (db: DbDoc) => selectHardCards(db, deck.id, LOCAL_USER_ID),
+      [deck.id],
+    ),
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [createSubDeckOpen, setCreateSubDeckOpen] = useState(false);
@@ -255,6 +273,34 @@ export function DeckHeader({
               </Link>
             )}
           </>
+        )}
+        {/* Outside the childless-only block above, unlike Study. A deck with
+            sub-decks is where hard cards collect — they are spread across the
+            children and nothing gathers them — and `selectCardsByIdsForUser`
+            resolves picks by id rather than by deck, so studying a parent's
+            hard cards works even though its own card list is empty.
+
+            Only when there are some: a button that is usually disabled teaches
+            you to stop looking at it. */}
+        {hardCards.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            title={`Study the ${hardCards.length} card${hardCards.length === 1 ? "" : "s"} you have missed ${HARD_MISS_THRESHOLD} or more times, worst first`}
+            onClick={() => {
+              // Handed over the same way the grid hands over a selection, so
+              // the session takes this list in this order rather than
+              // re-deriving what happens to be due.
+              setStudyPicks(
+                deck.id,
+                hardCards.map((c) => c.id),
+              );
+              router.push(`/deck/study/?id=${deck.id}`);
+            }}
+          >
+            <Flame className="size-3.5 text-amber-500" />
+            Hard {hardCards.length}
+          </Button>
         )}
         {(hasChildren || canAddSubDeck) && (
           <Button

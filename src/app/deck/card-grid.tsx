@@ -41,6 +41,7 @@ import {
 } from "./actions";
 import { REVIEW_SCHEDULES, type ReviewSchedule } from "@/lib/store/types";
 import { setStudyPicks } from "@/lib/study-picks";
+import { HARD_MISS_THRESHOLD, isHardCard } from "@/db/queries/cards";
 import { useRouter } from "next/navigation";
 import { VaryDeckDialog } from "@/components/vary-deck-dialog";
 import type { CardRow } from "@/lib/store/types";
@@ -149,6 +150,11 @@ const FILTERS: Filter[] = [
     value: "week",
     label: "Due within a week",
     test: (c, n) => c.nextReviewAt.getTime() < n.endOfWeek,
+  },
+  {
+    value: "hard",
+    label: `Hard (missed ${HARD_MISS_THRESHOLD}+)`,
+    test: (c) => isHardCard(c),
   },
   {
     value: "missed",

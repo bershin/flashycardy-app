@@ -383,21 +383,40 @@ export function selectDueCardsByDeckForUser(
 }
 
 /**
- * Specific cards, in the order the deck shows them.
+ * Specific cards, in the order they were asked for.
  *
  * For studying a hand-picked set: unlike the due list this ignores the review
  * date entirely, because choosing a card is a decision to study it now.
+ *
+ * The order of `cardIds` is kept rather than the order the document happens to
+ * store them in. Every caller has already decided on an order — the grid hands
+ * over its cards as displayed, sorted or shuffled, and the hard-cards button
+ * hands them over worst first — and re-sorting them by id threw all of that
+ * away silently, which for "hardest first" discarded the entire point.
+ *
+ * Ids that name nothing, or a card in someone else's deck, are dropped rather
+ * than left as holes; duplicates collapse to the first mention.
  */
 export function selectCardsByIdsForUser(
   db: DbDoc,
   cardIds: readonly number[],
   userId: string,
 ): CardRow[] {
-  const wanted = new Set(cardIds);
   const owned = new Set(
     db.decks.filter((d) => d.userId === userId).map((d) => d.id),
   );
-  return db.cards.filter((c) => wanted.has(c.id) && owned.has(c.deckId));
+  const byId = new Map(
+    db.cards.filter((c) => owned.has(c.deckId)).map((c) => [c.id, c]),
+  );
+  const seen = new Set<number>();
+  const out: CardRow[] = [];
+  for (const id of cardIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const card = byId.get(id);
+    if (card) out.push(card);
+  }
+  return out;
 }
 
 export function startOfDay(date: Date): Date {

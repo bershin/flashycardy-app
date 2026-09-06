@@ -467,6 +467,52 @@ export function selectCardsUnderDeck(
   return inScope.size === 0 ? [] : db.cards.filter((c) => inScope.has(c.deckId));
 }
 
+/**
+ * How many misses make a card *hard*.
+ *
+ * Three rather than one. "Missed at least once" is most of a working deck —
+ * every card worth having has caught you out at some point — so a threshold
+ * there names nothing. Three is the point at which a card has been missed more
+ * often than by accident, and stops being "I slipped" and starts being "I have
+ * not learned this".
+ *
+ * Exported so the deck page's filter and its Study button agree on the word;
+ * two definitions of "hard" would be worse than none.
+ */
+export const HARD_MISS_THRESHOLD = 3;
+
+export function isHardCard(card: CardRow): boolean {
+  return card.timesMissed >= HARD_MISS_THRESHOLD;
+}
+
+/**
+ * The cards in a deck that keep catching you out, worst first.
+ *
+ * Includes sub-decks, like the study session does, because "the hard ones in
+ * French" means the hard ones in all of it rather than the ones that happen to
+ * sit at the top level.
+ *
+ * Ordered by misses, then by how overdue it is: two cards missed five times
+ * each are equally hard, and the one that has been waiting longest is the one
+ * to see first. Not filtered by due date at all — the point of this list is the
+ * cards you keep failing, and waiting for one to come round on its own is what
+ * let it get to five misses.
+ */
+export function selectHardCards(
+  db: DbDoc,
+  deckId: number,
+  userId: string,
+): CardRow[] {
+  return selectCardsUnderDeck(db, deckId, userId)
+    .filter(isHardCard)
+    .sort(
+      (a, b) =>
+        b.timesMissed - a.timesMissed ||
+        a.nextReviewAt.getTime() - b.nextReviewAt.getTime() ||
+        a.id - b.id,
+    );
+}
+
 /** Put every card in a deck and its sub-decks on one schedule. */
 export async function setScheduleUnderDeck(
   deckId: number,
