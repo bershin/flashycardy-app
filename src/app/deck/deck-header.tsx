@@ -10,7 +10,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   BookOpen,
+  ChevronDown,
   Flame,
+  ListChecks,
+  Shuffle,
+  Sprout,
+  Timer,
   FolderInput,
   Layers,
   Pencil,
@@ -22,7 +27,15 @@ import {
 import { hasAIKey } from "@/lib/settings";
 import { accentStyle } from "@/lib/deck-accent";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { HARD_MISS_THRESHOLD, selectHardCards } from "@/db/queries/cards";
+import {
+  HARD_MISS_THRESHOLD,
+  selectHardCards,
+  selectNewCards,
+} from "@/db/queries/cards";
+import {
+  selectCardsByDeckForUser,
+  selectDueCardsByDeckForUser,
+} from "@/lib/store/selectors";
 import { setStudyPicks } from "@/lib/study-picks";
 import {
   AlertDialog,
@@ -44,7 +57,10 @@ import { generateCardsWithAIAction, setDeckScheduleAction } from "./actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LOCAL_USER_ID } from "@/lib/auth";
@@ -70,6 +86,14 @@ interface DeckHeaderProps {
   cardCount: number;
   hasChildren?: boolean;
   canAddSubDeck?: boolean;
+  /**
+   * Turn on the grid's selection mode.
+   *
+   * The grid is a sibling on the deck page, not a child, so the page owns the
+   * flag and hands each of us our half of it. A signal through the store or an
+   * effect would both be more machinery than one boolean deserves.
+   */
+  onSelectCards?: () => void;
 }
 
 export function DeckHeader({
@@ -77,6 +101,7 @@ export function DeckHeader({
   cardCount,
   hasChildren = false,
   canAddSubDeck = false,
+  onSelectCards,
 }: DeckHeaderProps) {
   const router = useRouter();
   /**
@@ -94,6 +119,66 @@ export function DeckHeader({
       [deck.id],
     ),
   );
+  /** What Study itself would open: this deck's cards that have come round. */
+  const dueCards = useStore(
+    useCallback(
+      (db: DbDoc) => selectDueCardsByDeckForUser(db, deck.id, LOCAL_USER_ID),
+      [deck.id],
+    ),
+  );
+  /** Never answered, never missed — the ones not started yet. */
+  const newCards = useStore(
+    useCallback(
+      (db: DbDoc) => selectNewCards(db, deck.id, LOCAL_USER_ID),
+      [deck.id],
+    ),
+  );
+  /** The whole deck, for a pass that ignores the schedule entirely. */
+  const allCards = useStore(
+    useCallback(
+      (db: DbDoc) => selectCardsByDeckForUser(db, deck.id, LOCAL_USER_ID),
+      [deck.id],
+    ),
+  );
+
+  /**
+   * Start a session over exactly these cards, in exactly this order.
+   *
+   * Everything but plain Study goes through here: the session takes a handed-
+   * over list as given, which is what lets "hardest first" and "shuffled" mean
+   * anything. Plain Study stays a link to the unpicked route, so the ordinary
+   * case is one click and behaves as it always has.
+   */
+  function studyThese(cards: { id: number }[]) {
+    if (cards.length === 0) return;
+    setStudyPicks(
+      deck.id,
+      cards.map((c) => c.id),
+    );
+    router.push(`/deck/study/?id=${deck.id}`);
+  }
+
+  /** A copy in a random order — the store's array is never reordered. */
+  function shuffle<T>(items: readonly T[]): T[] {
+    const out = [...items];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+
+  /**
+   * Due first, then whatever else fills the ten.
+   *
+   * A short session should still be the work that matters, so it starts from
+   * what has come round; a deck with nothing due falls back to the rest rather
+   * than refusing, since "I have five minutes" is a reason to study something.
+   */
+  const quickTen = [
+    ...dueCards,
+    ...allCards.filter((c) => !dueCards.some((d) => d.id === c.id)),
+  ].slice(0, 10);
   const [editOpen, setEditOpen] = useState(false);
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [createSubDeckOpen, setCreateSubDeckOpen] = useState(false);
@@ -263,14 +348,103 @@ export function DeckHeader({
                 {isGenerating ? "Generating…" : "Generate with AI"}
               </Button>
             )}
+            {/* A split control: Study still opens what is due in one click,
+                and the chevron holds the other ways in. Making Study itself a
+                menu would have charged the common case an extra click to reach
+                what it already did. */}
             {cardCount > 0 && (
-              <Link
-                href={`/deck/study/?id=${deck.id}`}
-                className={buttonVariants({ size: "sm", variant: "secondary" })}
-              >
-                <BookOpen className="size-3.5" />
-                Study
-              </Link>
+              <div className="inline-flex">
+                <Link
+                  href={`/deck/study/?id=${deck.id}`}
+                  className={buttonVariants({
+                    size: "sm",
+                    variant: "secondary",
+                    className: "rounded-r-none",
+                  })}
+                >
+                  <BookOpen className="size-3.5" />
+                  Study
+                </Link>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    aria-label="Other ways to study this deck"
+                    className={buttonVariants({
+                      size: "icon-sm",
+                      variant: "secondary",
+                      className: "rounded-l-none border-l border-black/10 dark:border-white/10",
+                    })}
+                  >
+                    <ChevronDown className="size-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-56">
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Study</DropdownMenuLabel>
+                      <DropdownMenuItem
+                        disabled={dueCards.length === 0}
+                        onClick={() => studyThese(shuffle(dueCards))}
+                      >
+                        <Shuffle className="size-3.5" />
+                        Shuffle and study
+                        <span className="ml-auto pl-3 tabular-nums opacity-60">
+                          {dueCards.length}
+                        </span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={hardCards.length === 0}
+                        onClick={() => studyThese(hardCards)}
+                      >
+                        <Flame className="size-3.5 text-amber-500" />
+                        Hardest first
+                        <span className="ml-auto pl-3 tabular-nums opacity-60">
+                          {hardCards.length}
+                        </span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={newCards.length === 0}
+                        onClick={() => studyThese(newCards)}
+                      >
+                        <Sprout className="size-3.5 text-emerald-500" />
+                        New cards first
+                        <span className="ml-auto pl-3 tabular-nums opacity-60">
+                          {newCards.length}
+                        </span>
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Ignore the schedule</DropdownMenuLabel>
+                      {/* Neither of these waits for a card to come round. The
+                          first is the pass before an exam; the second is for
+                          the five minutes you actually have. */}
+                      <DropdownMenuItem
+                        disabled={allCards.length === 0}
+                        onClick={() => studyThese(allCards)}
+                      >
+                        <Layers className="size-3.5" />
+                        Everything in this deck
+                        <span className="ml-auto pl-3 tabular-nums opacity-60">
+                          {allCards.length}
+                        </span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={quickTen.length === 0}
+                        onClick={() => studyThese(quickTen)}
+                      >
+                        <Timer className="size-3.5" />
+                        Quick session
+                        <span className="ml-auto pl-3 tabular-nums opacity-60">
+                          {quickTen.length}
+                        </span>
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={onSelectCards}>
+                      <ListChecks className="size-3.5" />
+                      Pick cards to study&hellip;
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )}
           </>
         )}
@@ -282,7 +456,7 @@ export function DeckHeader({
 
             Only when there are some: a button that is usually disabled teaches
             you to stop looking at it. */}
-        {hardCards.length > 0 && (
+        {hasChildren && hardCards.length > 0 && (
           <Button
             size="sm"
             variant="outline"

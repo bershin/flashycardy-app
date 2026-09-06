@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback } from "react";
+import { Suspense, useCallback, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { LOCAL_USER_ID } from "@/lib/auth";
@@ -28,6 +28,14 @@ import { SortableChildDecks } from "./sortable-child-decks";
  * HTML file serves every deck.
  */
 function DeckPageContent() {
+  /**
+   * Whether the card grid is picking cards.
+   *
+   * Held here because both children need it: the header's "Pick cards to
+   * study…" turns it on, and the grid turns it off when it is done. Which
+   * cards are picked stays inside the grid.
+   */
+  const [selecting, setSelecting] = useState(false);
   const searchParams = useSearchParams();
   const ready = useStoreReady();
   const deckId = Number(searchParams.get("id"));
@@ -97,6 +105,7 @@ function DeckPageContent() {
         cardCount={cards.length}
         hasChildren={hasChildren}
         canAddSubDeck={isTopLevel && cards.length === 0}
+        onSelectCards={() => setSelecting(true)}
       />
 
       {/* Sitting under the deck's own heading, because the thought this
@@ -145,7 +154,11 @@ function DeckPageContent() {
           })}
         />
       ) : (
-        <CardGrid cards={cards} />
+        <CardGrid
+          cards={cards}
+          selecting={selecting}
+          onSelectingChange={setSelecting}
+        />
       )}
     </div>
   );

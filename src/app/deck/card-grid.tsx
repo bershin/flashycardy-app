@@ -48,6 +48,15 @@ import { FlashCard } from "./flash-card";
 
 interface CardGridProps {
   cards: CardRow[];
+  /**
+   * Whether the grid is in selection mode.
+   *
+   * Controlled by the deck page rather than held here, because the header's
+   * "Pick cards to study…" has to turn it on and the header is a sibling. The
+   * grid still owns *which* cards are selected — only the mode is shared.
+   */
+  selecting: boolean;
+  onSelectingChange: (selecting: boolean) => void;
 }
 
 /** Today as `YYYY-MM-DD`, in the reader's own calendar. */
@@ -180,7 +189,11 @@ function shuffleArray<T>(arr: T[]): T[] {
   return copy;
 }
 
-export function CardGrid({ cards }: CardGridProps) {
+export function CardGrid({
+  cards,
+  selecting,
+  onSelectingChange,
+}: CardGridProps) {
   const router = useRouter();
   /** Every card here belongs to one deck, so the first one names it. */
   const deckId = cards[0]?.deckId ?? 0;
@@ -192,7 +205,6 @@ export function CardGrid({ cards }: CardGridProps) {
    */
   const [shuffled, setShuffled] = useState<CardRow[] | null>(null);
   const [prevCards, setPrevCards] = useState(cards);
-  const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [moveOpen, setMoveOpen] = useState(false);
   /**
@@ -256,7 +268,7 @@ export function CardGrid({ cards }: CardGridProps) {
   }, []);
 
   function exitSelection() {
-    setSelecting(false);
+    onSelectingChange(false);
     setSelected(new Set());
   }
 
@@ -487,7 +499,7 @@ export function CardGrid({ cards }: CardGridProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSelecting(true)}
+              onClick={() => onSelectingChange(true)}
             >
               <CheckSquare className="size-3.5" />
               Select

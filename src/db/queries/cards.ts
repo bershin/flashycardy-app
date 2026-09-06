@@ -513,6 +513,27 @@ export function selectHardCards(
     );
 }
 
+/**
+ * Cards nothing has been recorded against yet, oldest first.
+ *
+ * "New" is stricter than a streak of zero: a card missed nine times is also on
+ * zero, and it is the opposite of new. Never answered correctly *and* never
+ * missed is the only reading that means "not started".
+ *
+ * Oldest first, because these are read in the order they were written — a deck
+ * typed out in one sitting has an order, and shuffling that away for a first
+ * encounter loses whatever grouping the writing had.
+ */
+export function selectNewCards(
+  db: DbDoc,
+  deckId: number,
+  userId: string,
+): CardRow[] {
+  return selectCardsUnderDeck(db, deckId, userId)
+    .filter((c) => c.lastCorrectAt === null && c.timesMissed === 0)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id);
+}
+
 /** Put every card in a deck and its sub-decks on one schedule. */
 export async function setScheduleUnderDeck(
   deckId: number,
