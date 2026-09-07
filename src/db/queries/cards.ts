@@ -73,6 +73,7 @@ export async function insertCard(data: {
       consecutiveCorrect: 0,
       lastCorrectAt: null,
       timesMissed: 0,
+      editedAt: now,
       createdAt: now,
       updatedAt: now,
     };
@@ -100,6 +101,7 @@ export async function bulkInsertCards(
         consecutiveCorrect: 0,
         lastCorrectAt: null,
         timesMissed: 0,
+        editedAt: now,
         createdAt: now,
         updatedAt: now,
       };
@@ -138,6 +140,10 @@ export async function updateCard(
       // Changing the schedule re-aims future reviews without disturbing the
       // streak already earned or the date the card is currently waiting on.
       schedule: data.schedule ?? current.schedule,
+      // Written again, so it counts as new until it is answered again — which
+      // is the whole point of the field: a card whose wording changed has not
+      // been tested in its current form.
+      editedAt: new Date(),
       updatedAt: new Date(),
       // The payload follows the type, so switching a card away from quiz
       // doesn't leave orphaned options behind to reappear if it switches back.
@@ -427,6 +433,10 @@ export async function recordStudyResult(
       // that is exactly the card worth spotting later.
       timesMissed:
         draft.cards[index].timesMissed + (rating === "missed" ? 1 : 0),
+      // Answered, so no longer unstudied — whether it was right or wrong. Only
+      // an answer clears this; moving the card or changing its schedule leaves
+      // it alone, so neither can quietly mark a deck as studied.
+      editedAt: null,
       updatedAt: now,
     };
     draft.cards[index] = updated;
@@ -514,15 +524,16 @@ export function selectHardCards(
 }
 
 /**
- * Cards nothing has been recorded against yet, oldest first.
+ * Cards written but not answered since — newly added, or newly reworded.
  *
- * "New" is stricter than a streak of zero: a card missed nine times is also on
- * zero, and it is the opposite of new. Never answered correctly *and* never
- * missed is the only reading that means "not started".
+ * `editedAt` carries the whole rule: it is set when a card is created or its
+ * wording changes, and cleared by any answer. So this is "not tested in its
+ * current form", which covers a brand new card and a card you have just fixed
+ * alike, and excludes one you have merely moved or rescheduled.
  *
- * Oldest first, because these are read in the order they were written — a deck
- * typed out in one sitting has an order, and shuffling that away for a first
- * encounter loses whatever grouping the writing had.
+ * Most recently written first, because a card edited a minute ago is the one
+ * being looked for. That does mean a deck typed in one sitting is read back
+ * bottom-up on its first pass, which is the cost of the newer meaning.
  */
 export function selectNewCards(
   db: DbDoc,
@@ -530,8 +541,12 @@ export function selectNewCards(
   userId: string,
 ): CardRow[] {
   return selectCardsUnderDeck(db, deckId, userId)
-    .filter((c) => c.lastCorrectAt === null && c.timesMissed === 0)
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id);
+    .filter((c) => c.editedAt !== null)
+    .sort(
+      (a, b) =>
+        (b.editedAt?.getTime() ?? 0) - (a.editedAt?.getTime() ?? 0) ||
+        b.id - a.id,
+    );
 }
 
 /** Put every card in a deck and its sub-decks on one schedule. */

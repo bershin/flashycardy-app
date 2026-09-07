@@ -165,6 +165,20 @@ export type CardRow = {
    * them would be worse than starting the count from here.
    */
   timesMissed: number;
+  /**
+   * When the card was last written — created, or its wording changed — or null
+   * once it has been answered since.
+   *
+   * A flag with a date on it rather than a plain timestamp, because the
+   * question it answers is "has this been studied since it was written?" and
+   * the alternative was comparing against `updatedAt`, which studying moves
+   * (see `recordStudyResult`). Answering clears it; moving a card, changing its
+   * schedule or rescheduling it leave it alone, so a bulk reschedule cannot
+   * quietly mark a whole deck unstudied.
+   *
+   * The date itself orders the new cards, newest written first.
+   */
+  editedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -335,9 +349,12 @@ export type SerializedDbDoc = {
       | "nextReviewAt"
       | "lastCorrectAt"
       | "timesMissed"
+      | "editedAt"
       | "createdAt"
       | "updatedAt"
     > & {
+      /** Absent before cards tracked this; see `deserializeDoc` for the read. */
+      editedAt?: string | null;
       /**
        * Absent in version-1 documents, and may name a type this build no
        * longer has (vocabulary was removed). Normalised on read.
@@ -481,6 +498,17 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       // A missing or nonsense count reads as none rather than NaN, which would
       // render as "NaN missed" on the card and poison any arithmetic on it.
       timesMissed: Number.isFinite(c.timesMissed) ? Number(c.timesMissed) : 0,
+      // A card written before this existed is treated as unwritten-since only
+      // if nothing has ever been recorded against it — which is exactly the
+      // rule "new" used before the field, so no deck changes what it shows on
+      // the day this arrives. Anything already studied reads as null.
+      editedAt: c.editedAt
+        ? toDate(c.editedAt)
+        : c.editedAt === null ||
+            c.lastCorrectAt ||
+            (Number.isFinite(c.timesMissed) && Number(c.timesMissed) > 0)
+          ? null
+          : toDate(c.createdAt),
       createdAt: toDate(c.createdAt),
       updatedAt: toDate(c.updatedAt),
     })),
@@ -520,6 +548,7 @@ export function serializeDoc(doc: DbDoc): SerializedDbDoc {
       ...c,
       nextReviewAt: toIso(c.nextReviewAt),
       lastCorrectAt: toIso(c.lastCorrectAt),
+      editedAt: toIso(c.editedAt),
       createdAt: toIso(c.createdAt),
       updatedAt: toIso(c.updatedAt),
     })),
