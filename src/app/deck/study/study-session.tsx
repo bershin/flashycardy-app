@@ -395,24 +395,18 @@ export function StudySession({
   }, [current, currentIndex, bankTime, readElapsed]);
 
   /**
-   * Forward a card without answering it.
+   * Move on without turning the card over — counted as a miss.
    *
-   * The counterpart to `goPrev`, which until now had none: stepping back was
-   * possible but coming forward again meant rating cards you had only gone back
-   * to look at. Records nothing — a card skipped keeps whatever schedule it
-   * already had, which is the honest outcome for a card you did not answer.
+   * Skipping used to record nothing, which left a card in an odd state: passed
+   * over, still due, and with nothing to say it had been seen. A card you could
+   * not face is a card you did not know, so it is scored as one — which also
+   * means a session of skips still counts as having been through the deck, and
+   * the skipped cards come back in ten minutes like any other miss.
    *
-   * Stops at the last card rather than ending the session. Finishing is
-   * something the ratings do; running off the end by skipping would report a
-   * session you had not actually sat.
+   * `rate` handles the advancing and the end of the deck, so this is only the
+   * naming.
    */
-  const goNext = useCallback(() => {
-    if (currentIndex < total - 1) {
-      bankTime(current.id, readElapsed());
-      setCurrentIndex((i) => i + 1);
-      setRevealed(false);
-    }
-  }, [current, currentIndex, total, bankTime, readElapsed]);
+  const skip = useCallback(() => rate("missed"), [rate]);
 
   const restart = useCallback(() => {
     setDeal((n) => n + 1);
@@ -573,11 +567,10 @@ export function StudySession({
           break;
         case "ArrowRight":
           e.preventDefault();
-          // The mirror of left: back before the card is turned over, and the
-          // right-hand rating once it is. Left made that swap already; right
-          // did nothing at all until the answer was showing, so there was no
-          // way forward from a card you had stepped back to.
-          if (!finished && !revealed) goNext();
+          // Face down it is a skip, which scores as a miss and moves on; once
+          // the answer is showing it is the right-hand rating, as the buttons
+          // underneath say. Left makes the same kind of swap.
+          if (!finished && !revealed) skip();
           else if (!finished) rate("got_it");
           break;
         case "2":
@@ -594,7 +587,7 @@ export function StudySession({
   }, [
     reveal,
     goPrev,
-    goNext,
+    skip,
     rate,
     finished,
     revealed,
@@ -1047,8 +1040,8 @@ export function StudySession({
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              <Key>space</Key> to turn the card over, <Key>&larr;</Key>{" "}
-              <Key>&rarr;</Key> for the card before and after,{" "}
+              <Key>space</Key> to turn the card over, <Key>&larr;</Key> for the
+              card before, <Key>&rarr;</Key> to skip it as missed,{" "}
               <Key>&uarr;</Key> to delete
             </p>
           )}

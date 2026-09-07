@@ -74,6 +74,7 @@ export async function insertCard(data: {
       lastCorrectAt: null,
       timesMissed: 0,
       editedAt: now,
+      lastAnsweredAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -102,6 +103,7 @@ export async function bulkInsertCards(
         lastCorrectAt: null,
         timesMissed: 0,
         editedAt: now,
+        lastAnsweredAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -437,6 +439,9 @@ export async function recordStudyResult(
       // an answer clears this; moving the card or changing its schedule leaves
       // it alone, so neither can quietly mark a deck as studied.
       editedAt: null,
+      // Stamped whichever way it went: the question this answers is whether the
+      // card has been through your hands today, not whether you got it right.
+      lastAnsweredAt: now,
       updatedAt: now,
     };
     draft.cards[index] = updated;
@@ -547,6 +552,41 @@ export function selectNewCards(
         (b.editedAt?.getTime() ?? 0) - (a.editedAt?.getTime() ?? 0) ||
         b.id - a.id,
     );
+}
+
+/**
+ * Cards the deck is still asking for that have not been answered today.
+ *
+ * The union of the three pills — new, hard and due — minus anything already
+ * seen since midnight. Empty means the deck has been worked through, which is
+ * what "Studied today" claims.
+ *
+ * Answered, not answered *correctly*: a card you got wrong is a card you
+ * studied. It comes back in ten minutes and stays in the due count, so a rule
+ * built on the counts alone could never be satisfied by a session with a single
+ * mistake in it.
+ *
+ * The three sets are read exactly as the pills read them — hard and new across
+ * the sub-decks, due from this deck's own cards — so the badge can never
+ * disagree with the numbers sitting beside it.
+ */
+export function selectUnstudiedToday(
+  db: DbDoc,
+  deckId: number,
+  userId: string,
+): CardRow[] {
+  const today = startOfDay(new Date());
+  const outstanding = new Map<number, CardRow>();
+  for (const card of [
+    ...selectNewCards(db, deckId, userId),
+    ...selectHardCards(db, deckId, userId),
+    ...selectDueCardsByDeckForUser(db, deckId, userId),
+  ]) {
+    outstanding.set(card.id, card);
+  }
+  return [...outstanding.values()].filter(
+    (c) => c.lastAnsweredAt === null || c.lastAnsweredAt < today,
+  );
 }
 
 /** Put every card in a deck and its sub-decks on one schedule. */

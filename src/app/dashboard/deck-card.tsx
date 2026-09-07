@@ -43,6 +43,7 @@ import {
   HARD_MISS_THRESHOLD,
   selectHardCards,
   selectNewCards,
+  selectUnstudiedToday,
 } from "@/db/queries/cards";
 import { setStudyPicks } from "@/lib/study-picks";
 import type { DbDoc } from "@/lib/store/types";
@@ -82,6 +83,23 @@ export function DeckCard({ deck }: DeckCardProps) {
     useCallback(
       (db: DbDoc) =>
         deck.isArchive ? [] : selectNewCards(db, deck.id, LOCAL_USER_ID),
+      [deck.id, deck.isArchive],
+    ),
+  );
+
+  /**
+   * Whether every card this deck is still asking for has been answered today.
+   *
+   * Not "is the deck empty": a card answered wrong comes back in ten minutes
+   * and keeps its place in the due count, so emptying the counts would demand a
+   * flawless session. Having been through them is the claim.
+   */
+  const nothingLeft = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        deck.isArchive
+          ? true
+          : selectUnstudiedToday(db, deck.id, LOCAL_USER_ID).length === 0,
       [deck.id, deck.isArchive],
     ),
   );
@@ -160,7 +178,16 @@ export function DeckCard({ deck }: DeckCardProps) {
             )}
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {deck.studiedToday && (
+            {/* Only once there is nothing left to open. Having opened the deck
+                at some point today said almost nothing — it sat next to sixty
+                new and a hundred due and read as a claim that the deck was
+                dealt with. Now it means what it looks like it means.
+
+                Hard is deliberately not part of the test. `timesMissed` only
+                ever counts up, so a card missed three times is hard for good
+                and the count can never reach zero — requiring it would retire
+                this badge rather than qualify it. */}
+            {deck.studiedToday && nothingLeft && (
               <span className={badgeClass("studied")}>
                 <CircleCheckBig className="size-3.5" />
                 Studied today

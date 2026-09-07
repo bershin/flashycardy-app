@@ -179,6 +179,16 @@ export type CardRow = {
    * The date itself orders the new cards, newest written first.
    */
   editedAt: Date | null;
+  /**
+   * When the card was last answered, right or wrong.
+   *
+   * `lastCorrectAt` cannot stand in for this: it ignores misses, so a card you
+   * worked through and got wrong would read as never studied. That is the
+   * difference between "have I been through this deck today" and "have I got
+   * everything in it right", and the first is the question the deck card's
+   * "Studied today" badge is asking.
+   */
+  lastAnsweredAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -350,11 +360,14 @@ export type SerializedDbDoc = {
       | "lastCorrectAt"
       | "timesMissed"
       | "editedAt"
+      | "lastAnsweredAt"
       | "createdAt"
       | "updatedAt"
     > & {
       /** Absent before cards tracked this; see `deserializeDoc` for the read. */
       editedAt?: string | null;
+      /** Absent before misses were stamped; falls back to `lastCorrectAt`. */
+      lastAnsweredAt?: string | null;
       /**
        * Absent in version-1 documents, and may name a type this build no
        * longer has (vocabulary was removed). Normalised on read.
@@ -502,6 +515,16 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       // if nothing has ever been recorded against it — which is exactly the
       // rule "new" used before the field, so no deck changes what it shows on
       // the day this arrives. Anything already studied reads as null.
+      // A card written before misses were stamped falls back to its last
+      // correct answer, which is the only answer time such a document holds.
+      // That understates a card whose last answer was wrong, so an old deck may
+      // need one more pass before it reads as studied — better than claiming a
+      // day's work that was never recorded.
+      lastAnsweredAt: c.lastAnsweredAt
+        ? toDate(c.lastAnsweredAt)
+        : c.lastCorrectAt
+          ? toDate(c.lastCorrectAt)
+          : null,
       editedAt: c.editedAt
         ? toDate(c.editedAt)
         : c.editedAt === null ||
@@ -549,6 +572,7 @@ export function serializeDoc(doc: DbDoc): SerializedDbDoc {
       nextReviewAt: toIso(c.nextReviewAt),
       lastCorrectAt: toIso(c.lastCorrectAt),
       editedAt: toIso(c.editedAt),
+      lastAnsweredAt: toIso(c.lastAnsweredAt),
       createdAt: toIso(c.createdAt),
       updatedAt: toIso(c.updatedAt),
     })),

@@ -16,7 +16,7 @@ function deck(id: number, title: string, updated: Date, created = T0): DeckRow {
 function card(id: number, deckId: number, front: string, updated: Date, created = T0): CardRow {
   return {
     id, deckId, type: "basic", front, back: "a", schedule: "weekly",
-    nextReviewAt: T0, consecutiveCorrect: 0, lastCorrectAt: null, timesMissed: 0, editedAt: null,
+    nextReviewAt: T0, consecutiveCorrect: 0, lastCorrectAt: null, timesMissed: 0, editedAt: null, lastAnsweredAt: null,
     createdAt: created, updatedAt: updated,
   };
 }

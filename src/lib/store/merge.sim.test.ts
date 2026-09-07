@@ -14,7 +14,7 @@ const at = (m: number) => new Date(T0.getTime() + m * 60_000);
 function card(id: number, front: string, updated: Date, created = T0): CardRow {
   return {
     id, deckId: 1, type: "basic", front, back: "a", schedule: "weekly",
-    nextReviewAt: T0, consecutiveCorrect: 0, lastCorrectAt: null, timesMissed: 0, editedAt: null,
+    nextReviewAt: T0, consecutiveCorrect: 0, lastCorrectAt: null, timesMissed: 0, editedAt: null, lastAnsweredAt: null,
     createdAt: created, updatedAt: updated,
   };
 }
