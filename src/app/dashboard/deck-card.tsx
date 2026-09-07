@@ -40,11 +40,13 @@ import { accentStyle } from "@/lib/deck-accent";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import {
+  allAnsweredToday,
   HARD_MISS_THRESHOLD,
   selectHardCards,
   selectNewCards,
   selectUnstudiedToday,
 } from "@/db/queries/cards";
+import { selectDueCardsByDeckForUser } from "@/lib/store/selectors";
 import { setStudyPicks } from "@/lib/study-picks";
 import type { DbDoc } from "@/lib/store/types";
 import { deleteDeckAction } from "./actions";
@@ -87,6 +89,15 @@ export function DeckCard({ deck }: DeckCardProps) {
     ),
   );
 
+  /** The due cards themselves, to say whether that group has been worked. */
+  const dueCards = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        deck.isArchive ? [] : selectDueCardsByDeckForUser(db, deck.id, LOCAL_USER_ID),
+      [deck.id, deck.isArchive],
+    ),
+  );
+
   /**
    * Whether every card this deck is still asking for has been answered today.
    *
@@ -103,6 +114,16 @@ export function DeckCard({ deck }: DeckCardProps) {
       [deck.id, deck.isArchive],
     ),
   );
+
+  /**
+   * How a pill reads once its group has been gone through today.
+   *
+   * Faded with a tick rather than hidden or recoloured: the count still matters
+   * — nine hard cards are still nine hard cards — and turning it green would
+   * put it in the same language as "All caught up", which means something else.
+   * Still a button, because going round a group twice is allowed.
+   */
+  const doneLook = (done: boolean) => (done ? " opacity-60" : "");
 
   function study(cards: { id: number }[]) {
     if (cards.length === 0) return;
@@ -218,7 +239,8 @@ export function DeckCard({ deck }: DeckCardProps) {
                   onClick={() => study(newCards)}
                   className={badgeClass(
                     "new",
-                    "group/new cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-sky-500/25 hover:shadow-md hover:shadow-sky-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:hover:bg-sky-400/25",
+                    doneLook(allAnsweredToday(newCards)) +
+                      " group/new cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-sky-500/25 hover:shadow-md hover:shadow-sky-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:hover:bg-sky-400/25",
                   )}
                   aria-label={`Study the ${newCards.length} card${newCards.length === 1 ? "" : "s"} in ${deck.title} you have not started yet`}
                 >
@@ -229,7 +251,11 @@ export function DeckCard({ deck }: DeckCardProps) {
                     </span>{" "}
                     new
                   </span>
-                  <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/new:translate-x-0.5 group-hover/new:opacity-100" />
+                  {allAnsweredToday(newCards) ? (
+                    <CircleCheckBig className="-mr-0.5 size-3.5" />
+                  ) : (
+                    <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/new:translate-x-0.5 group-hover/new:opacity-100" />
+                  )}
                 </button>
               )}
               {hardCards.length > 0 && (
@@ -238,7 +264,8 @@ export function DeckCard({ deck }: DeckCardProps) {
                   onClick={() => study(hardCards)}
                   className={badgeClass(
                     "hard",
-                    "group/hard cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-rose-500/25 hover:shadow-md hover:shadow-rose-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 dark:hover:bg-rose-400/25",
+                    doneLook(allAnsweredToday(hardCards)) +
+                      " group/hard cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-rose-500/25 hover:shadow-md hover:shadow-rose-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 dark:hover:bg-rose-400/25",
                   )}
                   aria-label={`Study the ${hardCards.length} card${hardCards.length === 1 ? "" : "s"} in ${deck.title} missed ${HARD_MISS_THRESHOLD} or more times, worst first`}
                 >
@@ -249,7 +276,11 @@ export function DeckCard({ deck }: DeckCardProps) {
                     </span>{" "}
                     hard
                   </span>
-                  <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/hard:translate-x-0.5 group-hover/hard:opacity-100" />
+                  {allAnsweredToday(hardCards) ? (
+                    <CircleCheckBig className="-mr-0.5 size-3.5" />
+                  ) : (
+                    <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/hard:translate-x-0.5 group-hover/hard:opacity-100" />
+                  )}
                 </button>
               )}
               {deck.dueCount > 0 ? (
@@ -266,7 +297,8 @@ export function DeckCard({ deck }: DeckCardProps) {
                     // presses on click, and the chevron nudges toward where it
                     // goes. Keyboard users get an outline rather than a ring,
                     // since the pill's own ring is inset and would be hidden.
-                    "group/due cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-amber-500/25 hover:shadow-md hover:shadow-amber-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:hover:bg-amber-400/25",
+                    doneLook(allAnsweredToday(dueCards)) +
+                      " group/due cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-amber-500/25 hover:shadow-md hover:shadow-amber-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:hover:bg-amber-400/25",
                   )}
                   aria-label={
                     deck.childCount > 0
@@ -281,7 +313,11 @@ export function DeckCard({ deck }: DeckCardProps) {
                     </span>{" "}
                     due
                   </span>
-                  <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/due:translate-x-0.5 group-hover/due:opacity-100" />
+                  {allAnsweredToday(dueCards) ? (
+                    <CircleCheckBig className="-mr-0.5 size-3.5" />
+                  ) : (
+                    <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/due:translate-x-0.5 group-hover/due:opacity-100" />
+                  )}
                 </button>
               ) : (
                 <span className={badgeClass("done")}>

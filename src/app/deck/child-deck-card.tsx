@@ -8,9 +8,11 @@ import { badgeClass } from "@/components/deck-badge";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import {
+  allAnsweredToday,
   selectNewCards,
   selectUnstudiedToday,
 } from "@/db/queries/cards";
+import { selectDueCardsByDeckForUser } from "@/lib/store/selectors";
 import { setStudyPicks } from "@/lib/study-picks";
 import type { DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
@@ -64,6 +66,20 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
    * and keeps its place in the due count, so emptying the counts would demand a
    * flawless session. Having been through them is the claim.
    */
+  /** The due cards themselves, to say whether that group has been worked. */
+  const dueCards = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        deck.isArchive
+          ? []
+          : selectDueCardsByDeckForUser(db, deck.id, LOCAL_USER_ID),
+      [deck.id, deck.isArchive],
+    ),
+  );
+  /** Faded with a tick once a group has been gone through — see the deck card. */
+  const doneLook = (done: boolean) => (done ? " opacity-60" : "");
+
+
   const nothingLeft = useStore(
     useCallback(
       (db: DbDoc) =>
@@ -148,7 +164,8 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                   }}
                   className={badgeClass(
                     "new",
-                    "group/new cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-sky-500/25 hover:shadow-md hover:shadow-sky-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:hover:bg-sky-400/25",
+                    doneLook(allAnsweredToday(newCards)) +
+                      " group/new cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-sky-500/25 hover:shadow-md hover:shadow-sky-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:hover:bg-sky-400/25",
                   )}
                   aria-label={`Study the ${newCards.length} card${newCards.length === 1 ? "" : "s"} in ${deck.title} you have not started yet`}
                 >
@@ -159,7 +176,11 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                     </span>{" "}
                     new
                   </span>
-                  <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/new:translate-x-0.5 group-hover/new:opacity-100" />
+                  {allAnsweredToday(newCards) ? (
+                    <CircleCheckBig className="-mr-0.5 size-3.5" />
+                  ) : (
+                    <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/new:translate-x-0.5 group-hover/new:opacity-100" />
+                  )}
                 </button>
               )}
               {deck.dueCount > 0 ? (
@@ -172,7 +193,8 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                     // presses on click, and the chevron nudges toward where it
                     // goes. Keyboard users get an outline rather than a ring,
                     // since the pill's own ring is inset and would be hidden.
-                    "group/due cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-amber-500/25 hover:shadow-md hover:shadow-amber-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:hover:bg-amber-400/25",
+                    doneLook(allAnsweredToday(dueCards)) +
+                      " group/due cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-amber-500/25 hover:shadow-md hover:shadow-amber-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:hover:bg-amber-400/25",
                   )}
                   aria-label={`Study ${deck.dueCount} cards due in ${deck.title}`}
                 >
@@ -183,7 +205,11 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                     </span>{" "}
                     due
                   </span>
-                  <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/due:translate-x-0.5 group-hover/due:opacity-100" />
+                  {allAnsweredToday(dueCards) ? (
+                    <CircleCheckBig className="-mr-0.5 size-3.5" />
+                  ) : (
+                    <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/due:translate-x-0.5 group-hover/due:opacity-100" />
+                  )}
                 </button>
               ) : (
                 <span className={badgeClass("done")}>

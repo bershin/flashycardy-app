@@ -555,6 +555,24 @@ export function selectNewCards(
 }
 
 /**
+ * Whether every one of these cards has been answered today.
+ *
+ * False for an empty list: nothing has been finished if there was nothing to
+ * finish, and a group with no cards shows no pill at all.
+ *
+ * Right or wrong, as everywhere else here — going through a card is what
+ * counts, and a card got wrong is one that comes back rather than one that was
+ * skipped.
+ */
+export function allAnsweredToday(cards: readonly CardRow[]): boolean {
+  if (cards.length === 0) return false;
+  const today = startOfDay(new Date());
+  return cards.every(
+    (c) => c.lastAnsweredAt !== null && c.lastAnsweredAt >= today,
+  );
+}
+
+/**
  * Cards the deck is still asking for that have not been answered today.
  *
  * The union of the three pills — new, hard and due — minus anything already
