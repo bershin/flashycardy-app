@@ -42,11 +42,11 @@ import { useStore } from "@/lib/store/use-store";
 import {
   allAnsweredToday,
   HARD_MISS_THRESHOLD,
+  selectDueCardsUnderDeck,
   selectHardCards,
   selectNewCards,
   selectUnstudiedToday,
 } from "@/db/queries/cards";
-import { selectDueCardsByDeckForUser } from "@/lib/store/selectors";
 import { setStudyPicks } from "@/lib/study-picks";
 import type { DbDoc } from "@/lib/store/types";
 import { deleteDeckAction } from "./actions";
@@ -93,7 +93,7 @@ export function DeckCard({ deck }: DeckCardProps) {
   const dueCards = useStore(
     useCallback(
       (db: DbDoc) =>
-        deck.isArchive ? [] : selectDueCardsByDeckForUser(db, deck.id, LOCAL_USER_ID),
+        deck.isArchive ? [] : selectDueCardsUnderDeck(db, deck.id, LOCAL_USER_ID),
       [deck.id, deck.isArchive],
     ),
   );

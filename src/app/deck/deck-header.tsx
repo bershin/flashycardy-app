@@ -31,13 +31,11 @@ import { accentStyle } from "@/lib/deck-accent";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   HARD_MISS_THRESHOLD,
+  selectDueCardsUnderDeck,
   selectHardCards,
   selectNewCards,
 } from "@/db/queries/cards";
-import {
-  selectCardsByDeckForUser,
-  selectDueCardsByDeckForUser,
-} from "@/lib/store/selectors";
+import { selectCardsByDeckForUser } from "@/lib/store/selectors";
 import { setStudyPicks } from "@/lib/study-picks";
 import {
   AlertDialog,
@@ -126,10 +124,17 @@ export function DeckHeader({
       [deck.id],
     ),
   );
-  /** What Study itself would open: this deck's cards that have come round. */
+  /**
+   * The cards that have come round, across the sub-decks like new and hard.
+   *
+   * Identical to this deck's own cards wherever this menu appears — it is
+   * hidden on a deck with children, and only such a deck has any — but read the
+   * same way as its neighbours so the three counts cannot drift apart if that
+   * ever changes.
+   */
   const dueCards = useStore(
     useCallback(
-      (db: DbDoc) => selectDueCardsByDeckForUser(db, deck.id, LOCAL_USER_ID),
+      (db: DbDoc) => selectDueCardsUnderDeck(db, deck.id, LOCAL_USER_ID),
       [deck.id],
     ),
   );

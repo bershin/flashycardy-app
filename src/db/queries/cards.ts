@@ -19,6 +19,7 @@ import {
   selectArchiveRoot,
   selectCardByIdForUser,
   selectCardsByDeckForUser,
+  dueCutoff,
   selectDueCardsByDeckForUser,
   startOfDay,
 } from "@/lib/store/selectors";
@@ -555,6 +556,27 @@ export function selectNewCards(
 }
 
 /**
+ * Cards due today or earlier, across the deck and its sub-decks.
+ *
+ * `selectDueCardsByDeckForUser` counts a deck's own cards only, which is right
+ * for the study session — a parent deck holds no cards of its own, since a
+ * sub-deck can only be added to a deck that is empty. It is wrong for anything
+ * comparing due against new and hard, which read the whole subtree: a parent
+ * would show its children's due count beside a done-tick computed from its own
+ * zero cards, and the tick would never appear.
+ */
+export function selectDueCardsUnderDeck(
+  db: DbDoc,
+  deckId: number,
+  userId: string,
+): CardRow[] {
+  const cutoff = dueCutoff();
+  return selectCardsUnderDeck(db, deckId, userId).filter(
+    (c) => c.nextReviewAt < cutoff,
+  );
+}
+
+/**
  * Whether every one of these cards has been answered today.
  *
  * False for an empty list: nothing has been finished if there was nothing to
@@ -584,9 +606,8 @@ export function allAnsweredToday(cards: readonly CardRow[]): boolean {
  * built on the counts alone could never be satisfied by a session with a single
  * mistake in it.
  *
- * The three sets are read exactly as the pills read them — hard and new across
- * the sub-decks, due from this deck's own cards — so the badge can never
- * disagree with the numbers sitting beside it.
+ * All three are read across the sub-decks, so the badge can never disagree with
+ * the numbers sitting beside it.
  */
 export function selectUnstudiedToday(
   db: DbDoc,
@@ -598,7 +619,7 @@ export function selectUnstudiedToday(
   for (const card of [
     ...selectNewCards(db, deckId, userId),
     ...selectHardCards(db, deckId, userId),
-    ...selectDueCardsByDeckForUser(db, deckId, userId),
+    ...selectDueCardsUnderDeck(db, deckId, userId),
   ]) {
     outstanding.set(card.id, card);
   }

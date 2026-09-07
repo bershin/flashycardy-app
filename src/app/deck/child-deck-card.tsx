@@ -9,10 +9,10 @@ import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import {
   allAnsweredToday,
+  selectDueCardsUnderDeck,
   selectNewCards,
   selectUnstudiedToday,
 } from "@/db/queries/cards";
-import { selectDueCardsByDeckForUser } from "@/lib/store/selectors";
 import { setStudyPicks } from "@/lib/study-picks";
 import type { DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
@@ -72,7 +72,7 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
       (db: DbDoc) =>
         deck.isArchive
           ? []
-          : selectDueCardsByDeckForUser(db, deck.id, LOCAL_USER_ID),
+          : selectDueCardsUnderDeck(db, deck.id, LOCAL_USER_ID),
       [deck.id, deck.isArchive],
     ),
   );

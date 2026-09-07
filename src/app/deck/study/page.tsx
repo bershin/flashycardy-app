@@ -14,11 +14,11 @@ import {
 import { getSnapshot } from "@/lib/store/local-store";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import {
-  selectCardsByDeckForUser,
   selectDeckByIdForUser,
   selectCardsByIdsForUser,
   selectDueCardsByDeckForUser,
 } from "@/lib/store/selectors";
+import { selectCardsUnderDeck } from "@/db/queries/cards";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { StudySession } from "./study-session";
 import { takeStudyPicks } from "@/lib/study-picks";
@@ -98,12 +98,20 @@ function StudyPageContent() {
       [deckId, validId],
     ),
   );
+  /**
+   * Whether there is anything here to study at all.
+   *
+   * Counted across the sub-decks, not just this deck's own cards. A parent deck
+   * holds none of its own — a sub-deck can only be added to an empty deck — so
+   * the direct count read zero and the page turned away sessions it had already
+   * been handed: the deck card's "hard" and "new" pills gather cards from the
+   * children, and clicking one on a parent landed on "this deck has no cards
+   * yet" with the picks already consumed.
+   */
   const totalCards = useStore(
     useCallback(
       (db: DbDoc) =>
-        validId
-          ? selectCardsByDeckForUser(db, deckId, LOCAL_USER_ID).length
-          : 0,
+        validId ? selectCardsUnderDeck(db, deckId, LOCAL_USER_ID).length : 0,
       [deckId, validId],
     ),
   );
