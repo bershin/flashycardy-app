@@ -5,7 +5,6 @@ import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import {
   dueCutoff,
-  tomorrowCutoff,
   selectDecksWithCardsByUser,
 } from "@/lib/store/selectors";
 import type { DbDoc } from "@/lib/store/types";
@@ -31,7 +30,6 @@ export default function DashboardPage() {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const cutoff = dueCutoff();
-    const nextCutoff = tomorrowCutoff();
     const totalCards = deck.cards.length;
     // Archived cards are retired: they stay browsable and can be studied
     // deliberately, but they must never nag from the dashboard.
@@ -41,9 +39,6 @@ export default function DashboardPage() {
     // What tomorrow actually looks like: today's cards carry over unless they
     // are studied, so this counts everything due by the end of tomorrow rather
     // than only the cards dated tomorrow. Clearing today lowers it.
-    const tomorrowCount = deck.isArchive
-      ? 0
-      : deck.cards.filter((c) => c.nextReviewAt < nextCutoff).length;
     const studiedToday =
       !deck.isArchive &&
       deck.lastStudiedAt !== null &&
@@ -53,7 +48,6 @@ export default function DashboardPage() {
       ...deck,
       totalCards,
       dueCount,
-      tomorrowCount,
       studiedToday,
       childCount: deck.childCount,
     };

@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import {
   Archive,
   BookOpen,
-  CalendarClock,
   ChevronRight,
   CheckCircle,
   CircleCheckBig,
   Flame,
+  Sprout,
   Layers,
   Pencil,
   Trash2,
@@ -39,7 +39,11 @@ import { badgeClass } from "@/components/deck-badge";
 import { accentStyle } from "@/lib/deck-accent";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
-import { HARD_MISS_THRESHOLD, selectHardCards } from "@/db/queries/cards";
+import {
+  HARD_MISS_THRESHOLD,
+  selectHardCards,
+  selectNewCards,
+} from "@/db/queries/cards";
 import { setStudyPicks } from "@/lib/study-picks";
 import type { DbDoc } from "@/lib/store/types";
 import { deleteDeckAction } from "./actions";
@@ -51,7 +55,6 @@ interface DeckCardProps {
     description: string | null;
     totalCards: number;
     dueCount: number;
-    tomorrowCount: number;
     studiedToday: boolean;
     childCount: number;
     isArchive: boolean;
@@ -74,6 +77,23 @@ export function DeckCard({ deck }: DeckCardProps) {
       [deck.id, deck.isArchive],
     ),
   );
+  /** Cards nothing has been recorded against yet — see `selectNewCards`. */
+  const newCards = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        deck.isArchive ? [] : selectNewCards(db, deck.id, LOCAL_USER_ID),
+      [deck.id, deck.isArchive],
+    ),
+  );
+
+  function study(cards: { id: number }[]) {
+    if (cards.length === 0) return;
+    setStudyPicks(
+      deck.id,
+      cards.map((c) => c.id),
+    );
+    router.push(`/deck/study/?id=${deck.id}`);
+  }
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -161,19 +181,34 @@ export function DeckCard({ deck }: DeckCardProps) {
             ) : (
               deck.totalCards > 0 && (
               <>
-              {/* First, before today's work. It is the smaller number and the
-                  older problem: what is due changes every morning, while a card
-                  missed seven times has been wrong for weeks. */}
+              {/* Read left to right as the deck's own story: what you have not
+                  met, what keeps beating you, what you owe today. Due changes
+                  every morning and so comes last; the other two are standing
+                  facts about the deck. */}
+              {newCards.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => study(newCards)}
+                  className={badgeClass(
+                    "new",
+                    "group/new cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-sky-500/25 hover:shadow-md hover:shadow-sky-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:hover:bg-sky-400/25",
+                  )}
+                  aria-label={`Study the ${newCards.length} card${newCards.length === 1 ? "" : "s"} in ${deck.title} you have not started yet`}
+                >
+                  <Sprout className="size-3.5" />
+                  <span>
+                    <span className="font-semibold tabular-nums">
+                      {newCards.length}
+                    </span>{" "}
+                    new
+                  </span>
+                  <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/new:translate-x-0.5 group-hover/new:opacity-100" />
+                </button>
+              )}
               {hardCards.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setStudyPicks(
-                      deck.id,
-                      hardCards.map((c) => c.id),
-                    );
-                    router.push(`/deck/study/?id=${deck.id}`);
-                  }}
+                  onClick={() => study(hardCards)}
                   className={badgeClass(
                     "hard",
                     "group/hard cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-rose-500/25 hover:shadow-md hover:shadow-rose-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 dark:hover:bg-rose-400/25",
@@ -229,28 +264,6 @@ export function DeckCard({ deck }: DeckCardProps) {
               )}
               </>
               )
-            )}
-            {/* Tomorrow's workload, stated quietly beside today's. Deliberately
-                not a button: it is a heads-up, not something to act on yet. */}
-            {!deck.isArchive && deck.tomorrowCount > 0 && (
-              <span
-                className={badgeClass("tomorrow")}
-                // Says where the number comes from, since it includes today's
-                // cards and so can exceed what tomorrow's date alone holds.
-                title={
-                  deck.dueCount > 0
-                    ? `${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow, including the ${deck.dueCount} still due today`
-                    : `${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow`
-                }
-              >
-                <CalendarClock className="size-3.5" />
-                <span>
-                  <span className="font-semibold tabular-nums">
-                    {deck.tomorrowCount}
-                  </span>{" "}
-                  tomorrow
-                </span>
-              </span>
             )}
           </div>
         </CardFooter>

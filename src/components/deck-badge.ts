@@ -10,7 +10,7 @@
 export type BadgeTone =
   | "due"
   | "hard"
-  | "tomorrow"
+  | "new"
   | "done"
   | "studied"
   | "muted";
@@ -22,9 +22,10 @@ const TONES: Record<BadgeTone, string> = {
   // they are the cards that keep coming back however often they are answered.
   // Rose rather than red — a standing weakness, not an error.
   hard: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:bg-rose-400/15 dark:text-rose-300 dark:ring-rose-300/25",
-  // Deliberately quieter: a heads-up, not something to act on yet.
-  tomorrow:
-    "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:bg-sky-400/10 dark:text-sky-300 dark:ring-sky-300/20",
+  // Cards not started yet. Its own colour rather than the due amber or the hard
+  // rose, because it is neither a backlog nor a weakness — it is the part of
+  // the deck you have not met.
+  new: "bg-sky-500/15 text-sky-700 ring-sky-500/25 dark:bg-sky-400/15 dark:text-sky-300 dark:ring-sky-300/25",
   done: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/25 dark:bg-emerald-400/15 dark:text-emerald-300 dark:ring-emerald-300/25",
   studied:
     "bg-violet-500/15 text-violet-700 ring-violet-500/25 dark:bg-violet-400/15 dark:text-violet-300 dark:ring-violet-300/25",

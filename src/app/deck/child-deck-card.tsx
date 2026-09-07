@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Archive, BookOpen, CalendarClock, ChevronRight, CheckCircle, CircleCheckBig, Pencil, Trash2 } from "lucide-react";
+import { Archive, BookOpen, ChevronRight, CheckCircle, CircleCheckBig, Pencil, Sprout, Trash2 } from "lucide-react";
 import { badgeClass } from "@/components/deck-badge";
+import { LOCAL_USER_ID } from "@/lib/auth";
+import { useStore } from "@/lib/store/use-store";
+import { selectNewCards } from "@/db/queries/cards";
+import { setStudyPicks } from "@/lib/study-picks";
+import type { DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,7 +39,6 @@ interface ChildDeckCardProps {
     description: string | null;
     totalCards: number;
     dueCount: number;
-    tomorrowCount: number;
     studiedToday: boolean;
     isArchive?: boolean;
   };
@@ -42,6 +46,14 @@ interface ChildDeckCardProps {
 
 export function ChildDeckCard({ deck }: ChildDeckCardProps) {
   const router = useRouter();
+  /** Cards not started yet, the same reading the dashboard's pill uses. */
+  const newCards = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        deck.isArchive ? [] : selectNewCards(db, deck.id, LOCAL_USER_ID),
+      [deck.id, deck.isArchive],
+    ),
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -94,8 +106,35 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                     </span>
                   </span>
                 )
-              : deck.totalCards > 0 &&
-              (deck.dueCount > 0 ? (
+              : deck.totalCards > 0 && (
+              <>
+              {newCards.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStudyPicks(
+                      deck.id,
+                      newCards.map((c) => c.id),
+                    );
+                    router.push(`/deck/study/?id=${deck.id}`);
+                  }}
+                  className={badgeClass(
+                    "new",
+                    "group/new cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-sky-500/25 hover:shadow-md hover:shadow-sky-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:hover:bg-sky-400/25",
+                  )}
+                  aria-label={`Study the ${newCards.length} card${newCards.length === 1 ? "" : "s"} in ${deck.title} you have not started yet`}
+                >
+                  <Sprout className="size-3.5" />
+                  <span>
+                    <span className="font-semibold tabular-nums">
+                      {newCards.length}
+                    </span>{" "}
+                    new
+                  </span>
+                  <ChevronRight className="-mr-0.5 size-3.5 opacity-60 transition-transform duration-150 group-hover/new:translate-x-0.5 group-hover/new:opacity-100" />
+                </button>
+              )}
+              {deck.dueCount > 0 ? (
                 <button
                   type="button"
                   onClick={() => router.push(`/deck/study/?id=${deck.id}`)}
@@ -123,26 +162,9 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                   <CheckCircle className="size-3.5" />
                   All caught up
                 </span>
-              ))}
-            {/* Tomorrow's load, same as on the dashboard. */}
-            {!deck.isArchive && deck.tomorrowCount > 0 && (
-              <span
-                className={badgeClass("tomorrow")}
-                title={
-                  deck.dueCount > 0
-                    ? `${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow, including the ${deck.dueCount} still due today`
-                    : `${deck.tomorrowCount} card${deck.tomorrowCount === 1 ? "" : "s"} due tomorrow`
-                }
-              >
-                <CalendarClock className="size-3.5" />
-                <span>
-                  <span className="font-semibold tabular-nums">
-                    {deck.tomorrowCount}
-                  </span>{" "}
-                  tomorrow
-                </span>
-              </span>
-            )}
+              )}
+              </>
+              )}
           </div>
         </CardFooter>
       </Card>
