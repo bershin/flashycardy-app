@@ -46,12 +46,10 @@ export type QuizPayload = {
 /**
  * How far apart a card's reviews spread as its streak grows.
  *
- *  - `incremental` — the next day, every time. Named for the widening ladder it
- *    used to be, a day out to a year; the stored value is on every card, so it
- *    stays as it is.
- *  - `weekly` — a day, a day, then a week widening out to a year, so something
- *    learned cleanly is seen less and less. Named for the seven days it used to
- *    wait; the stored value is on every card, so it stays as it is.
+ * Both values now behave identically: there is one ladder, in `LADDER` in
+ * `db/queries/cards.ts`, and a card's stored schedule selects nothing. The
+ * field and its two spellings survive so that documents written before the
+ * ladders were merged still read and write unchanged.
  *
  * The actual day counts live in `REVIEW_SCHEDULES` in `src/db/queries/cards.ts`,
  * next to the code that applies them.
@@ -72,15 +70,13 @@ export type ReviewSchedule = (typeof REVIEW_SCHEDULES)[number];
 export const LEGACY_REVIEW_SCHEDULE: ReviewSchedule = "incremental";
 
 /**
- * What a newly created card starts on: the daily ladder.
+ * What a newly created card carries.
  *
- * Same value as {@link LEGACY_REVIEW_SCHEDULE} at the moment, and deliberately
- * a separate constant — they answer different questions. That one says how to
- * read a card written before schedules existed and must never move; this one is
- * a preference about new cards and is expected to. Collapsing them would tie a
- * change of default to a rewrite of every old card's behaviour.
+ * Every card is on the same ladder now — see `LADDER` in `db/queries/cards.ts`
+ * — so this no longer selects anything and is kept only so the stored field has
+ * a value. `weekly` because that is what the surviving ladder was called.
  */
-export const NEW_CARD_SCHEDULE: ReviewSchedule = "incremental";
+export const NEW_CARD_SCHEDULE: ReviewSchedule = "weekly";
 
 /**
  * Something written against a day rather than against a card.

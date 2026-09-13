@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/rich-text-editor";
-import { graduationStreak } from "@/db/queries/cards";
 import {
   NEW_CARD_SCHEDULE,
   type CardRow,
@@ -110,23 +109,6 @@ export function draftToInput(draft: CardDraft) {
         : undefined,
   };
 }
-
-const SCHEDULES: Array<{
-  value: ReviewSchedule;
-  label: string;
-  hint: string;
-}> = [
-  {
-    value: "incremental",
-    label: "Daily",
-    hint: "Every day",
-  },
-  {
-    value: "weekly",
-    label: "Widening",
-    hint: "1 day, 1 day, then a week out to a year",
-  },
-];
 
 const TYPES: Array<{ value: CardType; label: string; hint: string }> = [
   { value: "basic", label: "Basic", hint: "Question and answer, self-rated" },
@@ -267,38 +249,6 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
         </div>
       )}
 
-      <div className="grid gap-2">
-        <Label>Review schedule</Label>
-        <p className="-mt-1 text-xs text-muted-foreground">
-          How long the card waits between reviews while you keep getting it
-          right. Clearing the whole ladder archives the card.
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          {SCHEDULES.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              disabled={disabled}
-              onClick={() => set({ schedule: option.value })}
-              className={`rounded-lg border p-2 text-left transition-colors disabled:opacity-50 ${
-                draft.schedule === option.value
-                  ? "border-primary bg-primary/10"
-                  : "border-border hover:bg-muted"
-              }`}
-            >
-              <span className="block text-sm font-medium">{option.label}</span>
-              <span className="block text-xs text-muted-foreground">
-                {option.hint}
-              </span>
-              {/* Counted from the ladder itself, so the two can be different
-                  lengths without this line going stale. */}
-              <span className="mt-1 block text-xs text-muted-foreground/80">
-                {graduationStreak(option.value)} in a row to archive
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
 
       <div className="grid gap-2">
         <Label>

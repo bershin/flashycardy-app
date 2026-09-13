@@ -169,51 +169,32 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
  * Days until the next review, indexed by streak — element 0 is the wait after
  * the first correct answer, element 1 after the second, and so on.
  *
- * Both stored names are historical and neither describes what its ladder does
- * now — they are kept because every card carries one, and renaming a stored
- * value is a migration for a word. Read them as arbitrary labels:
+ * One ladder for every card. There were two, and choosing between them was a
+ * decision taken per card at the moment you had least idea how hard it would
+ * turn out to be — the card's own record answers that far better, and the
+ * widening shape is what a card wants either way: two nights in a row to get it
+ * in, then gaps that open up until something learned cleanly is only checked
+ * occasionally.
  *
- *  - `incremental` comes back the next day, every time. Eight rungs, so it
- *    graduates on the ninth correct answer, a little over a week after the card
- *    was first seen. Named for the widening ladder it used to be.
- *  - `weekly` is the widening one now: two nights in a row to get it in, then a
- *    week, a fortnight, a month and on out to a year, so something learned
- *    cleanly drops out of the way while still being checked occasionally. Eight
- *    rungs as well, graduating on the ninth correct answer about twenty months
- *    after the card was first seen. Named for the seven days it once waited.
+ * Cards still carry a `schedule` value and it still round-trips through the
+ * document, so nothing written before this needs migrating; it simply no longer
+ * selects anything. Eight rungs, so a card graduates on the ninth correct
+ * answer, about twenty months after it was first seen.
  *
- * Running off the end of a ladder means the card has been learned and is
- * archived, so adding a rung extends that schedule rather than needing a second
- * edit somewhere else. Nothing assumes the two are the same length —
- * `graduationStreak` derives each from its own ladder.
+ * Running off the end means the card has been learned and is archived, so
+ * adding a rung extends the schedule rather than needing a second edit
+ * somewhere else.
  */
-const REVIEW_SCHEDULES: Record<ReviewSchedule, readonly number[]> = {
-  // Every day. One night's sleep between seeing a card and being asked it
-  // again is the shortest gap that still tests recall rather than memory of the
-  // last few minutes, and this schedule is for material wanted at that pace.
-  incremental: [1, 1, 1, 1, 1, 1, 1, 1],
-  // Two single nights before the gaps open up: the second day is what settles
-  // a card that was only just recalled on the first, and widening straight from
-  // one day to a week asks it to survive a jump it has not earned yet.
-  weekly: [1, 1, 7, 14, 30, 90, 180, 360],
-};
+const LADDER: readonly number[] = [1, 1, 7, 14, 30, 90, 180, 360];
 
 /** How soon a missed card comes back round. */
 const MISSED_REVIEW_MINUTES = 10;
 
-function intervalsFor(schedule: ReviewSchedule): readonly number[] {
-  return REVIEW_SCHEDULES[schedule] ?? REVIEW_SCHEDULES.incremental;
-}
 
-/**
- * Correct answers in a row before a card on this schedule is learned.
- *
- * Exported so the card form can state the number rather than hard-coding it —
- * the ladders are different lengths, and prose that says "five" goes stale the
- * moment one of them gains a rung.
- */
-export function graduationStreak(schedule: ReviewSchedule): number {
-  return intervalsFor(schedule).length + 1;
+
+/** Correct answers in a row before a card is learned and archived. */
+export function graduationStreak(): number {
+  return LADDER.length + 1;
 }
 
 /**
@@ -234,7 +215,7 @@ export function selectLearnedButUnarchived(
   return db.cards.filter((card) => {
     const deck = owned.get(card.deckId);
     if (!deck || isArchiveDeck(db, deck)) return false;
-    return card.consecutiveCorrect >= graduationStreak(card.schedule);
+    return card.consecutiveCorrect >= graduationStreak();
   });
 }
 
@@ -348,10 +329,9 @@ function archiveCard(cardId: number, userId: string): CardRow | undefined {
  *
  *  - `missed`  → streak resets, review again in a few minutes
  *  - `got_it`  → streak + 1, next review taken from the card's own ladder in
- *                `REVIEW_SCHEDULES` — the next day, or a widening gap
+ *                `LADDER`, which widens as the streak grows
  *  - clearing that ladder → the card is **archived** (see `archiveCard`), which
- *    takes nine correct answers on either schedule; they differ in how long
- *    those nine take, not in how many there are
+ *    takes nine correct answers
  *
  * The streak moves at most one step a day. A card answered correctly a second
  * time today is rescheduled but not promoted: the ladder is built on the idea
@@ -375,7 +355,7 @@ export async function recordStudyResult(
 
   const now = new Date();
   const today = startOfDay(now);
-  const intervals = intervalsFor(existing.schedule);
+  const intervals = LADDER;
   const creditedToday =
     existing.lastCorrectAt !== null &&
     startOfDay(existing.lastCorrectAt).getTime() === today.getTime();
@@ -410,7 +390,7 @@ export async function recordStudyResult(
   } else {
     consecutiveCorrect = existing.consecutiveCorrect + 1;
 
-    if (consecutiveCorrect >= graduationStreak(existing.schedule)) {
+    if (consecutiveCorrect >= graduationStreak()) {
       archiveCard(cardId, userId);
       return null;
     }
@@ -628,47 +608,7 @@ export function selectUnstudiedToday(
   );
 }
 
-/** Put every card in a deck and its sub-decks on one schedule. */
-export async function setScheduleUnderDeck(
-  deckId: number,
-  userId: string,
-  schedule: ReviewSchedule,
-): Promise<number> {
-  const ids = selectCardsUnderDeck(getSnapshot(), deckId, userId).map((c) => c.id);
-  return setCardsSchedule(ids, userId, schedule);
-}
 
-/**
- * Put a batch of cards on a different review schedule.
- *
- * Only the ladder changes. The streak is left where it is, because it is a
- * record of what happened rather than a position on a particular ladder — and
- * a card whose streak already exceeds its new ladder is simply learned by the
- * new rule, which the next correct answer will act on.
- */
-export async function setCardsSchedule(
-  cardIds: number[],
-  userId: string,
-  schedule: ReviewSchedule,
-): Promise<number> {
-  if (cardIds.length === 0) return 0;
-
-  const changed = await mutate((draft) => {
-    const wanted = new Set(cardIds);
-    const now = new Date();
-    let count = 0;
-
-    draft.cards = draft.cards.map((card) => {
-      if (!wanted.has(card.id) || !ownsCard(draft, card, userId)) return card;
-      if (card.schedule === schedule) return card;
-      count += 1;
-      return { ...card, schedule, updatedAt: now };
-    });
-
-    return count;
-  });
-  return changed ?? 0;
-}
 
 /**
  * Delete a batch of cards.

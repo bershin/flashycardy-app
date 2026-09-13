@@ -17,7 +17,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Ellipsis,
-  Layers,
   Plus,
   Trash2,
   Undo2,
@@ -46,8 +45,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { deleteCardsAction, setCardsScheduleAction } from "@/app/deck/actions";
-import { REVIEW_SCHEDULES, type ReviewSchedule } from "@/lib/store/types";
+import { deleteCardsAction } from "@/app/deck/actions";
 import { MoveDueCardsDialog, type MovableCard } from "./move-due-cards-dialog";
 import {
   getLastMove,
@@ -79,11 +77,6 @@ const WINDOW_WEEKS = 6;
 const WEEKS_BEFORE = 4;
 const WEEKS_AFTER = 30;
 const TOTAL_WEEKS = WEEKS_BEFORE + WEEKS_AFTER;
-
-const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
-  incremental: "Daily",
-  weekly: "Widening",
-};
 
 /** Monday-first, matching how a week is read here. */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -1000,26 +993,6 @@ function CalendarPageContent() {
                     <Ellipsis className="size-3.5" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {REVIEW_SCHEDULES.map((schedule) => (
-                      <DropdownMenuItem
-                        key={schedule}
-                        disabled={batchBusy}
-                        onClick={() =>
-                          runOnDeckDay(
-                            deck,
-                            `Put ${deck.count} on ${SCHEDULE_LABELS[schedule]}`,
-                            (ids) =>
-                              setCardsScheduleAction({
-                                cardIds: ids,
-                                schedule,
-                              }),
-                          )
-                        }
-                      >
-                        <Layers />
-                        Put these {deck.count} on {SCHEDULE_LABELS[schedule]}
-                      </DropdownMenuItem>
-                    ))}
                     <DropdownMenuItem
                       disabled={batchBusy}
                       onClick={() => setDeleting(deck)}

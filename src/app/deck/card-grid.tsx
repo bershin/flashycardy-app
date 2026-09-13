@@ -6,7 +6,6 @@ import {
   Filter,
   CalendarClock,
   FolderInput,
-  Layers,
   Trash2,
   X,
 } from "lucide-react";
@@ -33,9 +32,7 @@ import {
 import {
   deleteCardsAction,
   rescheduleCardsAction,
-  setCardsScheduleAction,
 } from "./actions";
-import { REVIEW_SCHEDULES, type ReviewSchedule } from "@/lib/store/types";
 import { setStudyPicks } from "@/lib/study-picks";
 import { HARD_MISS_THRESHOLD, isHardCard } from "@/db/queries/cards";
 import { useRouter } from "next/navigation";
@@ -172,11 +169,6 @@ function boundsNow(): Bounds {
   };
 }
 
-const SCHEDULE_LABELS: Record<ReviewSchedule, string> = {
-  incremental: "Daily",
-  weekly: "Widening",
-};
-
 /** "Today", "Tomorrow", or a short date — relative where it is most read. */
 function dueLabel(date: Date): string {
   const day = new Date(date);
@@ -229,7 +221,7 @@ export function CardGrid({
    */
   const [filter, setFilter] = useState("all");
     /** Which bulk edit is open, if any — only one at a time in the toolbar. */
-  const [editing, setEditing] = useState<"schedule" | "due" | null>(null);
+  const [editing, setEditing] = useState<"due" | null>(null);
   const [dueDate, setDueDate] = useState(() => todayKey());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -326,38 +318,7 @@ export function CardGrid({
             </Button>
             {/* Each control acts on the ticked cards. Grouped as one row so
                 the count above them is plainly what they all apply to. */}
-            {editing === "schedule" ? (
-              <>
-                <span className="text-xs text-muted-foreground">
-                  Put {selected.size} on
-                </span>
-                {REVIEW_SCHEDULES.map((schedule) => (
-                  <Button
-                    key={schedule}
-                    size="sm"
-                    variant="secondary"
-                    disabled={busy}
-                    onClick={() =>
-                      applyToSelection(
-                        (ids) =>
-                          setCardsScheduleAction({ cardIds: ids, schedule }),
-                        (n) =>
-                          `Put ${n} card${n === 1 ? "" : "s"} on ${SCHEDULE_LABELS[schedule]}.`,
-                      )
-                    }
-                  >
-                    {SCHEDULE_LABELS[schedule]}
-                  </Button>
-                ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditing(null)}
-                >
-                  Cancel
-                </Button>
-              </>
-            ) : editing === "due" ? (
+            {editing === "due" ? (
               <>
                 <span className="text-xs text-muted-foreground">
                   Review {selected.size} on
@@ -408,15 +369,6 @@ export function CardGrid({
                 >
                   <BookOpen className="size-3.5" />
                   Study {selected.size}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={selected.size === 0}
-                  onClick={() => setEditing("schedule")}
-                >
-                  <Layers className="size-3.5" />
-                  Schedule
                 </Button>
                 <Button
                   variant="outline"
