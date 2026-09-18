@@ -11,18 +11,19 @@ import type { DbDoc, Memo } from "@/lib/store/types";
 import { noteBodyToText } from "@/lib/note-body";
 
 /**
- * Pinned first, then most recently changed.
+ * Pinned first, then wherever you put it.
  *
- * By `updatedAt` rather than `createdAt`: a note you were writing a minute ago
- * is the one you want next, whenever it was started. The id breaks ties so two
- * notes saved in the same millisecond do not swap places between renders.
+ * By position rather than by when it was last edited: the list is arranged by
+ * hand now, and one that rearranges itself the moment you type into a note is
+ * the opposite of that. The id breaks ties so two notes sharing a position do
+ * not swap places between renders.
  */
 function inReadingOrder(memos: Memo[]): Memo[] {
   return [...memos].sort(
     (a, b) =>
       Number(b.pinned) - Number(a.pinned) ||
-      b.updatedAt.getTime() - a.updatedAt.getTime() ||
-      b.id - a.id,
+      a.position - b.position ||
+      a.id - b.id,
   );
 }
 
@@ -78,13 +79,20 @@ export async function addMemo(
     const parent = parentId
       ? (draft.memos ?? []).find((m) => m.id === parentId && m.userId === userId)
       : undefined;
+    const resolvedParent = parent ? (parent.parentId ?? parent.id) : null;
+    // One past the last of its siblings, so a new note joins the end of the
+    // level it belongs to rather than the top of everything.
+    const lastPosition = (draft.memos ?? [])
+      .filter((m) => m.userId === userId && m.parentId === resolvedParent)
+      .reduce((max, m) => Math.max(max, m.position), -1);
     const memo: Memo = {
       id: allocateMemoId(draft),
       userId,
       title,
       body,
       pinned: false,
-      parentId: parent ? (parent.parentId ?? parent.id) : null,
+      parentId: resolvedParent,
+      position: lastPosition + 1,
       createdAt: now,
       updatedAt: now,
     };
@@ -130,6 +138,24 @@ export async function updateMemo(
  * vanishing — the parent is gone, the writing is not, and a note you cannot
  * find is indistinguishable from one that was lost.
  */
+/**
+ * Write a hand-made order onto a run of notes.
+ *
+ * Takes the ids as displayed and numbers them from zero. Only the notes named
+ * are touched, so reordering one level leaves every other level alone.
+ */
+export async function reorderMemos(userId: string, orderedIds: number[]) {
+  if (orderedIds.length === 0) return;
+  return mutate((draft) => {
+    const rank = new Map(orderedIds.map((id, index) => [id, index]));
+    draft.memos = (draft.memos ?? []).map((m) =>
+      m.userId === userId && rank.has(m.id)
+        ? { ...m, position: rank.get(m.id)! }
+        : m,
+    );
+  });
+}
+
 /** Put a note under another, or back out on its own with `parentId` null. */
 export async function setMemoParent(
   id: number,
@@ -148,9 +174,15 @@ export async function setMemoParent(
       : undefined;
     const resolved = parent ? (parent.parentId ?? parent.id) : null;
     if (resolved === id) return null;
+    const lastPosition = memos
+      .filter((m) => m.userId === userId && m.parentId === resolved && m.id !== id)
+      .reduce((max, m) => Math.max(max, m.position), -1);
     draft.memos[index] = {
       ...memos[index],
       parentId: resolved,
+      // Joins the end of its new level; keeping the old number would have put
+      // it in an arbitrary place among its new siblings.
+      position: lastPosition + 1,
       updatedAt: new Date(),
     };
     return draft.memos[index];

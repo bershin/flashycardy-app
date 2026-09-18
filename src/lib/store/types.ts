@@ -245,6 +245,16 @@ export type Memo = {
    * showing it in the wrong place.
    */
   parentId: number | null;
+  /**
+   * Where it sits among its siblings, low first.
+   *
+   * Only compared, never counted — a level may have gaps in it after a note is
+   * moved out of it. Notes written before dragging existed fall back to their
+   * id, which is the order they were created in. The alternative was to keep
+   * ordering by when each was last edited, and a list that rearranges itself
+   * the moment you type is the opposite of one you can arrange.
+   */
+  position: number;
   /** May be empty: a note is worth keeping before it has been named. */
   title: string;
   body: string;
@@ -292,9 +302,14 @@ export type SerializedDbDoc = {
   profile?: { name: string; emoji?: string | null; updatedAt: string };
   /** Absent in documents written before notes existed; reads as an empty list. */
   memos?: Array<
-    Omit<Memo, "pinned" | "parentId" | "createdAt" | "updatedAt"> & {
+    Omit<
+      Memo,
+      "pinned" | "parentId" | "position" | "createdAt" | "updatedAt"
+    > & {
       /** Absent before notes could nest; reads as a note of its own. */
       parentId?: number | null;
+      /** Absent before notes could be dragged; falls back to the id. */
+      position?: number;
       /** Absent before notes could be pinned; reads as unpinned. */
       pinned?: boolean;
       createdAt: string;
@@ -480,6 +495,7 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       body: m.body,
       pinned: m.pinned ?? false,
       parentId: m.parentId ?? null,
+      position: m.position ?? m.id,
       createdAt: new Date(m.createdAt),
       updatedAt: new Date(m.updatedAt),
     })),

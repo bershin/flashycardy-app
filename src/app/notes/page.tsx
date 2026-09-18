@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -24,6 +24,26 @@ import type { DbDoc, Memo } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/rich-text-editor";
+import {
+  DndContext,
+  closestCenter,
+  pointerWithin,
+  useDroppable,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { noteBodyToHtml, noteBodyToText } from "@/lib/note-body";
 import {
   AlertDialog,
@@ -38,6 +58,7 @@ import {
 import {
   addNoteAction,
   deleteNoteAction,
+  reorderNotesAction,
   setNoteParentAction,
   updateNoteAction,
 } from "./actions";
@@ -109,6 +130,62 @@ function NotesPageContent() {
   const memos = searching ? matches : tree.map((node) => node.memo);
   /** Which parents are open. Collapsed by default: the point is a shorter list. */
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const dndId = useId();
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const sensors = useSensors(
+    // A short distance before a drag starts, so tapping a note still opens it.
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  /**
+   * A nest zone wins only when the pointer is genuinely inside one; everything
+   * else falls through to ordinary sorting.
+   */
+  const collisionDetection: CollisionDetection = useCallback(
+    (args) => {
+      const nest = pointerWithin(args).find((c) =>
+        String(c.id).startsWith(NEST_PREFIX),
+      );
+      return nest ? [nest] : closestCenter(args);
+    },
+    [],
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setDraggingId(null);
+    if (!over || active.id === over.id) return;
+    const noteId = Number(active.id);
+    const overId = String(over.id);
+
+    if (overId.startsWith(NEST_PREFIX)) {
+      const parentId = Number(overId.slice(NEST_PREFIX.length));
+      setExpanded((prev) => new Set(prev).add(parentId));
+      void setNoteParentAction({ id: noteId, parentId });
+      return;
+    }
+
+    // Reordering happens within one level: the siblings of whatever was picked
+    // up. Dragging between levels is what the nest zone and the move-out button
+    // are for, and letting a sort do it as well would make two ways to say the
+    // same thing, each with its own edge cases.
+    const moved = [...tree.flatMap((n) => [n.memo, ...n.children])].find(
+      (m) => m.id === noteId,
+    );
+    const siblings = (moved?.parentId ?? null) === null
+      ? tree.map((n) => n.memo)
+      : (tree.find((n) => n.memo.id === moved?.parentId)?.children ?? []);
+    const oldIndex = siblings.findIndex((m) => m.id === noteId);
+    const newIndex = siblings.findIndex((m) => m.id === Number(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const next = [...siblings];
+    const [row] = next.splice(oldIndex, 1);
+    next.splice(newIndex, 0, row);
+    void reorderNotesAction({ orderedIds: next.map((m) => m.id) });
+  }
 
   function toggle(id: number) {
     setExpanded((prev) => {
@@ -198,58 +275,99 @@ function NotesPageContent() {
             // sized `auto`, which is max-content, so one long unbroken line of
             // preview text made the whole list wider than its column and spilled
             // it over the editor. `minmax(0,1fr)` caps it at the column.
-            <ul className="grid grid-cols-1 gap-1">
-              {memos.map((memo) => {
-                const children = searching
-                  ? []
-                  : (tree.find((n) => n.memo.id === memo.id)?.children ?? []);
-                const open = expanded.has(memo.id);
-                return (
-                  <li key={memo.id} className="grid grid-cols-1 gap-1">
-                    <NoteRow
-                      memo={memo}
-                      selected={memo.id === selectedId}
-                      onOpen={() => setSelectedId(memo.id)}
-                      // The triangle is a button of its own rather than the row
-                      // doing both: opening a note and folding its children away
-                      // are different intentions, and one click cannot be both.
-                      disclosure={
-                        children.length > 0 ? (
-                          <button
-                            type="button"
-                            aria-label={`${open ? "Collapse" : "Expand"} ${heading(memo)}`}
-                            aria-expanded={open}
-                            onClick={() => toggle(memo.id)}
-                            className="-ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                          >
-                            <ChevronRight
-                              className={`size-3.5 transition-transform ${open ? "rotate-90" : ""}`}
-                            />
-                          </button>
-                        ) : null
-                      }
-                      count={children.length}
-                    />
-                    {open &&
-                      children.map((child) => (
-                        // Indented and rule-marked rather than merely inset, so
-                        // a long list of children still reads as belonging to
-                        // something once the parent has scrolled past.
-                        <div
-                          key={child.id}
-                          className="ml-3 border-l border-border/60 pl-2"
+            <DndContext
+              id={dndId}
+              sensors={sensors}
+              collisionDetection={collisionDetection}
+              onDragStart={(e: DragStartEvent) =>
+                setDraggingId(Number(e.active.id))
+              }
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setDraggingId(null)}
+            >
+              <SortableContext
+                items={memos.map((m) => m.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <ul className="grid grid-cols-1 gap-1">
+                  {memos.map((memo) => {
+                    const children = searching
+                      ? []
+                      : (tree.find((n) => n.memo.id === memo.id)?.children ??
+                        []);
+                    const open = expanded.has(memo.id);
+                    const dragged = draggingId;
+                    // Offered only while something is being dragged, and never
+                    // over the note doing the dragging or one that is already a
+                    // child — nesting stops at one level.
+                    const canTakeChild =
+                      !searching &&
+                      dragged !== null &&
+                      dragged !== memo.id &&
+                      memo.parentId === null &&
+                      !tree.some(
+                        (n) => n.memo.id === dragged && n.children.length > 0,
+                      );
+                    return (
+                      <li key={memo.id} className="grid grid-cols-1 gap-1">
+                        <SortableNote
+                          memo={memo}
+                          nestZone={
+                            canTakeChild ? <NestZone noteId={memo.id} /> : null
+                          }
                         >
                           <NoteRow
-                            memo={child}
-                            selected={child.id === selectedId}
-                            onOpen={() => setSelectedId(child.id)}
+                            memo={memo}
+                            selected={memo.id === selectedId}
+                            onOpen={() => setSelectedId(memo.id)}
+                            disclosure={
+                              children.length > 0 ? (
+                                <button
+                                  type="button"
+                                  aria-label={`${open ? "Collapse" : "Expand"} ${heading(memo)}`}
+                                  aria-expanded={open}
+                                  // Stops the row's drag listeners from
+                                  // swallowing the click that folds it.
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={() => toggle(memo.id)}
+                                  className="-ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                >
+                                  <ChevronRight
+                                    className={`size-3.5 transition-transform ${open ? "rotate-90" : ""}`}
+                                  />
+                                </button>
+                              ) : null
+                            }
+                            count={children.length}
                           />
-                        </div>
-                      ))}
-                  </li>
-                );
-              })}
-            </ul>
+                        </SortableNote>
+                        {open && children.length > 0 && (
+                          <SortableContext
+                            items={children.map((c) => c.id)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            {children.map((child) => (
+                              <div
+                                key={child.id}
+                                className="ml-3 border-l border-border/60 pl-2"
+                              >
+                                <SortableNote memo={child}>
+                                  <NoteRow
+                                    memo={child}
+                                    selected={child.id === selectedId}
+                                    onOpen={() => setSelectedId(child.id)}
+                                  />
+                                </SortableNote>
+                              </div>
+                            ))}
+                          </SortableContext>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
 
@@ -303,6 +421,70 @@ function NotesPageContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+/** Droppable id prefix for the "file this under that note" zones. */
+const NEST_PREFIX = "nest-";
+
+/**
+ * The drop target that files one note under another.
+ *
+ * Only rendered mid-drag, and only over notes that can actually take a child —
+ * a top-level note, and not the one being dragged. It says what it does,
+ * because filing a note away is a different and more surprising outcome than
+ * nudging it up a place, and it should never happen by accident.
+ */
+function NestZone({ noteId }: { noteId: number }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `${NEST_PREFIX}${noteId}` });
+  return (
+    <div
+      ref={setNodeRef}
+      // The right half of the row only. The decks version can afford the middle
+      // of a big card, but a note row is about fifty pixels tall — a zone over
+      // all of it caught every reordering drag as a nesting one, so there was
+      // no way left to simply move a note up. Left half sorts, right half files.
+      className={`absolute inset-y-1 right-1 z-20 flex w-[45%] items-center justify-center gap-1.5 rounded-md border-2 border-dashed text-[0.7rem] font-medium transition-colors ${
+        isOver
+          ? "border-violet-400 bg-violet-500/25 text-violet-900 dark:text-violet-100"
+          : "border-violet-400/40 bg-violet-500/10 text-violet-700/80 dark:text-violet-300/80"
+      }`}
+    >
+      <CornerDownRight className="size-3" />
+      File under this
+    </div>
+  );
+}
+
+/**
+ * A row that can be picked up.
+ *
+ * The whole row is the handle rather than a separate grip: there is no room for
+ * one beside a title and a date, and an 8px activation distance means a click
+ * still opens the note it lands on.
+ */
+function SortableNote({
+  memo,
+  children,
+  nestZone,
+}: {
+  memo: Memo;
+  children: React.ReactNode;
+  nestZone?: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: memo.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`relative touch-none ${isDragging ? "z-30 opacity-60" : ""}`}
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+      {nestZone}
     </div>
   );
 }

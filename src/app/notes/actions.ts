@@ -10,6 +10,7 @@ import { auth } from "@/lib/auth";
 import {
   addMemo,
   deleteMemo,
+  reorderMemos,
   setMemoParent,
   updateMemo,
 } from "@/db/queries/memos";
@@ -81,4 +82,17 @@ export async function setNoteParentAction(data: z.infer<typeof parentSchema>) {
 
   const { id, parentId } = parentSchema.parse(data);
   return setMemoParent(id, userId, parentId);
+}
+
+const reorderSchema = z.object({
+  orderedIds: z.array(z.number().int().positive()).max(500),
+});
+
+/** Write a hand-made order onto one level of the list. */
+export async function reorderNotesAction(data: z.infer<typeof reorderSchema>) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const { orderedIds } = reorderSchema.parse(data);
+  return reorderMemos(userId, orderedIds);
 }
