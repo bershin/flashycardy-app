@@ -3,10 +3,23 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Pin, PinOff, Plus, Search, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  CornerDownRight,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
-import { selectMemoById, selectMemosMatching } from "@/db/queries/memos";
+import {
+  selectMemoById,
+  selectMemosMatching,
+  selectMemoTree,
+} from "@/db/queries/memos";
 import type { DbDoc, Memo } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +38,7 @@ import {
 import {
   addNoteAction,
   deleteNoteAction,
+  setNoteParentAction,
   updateNoteAction,
 } from "./actions";
 
@@ -74,12 +88,35 @@ function NotesPageContent() {
   });
   const [doomed, setDoomed] = useState<Memo | null>(null);
 
-  const memos = useStore(
+  const searching = query.trim().length > 0;
+  /**
+   * The notes as written: top-level ones, each with whatever sits under it.
+   *
+   * Only while not searching. A search is a question about every note, and
+   * hiding a match inside a collapsed parent would answer it with "nothing" —
+   * so results are a flat list and the nesting steps out of the way.
+   */
+  const tree = useStore(
+    useCallback((db: DbDoc) => selectMemoTree(db, LOCAL_USER_ID), []),
+  );
+  const matches = useStore(
     useCallback(
-      (db: DbDoc) => selectMemosMatching(db, LOCAL_USER_ID, query),
-      [query],
+      (db: DbDoc) =>
+        searching ? selectMemosMatching(db, LOCAL_USER_ID, query) : [],
+      [query, searching],
     ),
   );
+  const memos = searching ? matches : tree.map((node) => node.memo);
+  /** Which parents are open. Collapsed by default: the point is a shorter list. */
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  function toggle(id: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
   const selected = useStore(
     useCallback(
       (db: DbDoc) =>
@@ -88,10 +125,19 @@ function NotesPageContent() {
     ),
   );
 
-  async function handleNew() {
-    const created = await addNoteAction({});
-    if (created) setSelectedId(created.id);
+  async function handleNew(parentId: number | null = null) {
+    const created = await addNoteAction(parentId ? { parentId } : {});
+    if (created) {
+      if (parentId) setExpanded((prev) => new Set(prev).add(parentId));
+      setSelectedId(created.id);
+    }
   }
+
+  /** The note open in the editor, and whether it is somebody's child. */
+  const selectedParentId = selected?.parentId ?? null;
+  const selectedHasChildren = tree.some(
+    (node) => node.memo.id === selected?.id && node.children.length > 0,
+  );
 
   async function handleDelete(memo: Memo) {
     setDoomed(null);
@@ -129,7 +175,7 @@ function NotesPageContent() {
               className="h-8 w-48 pl-7"
             />
           </div>
-          <Button size="sm" onClick={handleNew}>
+          <Button size="sm" onClick={() => handleNew()}>
             <Plus className="size-3.5" />
             New note
           </Button>
@@ -153,37 +199,56 @@ function NotesPageContent() {
             // preview text made the whole list wider than its column and spilled
             // it over the editor. `minmax(0,1fr)` caps it at the column.
             <ul className="grid grid-cols-1 gap-1">
-              {memos.map((memo) => (
-                <li key={memo.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(memo.id)}
-                    aria-current={memo.id === selectedId}
-                    className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
-                      memo.id === selectedId
-                        ? "border-ring bg-muted"
-                        : "border-border/60 hover:bg-muted/60"
-                    }`}
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      {memo.pinned && (
-                        <Pin className="size-3 shrink-0 text-muted-foreground" />
-                      )}
-                      <span className="truncate text-sm font-medium">
-                        {heading(memo)}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 flex min-w-0 items-baseline justify-between gap-2">
-                      <span className="truncate text-xs text-muted-foreground">
-                        {preview(memo) || "Empty"}
-                      </span>
-                      <span className="shrink-0 text-[0.7rem] text-muted-foreground">
-                        {when(memo.updatedAt)}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {memos.map((memo) => {
+                const children = searching
+                  ? []
+                  : (tree.find((n) => n.memo.id === memo.id)?.children ?? []);
+                const open = expanded.has(memo.id);
+                return (
+                  <li key={memo.id} className="grid grid-cols-1 gap-1">
+                    <NoteRow
+                      memo={memo}
+                      selected={memo.id === selectedId}
+                      onOpen={() => setSelectedId(memo.id)}
+                      // The triangle is a button of its own rather than the row
+                      // doing both: opening a note and folding its children away
+                      // are different intentions, and one click cannot be both.
+                      disclosure={
+                        children.length > 0 ? (
+                          <button
+                            type="button"
+                            aria-label={`${open ? "Collapse" : "Expand"} ${heading(memo)}`}
+                            aria-expanded={open}
+                            onClick={() => toggle(memo.id)}
+                            className="-ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          >
+                            <ChevronRight
+                              className={`size-3.5 transition-transform ${open ? "rotate-90" : ""}`}
+                            />
+                          </button>
+                        ) : null
+                      }
+                      count={children.length}
+                    />
+                    {open &&
+                      children.map((child) => (
+                        // Indented and rule-marked rather than merely inset, so
+                        // a long list of children still reads as belonging to
+                        // something once the parent has scrolled past.
+                        <div
+                          key={child.id}
+                          className="ml-3 border-l border-border/60 pl-2"
+                        >
+                          <NoteRow
+                            memo={child}
+                            selected={child.id === selectedId}
+                            onOpen={() => setSelectedId(child.id)}
+                          />
+                        </div>
+                      ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -194,6 +259,19 @@ function NotesPageContent() {
             memo={selected}
             onBack={() => setSelectedId(null)}
             onDelete={() => setDoomed(selected)}
+            // A note can take sub-notes only if it is not one itself, and can
+            // be moved out only if it is. The two are never both offered.
+            onAddSubNote={
+              selectedParentId === null
+                ? () => void handleNew(selected.id)
+                : undefined
+            }
+            onMoveOut={
+              selectedParentId !== null
+                ? () => void setNoteParentAction({ id: selected.id, parentId: null })
+                : undefined
+            }
+            childCount={selectedHasChildren ? 1 : 0}
           />
         ) : (
           <div className="hidden items-center justify-center rounded-lg border border-dashed border-border/60 p-10 text-sm text-muted-foreground md:flex">
@@ -230,6 +308,63 @@ function NotesPageContent() {
 }
 
 /**
+ * A row in the list: one note, with room for a disclosure triangle.
+ *
+ * Shared by parents and children so the two read identically — a sub-note is
+ * the same kind of thing as a note, just filed under one, and giving it its own
+ * smaller styling would suggest otherwise.
+ */
+function NoteRow({
+  memo,
+  selected,
+  onOpen,
+  disclosure,
+  count = 0,
+}: {
+  memo: Memo;
+  selected: boolean;
+  onOpen: () => void;
+  disclosure?: React.ReactNode;
+  count?: number;
+}) {
+  return (
+    <div
+      className={`flex items-start gap-1 rounded-lg border px-2 py-2 transition-colors ${
+        selected ? "border-ring bg-muted" : "border-border/60 hover:bg-muted/60"
+      }`}
+    >
+      {disclosure ?? <span className="w-0" />}
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-current={selected}
+        className="min-w-0 flex-1 text-left"
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          {memo.pinned && (
+            <Pin className="size-3 shrink-0 text-muted-foreground" />
+          )}
+          <span className="truncate text-sm font-medium">{heading(memo)}</span>
+          {count > 0 && (
+            <span className="shrink-0 rounded-full bg-muted px-1.5 text-[0.65rem] text-muted-foreground tabular-nums">
+              {count}
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 flex min-w-0 items-baseline justify-between gap-2">
+          <span className="truncate text-xs text-muted-foreground">
+            {preview(memo) || "Empty"}
+          </span>
+          <span className="shrink-0 text-[0.7rem] text-muted-foreground">
+            {when(memo.updatedAt)}
+          </span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
+/**
  * One note, open.
  *
  * Mounted with `key={memo.id}` by the page, so switching notes builds a fresh
@@ -240,10 +375,17 @@ function NoteEditor({
   memo,
   onBack,
   onDelete,
+  onAddSubNote,
+  onMoveOut,
 }: {
   memo: Memo;
   onBack: () => void;
   onDelete: () => void;
+  /** Present on a top-level note: start another one filed under it. */
+  onAddSubNote?: () => void;
+  /** Present on a sub-note: lift it back out to the top level. */
+  onMoveOut?: () => void;
+  childCount?: number;
 }) {
   /**
    * What is on screen, which leads what is stored.
@@ -324,6 +466,28 @@ function NoteEditor({
         >
           {dirty ? "Saving…" : "Saved"}
         </span>
+        {onAddSubNote && (
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Add a note under this one"
+            title="Add a note under this one"
+            onClick={onAddSubNote}
+          >
+            <Plus className="size-3.5" />
+          </Button>
+        )}
+        {onMoveOut && (
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Move this note out on its own"
+            title="Move this note out on its own"
+            onClick={onMoveOut}
+          >
+            <CornerDownRight className="size-3.5 rotate-180" />
+          </Button>
+        )}
         <Button
           size="icon-sm"
           variant="ghost"

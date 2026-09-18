@@ -7,7 +7,12 @@
 
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { addMemo, deleteMemo, updateMemo } from "@/db/queries/memos";
+import {
+  addMemo,
+  deleteMemo,
+  setMemoParent,
+  updateMemo,
+} from "@/db/queries/memos";
 
 /**
  * Generous, and capped rather than trimmed.
@@ -23,6 +28,8 @@ const bodySchema = z.string().max(50_000);
 const addSchema = z.object({
   title: titleSchema.optional(),
   body: bodySchema.optional(),
+  /** The note to sit under, for a sub-note. */
+  parentId: z.number().int().positive().nullable().optional(),
 });
 const updateSchema = z.object({
   id: z.number().int().positive(),
@@ -37,7 +44,12 @@ export async function addNoteAction(data: z.infer<typeof addSchema> = {}) {
   if (!userId) throw new Error("Unauthorized");
 
   const parsed = addSchema.parse(data);
-  return addMemo(userId, parsed.title ?? "", parsed.body ?? "");
+  return addMemo(
+    userId,
+    parsed.title ?? "",
+    parsed.body ?? "",
+    parsed.parentId ?? null,
+  );
 }
 
 /** Edits the words, or pins it to the top of the list. */
@@ -55,4 +67,18 @@ export async function deleteNoteAction(data: z.infer<typeof idSchema>) {
 
   const { id } = idSchema.parse(data);
   return deleteMemo(id, userId);
+}
+
+const parentSchema = z.object({
+  id: z.number().int().positive(),
+  parentId: z.number().int().positive().nullable(),
+});
+
+/** Move a note under another, or back out on its own. */
+export async function setNoteParentAction(data: z.infer<typeof parentSchema>) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const { id, parentId } = parentSchema.parse(data);
+  return setMemoParent(id, userId, parentId);
 }

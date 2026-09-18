@@ -233,6 +233,18 @@ export type DbDoc = {
 export type Memo = {
   id: number;
   userId: string;
+  /**
+   * The note this one sits under, or null for a note of its own.
+   *
+   * One level deep, like decks and their sub-decks: a note under a note is
+   * enough to keep a subject together, and arbitrary nesting turns a list you
+   * glance down into a tree you have to navigate.
+   *
+   * A child whose parent has gone reads as top-level rather than disappearing —
+   * see `selectMemoTree`. Losing sight of a note would be a worse answer than
+   * showing it in the wrong place.
+   */
+  parentId: number | null;
   /** May be empty: a note is worth keeping before it has been named. */
   title: string;
   body: string;
@@ -280,7 +292,9 @@ export type SerializedDbDoc = {
   profile?: { name: string; emoji?: string | null; updatedAt: string };
   /** Absent in documents written before notes existed; reads as an empty list. */
   memos?: Array<
-    Omit<Memo, "pinned" | "createdAt" | "updatedAt"> & {
+    Omit<Memo, "pinned" | "parentId" | "createdAt" | "updatedAt"> & {
+      /** Absent before notes could nest; reads as a note of its own. */
+      parentId?: number | null;
       /** Absent before notes could be pinned; reads as unpinned. */
       pinned?: boolean;
       createdAt: string;
@@ -465,6 +479,7 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       title: m.title,
       body: m.body,
       pinned: m.pinned ?? false,
+      parentId: m.parentId ?? null,
       createdAt: new Date(m.createdAt),
       updatedAt: new Date(m.updatedAt),
     })),

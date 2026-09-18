@@ -210,7 +210,7 @@ test("an unsynced document does not clear a populated one", () => {
 function memo(id: number, title: string, updated: Date, created = T0): Memo {
   return {
     id, userId: "local-user", title, body: title.toLowerCase(),
-    pinned: false, createdAt: created, updatedAt: updated,
+    pinned: false, parentId: null, createdAt: created, updatedAt: updated,
   };
 }
 

@@ -65,15 +65,26 @@ export async function getMemosByUser(userId: string) {
 }
 
 /** A new, empty note, ready to be typed into. */
-export async function addMemo(userId: string, title = "", body = "") {
+export async function addMemo(
+  userId: string,
+  title = "",
+  body = "",
+  parentId: number | null = null,
+) {
   return mutate((draft) => {
     const now = new Date();
+    // Only a top-level note can be a parent: nesting stops at one level, so a
+    // note asked for under a child is put beside it instead.
+    const parent = parentId
+      ? (draft.memos ?? []).find((m) => m.id === parentId && m.userId === userId)
+      : undefined;
     const memo: Memo = {
       id: allocateMemoId(draft),
       userId,
       title,
       body,
       pinned: false,
+      parentId: parent ? (parent.parentId ?? parent.id) : null,
       createdAt: now,
       updatedAt: now,
     };
@@ -112,12 +123,72 @@ export async function updateMemo(
   });
 }
 
+/**
+ * The notes as a two-level list: each top-level note with its children.
+ *
+ * A child whose parent has been deleted comes back as top-level rather than
+ * vanishing — the parent is gone, the writing is not, and a note you cannot
+ * find is indistinguishable from one that was lost.
+ */
+/** Put a note under another, or back out on its own with `parentId` null. */
+export async function setMemoParent(
+  id: number,
+  userId: string,
+  parentId: number | null,
+) {
+  return mutate((draft) => {
+    const memos = draft.memos ?? [];
+    const index = memos.findIndex((m) => m.id === id && m.userId === userId);
+    if (index === -1) return null;
+    // A note with children of its own cannot become a child: that would be the
+    // second level of nesting this deliberately does not have.
+    if (parentId !== null && memos.some((m) => m.parentId === id)) return null;
+    const parent = parentId
+      ? memos.find((m) => m.id === parentId && m.userId === userId)
+      : undefined;
+    const resolved = parent ? (parent.parentId ?? parent.id) : null;
+    if (resolved === id) return null;
+    draft.memos[index] = {
+      ...memos[index],
+      parentId: resolved,
+      updatedAt: new Date(),
+    };
+    return draft.memos[index];
+  });
+}
+
+export function selectMemoTree(
+  db: DbDoc,
+  userId: string,
+): Array<{ memo: Memo; children: Memo[] }> {
+  const all = selectMemosByUser(db, userId);
+  const ids = new Set(all.map((m) => m.id));
+  const childrenOf = new Map<number, Memo[]>();
+  const roots: Memo[] = [];
+  for (const memo of all) {
+    if (memo.parentId !== null && ids.has(memo.parentId)) {
+      const list = childrenOf.get(memo.parentId) ?? [];
+      list.push(memo);
+      childrenOf.set(memo.parentId, list);
+    } else {
+      roots.push(memo);
+    }
+  }
+  return roots.map((memo) => ({
+    memo,
+    children: childrenOf.get(memo.id) ?? [],
+  }));
+}
+
 export async function deleteMemo(id: number, userId: string) {
   return mutate((draft) => {
     const before = (draft.memos ?? []).length;
-    draft.memos = (draft.memos ?? []).filter(
-      (m) => !(m.id === id && m.userId === userId),
-    );
+    draft.memos = (draft.memos ?? [])
+      .filter((m) => !(m.id === id && m.userId === userId))
+      // Children are promoted, not deleted. Removing a heading should not take
+      // the pages under it, and a delete that quietly took four other notes
+      // with it is the kind of thing you only find out about later.
+      .map((m) => (m.parentId === id ? { ...m, parentId: null } : m));
     return draft.memos.length < before;
   });
 }
