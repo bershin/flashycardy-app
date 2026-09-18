@@ -10,6 +10,8 @@ import { selectMemoById, selectMemosMatching } from "@/db/queries/memos";
 import type { DbDoc, Memo } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RichTextEditor } from "@/components/rich-text-editor";
+import { noteBodyToHtml, noteBodyToText } from "@/lib/note-body";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,7 +46,9 @@ function when(date: Date): string {
 
 /** The first line that has anything on it, for the list. */
 function preview(memo: Memo): string {
-  const line = memo.body.split("\n").find((l) => l.trim().length > 0);
+  const line = noteBodyToText(memo.body)
+    .split("\n")
+    .find((l) => l.trim().length > 0);
   return line?.trim() ?? "";
 }
 
@@ -144,7 +148,11 @@ function NotesPageContent() {
                 : "No notes yet. Start one with New note."}
             </p>
           ) : (
-            <ul className="grid gap-1">
+            // `grid-cols-1` rather than a bare `grid`: an implicit column is
+            // sized `auto`, which is max-content, so one long unbroken line of
+            // preview text made the whole list wider than its column and spilled
+            // it over the editor. `minmax(0,1fr)` caps it at the column.
+            <ul className="grid grid-cols-1 gap-1">
               {memos.map((memo) => (
                 <li key={memo.id}>
                   <button
@@ -157,7 +165,7 @@ function NotesPageContent() {
                         : "border-border/60 hover:bg-muted/60"
                     }`}
                   >
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex min-w-0 items-center gap-1.5">
                       {memo.pinned && (
                         <Pin className="size-3 shrink-0 text-muted-foreground" />
                       )}
@@ -165,7 +173,7 @@ function NotesPageContent() {
                         {heading(memo)}
                       </span>
                     </span>
-                    <span className="mt-0.5 flex items-baseline justify-between gap-2">
+                    <span className="mt-0.5 flex min-w-0 items-baseline justify-between gap-2">
                       <span className="truncate text-xs text-muted-foreground">
                         {preview(memo) || "Empty"}
                       </span>
@@ -245,7 +253,15 @@ function NoteEditor({
    * would put the cursor back at the end of the text on every keystroke.
    */
   const [title, setTitle] = useState(memo.title);
-  const [body, setBody] = useState(memo.body);
+  /**
+   * The body as HTML, converted on the way in if it was typed as plain text.
+   *
+   * Compared against the same conversion below rather than against the stored
+   * value, so simply opening a note written before the editor arrived does not
+   * read as an edit and quietly rewrite it.
+   */
+  const [body, setBody] = useState(() => noteBodyToHtml(memo.body));
+  const storedBody = noteBodyToHtml(memo.body);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
@@ -256,7 +272,7 @@ function NoteEditor({
    * A `saved` flag would have been a second source of truth for something the
    * two values already say, and one more thing to get out of step.
    */
-  const dirty = title !== memo.title || body !== memo.body;
+  const dirty = title !== memo.title || body !== storedBody;
 
   // Written after typing pauses rather than on every keystroke: each save
   // rewrites the whole document and schedules a push to GitHub, and a commit
@@ -335,13 +351,14 @@ function NoteEditor({
           <Trash2 className="size-3.5" />
         </Button>
       </div>
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        onBlur={flush}
+      {/* The same editor the cards use, so a note can carry headings, lists
+          and code rather than being one block of plain text. Losing focus is
+          the editor's own business, so saving on blur goes with it — the pause
+          timer above is what commits now. */}
+      <RichTextEditor
+        content={body}
+        onChange={setBody}
         placeholder="Write it down…"
-        aria-label="Note"
-        className="min-h-[24rem] w-full resize-y rounded-md bg-transparent p-1 text-sm outline-none placeholder:text-muted-foreground"
       />
     </div>
   );

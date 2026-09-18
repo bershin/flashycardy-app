@@ -8,6 +8,7 @@
 
 import { allocateMemoId, getSnapshot, mutate } from "@/lib/store/local-store";
 import type { DbDoc, Memo } from "@/lib/store/types";
+import { noteBodyToText } from "@/lib/note-body";
 
 /**
  * Pinned first, then most recently changed.
@@ -51,7 +52,10 @@ export function selectMemosMatching(
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return selectMemosByUser(db, userId);
   return selectMemosByUser(db, userId).filter((memo) => {
-    const haystack = `${memo.title}\n${memo.body}`.toLowerCase();
+    // The words as written: searching raw HTML would match a tag name or an
+    // attribute nobody typed, so "p" or "strong" would hit every note.
+    const haystack =
+      `${memo.title}\n${noteBodyToText(memo.body)}`.toLowerCase();
     return words.every((word) => haystack.includes(word));
   });
 }

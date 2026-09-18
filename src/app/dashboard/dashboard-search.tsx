@@ -34,6 +34,7 @@ import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore } from "@/lib/store/use-store";
 import { selectDeckMoveOptions } from "@/lib/store/selectors";
 import { selectMemosMatching } from "@/db/queries/memos";
+import { noteBodyToText } from "@/lib/note-body";
 import { selectTodosMatching } from "@/db/queries/todos";
 import type { DbDoc } from "@/lib/store/types";
 import { DeckCard } from "./deck-card";
@@ -307,7 +308,9 @@ export function DashboardSearch({ decks, query }: DashboardSearchProps) {
                     {memo.title.trim() || "Untitled"}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {memo.body.split("\n").find((l) => l.trim()) ?? "Empty"}
+                    {noteBodyToText(memo.body)
+                      .split("\n")
+                      .find((l) => l.trim()) ?? "Empty"}
                   </span>
                 </Link>
               </li>
