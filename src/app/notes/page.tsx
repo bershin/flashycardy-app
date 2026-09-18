@@ -66,19 +66,6 @@ import {
 /** How long typing has to pause before a note is written. */
 const SAVE_AFTER_MS = 700;
 
-/** "Just now", "14:32" today, otherwise a short date. */
-function when(date: Date): string {
-  const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
-  if (sameDay) {
-    return date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-}
-
 /** The first line that has anything on it, for the list. */
 function preview(memo: Memo): string {
   const line = noteBodyToText(memo.body)
@@ -445,14 +432,14 @@ function NestZone({ noteId }: { noteId: number }) {
       // of a big card, but a note row is about fifty pixels tall — a zone over
       // all of it caught every reordering drag as a nesting one, so there was
       // no way left to simply move a note up. Left half sorts, right half files.
-      className={`absolute inset-y-1 right-1 z-20 flex w-[45%] items-center justify-center gap-1.5 rounded-md border-2 border-dashed text-[0.7rem] font-medium transition-colors ${
+      className={`absolute inset-y-0.5 right-1 z-20 flex w-[45%] items-center justify-center gap-1 rounded-md border-2 border-dashed text-[0.65rem] font-medium transition-colors ${
         isOver
           ? "border-violet-400 bg-violet-500/25 text-violet-900 dark:text-violet-100"
           : "border-violet-400/40 bg-violet-500/10 text-violet-700/80 dark:text-violet-300/80"
       }`}
     >
-      <CornerDownRight className="size-3" />
-      File under this
+      <CornerDownRight className="size-3 shrink-0" />
+      File under
     </div>
   );
 }
@@ -510,8 +497,12 @@ function NoteRow({
   count?: number;
 }) {
   return (
+    // One line. The preview and the time were two thirds of the row's height
+    // and neither was the reason you look at the list: a title you wrote is
+    // more use than the first words of a note you half remember, and twice as
+    // many notes fit on the screen without scrolling.
     <div
-      className={`flex items-start gap-1 rounded-lg border px-2 py-2 transition-colors ${
+      className={`flex items-center gap-1 rounded-lg border px-2 py-1 transition-colors ${
         selected ? "border-ring bg-muted" : "border-border/60 hover:bg-muted/60"
       }`}
     >
@@ -520,27 +511,18 @@ function NoteRow({
         type="button"
         onClick={onOpen}
         aria-current={selected}
-        className="min-w-0 flex-1 text-left"
+        // The full note still reaches a screen reader through the editor; the
+        // title is what this row is for.
+        title={heading(memo)}
+        className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
       >
-        <span className="flex min-w-0 items-center gap-1.5">
-          {memo.pinned && (
-            <Pin className="size-3 shrink-0 text-muted-foreground" />
-          )}
-          <span className="truncate text-sm font-medium">{heading(memo)}</span>
-          {count > 0 && (
-            <span className="shrink-0 rounded-full bg-muted px-1.5 text-[0.65rem] text-muted-foreground tabular-nums">
-              {count}
-            </span>
-          )}
-        </span>
-        <span className="mt-0.5 flex min-w-0 items-baseline justify-between gap-2">
-          <span className="truncate text-xs text-muted-foreground">
-            {preview(memo) || "Empty"}
+        {memo.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
+        <span className="truncate text-sm font-medium">{heading(memo)}</span>
+        {count > 0 && (
+          <span className="shrink-0 rounded-full bg-muted px-1.5 text-[0.65rem] text-muted-foreground tabular-nums">
+            {count}
           </span>
-          <span className="shrink-0 text-[0.7rem] text-muted-foreground">
-            {when(memo.updatedAt)}
-          </span>
-        </span>
+        )}
       </button>
     </div>
   );
