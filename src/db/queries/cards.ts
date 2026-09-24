@@ -74,6 +74,7 @@ export async function insertCard(data: {
       consecutiveCorrect: 0,
       lastCorrectAt: null,
       timesMissed: 0,
+      lastMissedAt: null,
       editedAt: now,
       lastAnsweredAt: null,
       createdAt: now,
@@ -103,6 +104,7 @@ export async function bulkInsertCards(
         consecutiveCorrect: 0,
         lastCorrectAt: null,
         timesMissed: 0,
+        lastMissedAt: null,
         editedAt: now,
         lastAnsweredAt: null,
         createdAt: now,
@@ -171,21 +173,23 @@ export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
  *
  * One ladder for every card. There were two, and choosing between them was a
  * decision taken per card at the moment you had least idea how hard it would
- * turn out to be — the card's own record answers that far better, and the
- * widening shape is what a card wants either way: two nights in a row to get it
- * in, then gaps that open up until something learned cleanly is only checked
- * occasionally.
+ * turn out to be — the card's own record answers that far better.
+ *
+ * One night to see it again, then a week, and from there roughly doubling out
+ * to a year: 1, 7, 14, 30, 90, 180, 360. A card recalled the next morning has
+ * shown enough to be left alone for a week; the second single night that used
+ * to sit here asked the same easy question twice.
  *
  * Cards still carry a `schedule` value and it still round-trips through the
  * document, so nothing written before this needs migrating; it simply no longer
- * selects anything. Eight rungs, so a card graduates on the ninth correct
+ * selects anything. Seven rungs, so a card graduates on the eighth correct
  * answer, about twenty months after it was first seen.
  *
  * Running off the end means the card has been learned and is archived, so
  * adding a rung extends the schedule rather than needing a second edit
  * somewhere else.
  */
-const LADDER: readonly number[] = [1, 1, 7, 14, 30, 90, 180, 360];
+const LADDER: readonly number[] = [1, 7, 14, 30, 90, 180, 360];
 
 /** How soon a missed card comes back round. */
 const MISSED_REVIEW_MINUTES = 10;
@@ -359,6 +363,17 @@ export async function recordStudyResult(
   const creditedToday =
     existing.lastCorrectAt !== null &&
     startOfDay(existing.lastCorrectAt).getTime() === today.getTime();
+  /**
+   * Whether this card has already been counted wrong today.
+   *
+   * The mirror of `creditedToday`. A card can be fumbled three times in an
+   * evening — the review round hands the missed ones straight back — and each
+   * one used to count, so a deck a week old could report most of its cards as
+   * hard. One a day, the same rule the streak has.
+   */
+  const missedToday =
+    existing.lastMissedAt !== null &&
+    startOfDay(existing.lastMissedAt).getTime() === today.getTime();
 
   let consecutiveCorrect: number;
   let nextReviewAt: Date;
@@ -411,11 +426,27 @@ export async function recordStudyResult(
       // and fourth answer today are held back by the same rule as the second.
       lastCorrectAt:
         rating === "got_it" ? now : draft.cards[index].lastCorrectAt,
-      // Counted on every miss, including repeat misses in the same sitting: a
-      // card that took four attempts tonight really was missed four times, and
-      // that is exactly the card worth spotting later.
+      // Misses since the card last proved itself, not for all time.
+      //
+      // A miss adds one, at most one a day however many attempts an evening
+      // takes — the streak is capped the same way and for the same reason: the
+      // ladder is built on a day having passed between answers, and four goes
+      // at one card tonight is one card you did not know tonight.
+      //
+      // Two correct answers in a row wipe it. Two rather than one because a
+      // single right answer is as often a guess as it is knowledge, and the cap
+      // above means the pair takes two days — which is the point, since a card
+      // that survives a night is a card you actually have.
       timesMissed:
-        draft.cards[index].timesMissed + (rating === "missed" ? 1 : 0),
+        rating === "missed"
+          ? draft.cards[index].timesMissed + (missedToday ? 0 : 1)
+          : consecutiveCorrect >= 2
+            ? 0
+            : draft.cards[index].timesMissed,
+      // Stamped on every miss even when it did not count, so the cap above can
+      // tell that today has already been spent.
+      lastMissedAt:
+        rating === "missed" ? now : draft.cards[index].lastMissedAt,
       // Answered, so no longer unstudied — whether it was right or wrong. Only
       // an answer clears this; moving the card or changing its schedule leaves
       // it alone, so neither can quietly mark a deck as studied.
@@ -466,41 +497,32 @@ export function selectCardsUnderDeck(
 /**
  * How many misses make a card *hard*.
  *
- * Three rather than one. "Missed at least once" is most of a working deck —
- * every card worth having has caught you out at some point — so a threshold
- * there names nothing. Three is the point at which a card has been missed more
- * often than by accident, and stops being "I slipped" and starts being "I have
- * not learned this".
+ * Two. One miss is a slip; twice is a card you do not know yet. It reads lower
+ * than it would have done against a lifetime tally, because the count it tests
+ * is no longer a lifetime one — two correct answers in a row clear it (see
+ * `recordStudyResult`), so this is asking "wrong twice since you last had it"
+ * rather than "wrong twice ever".
  *
  * Exported so the deck page's filter and its Study button agree on the word;
  * two definitions of "hard" would be worse than none.
  */
-export const HARD_MISS_THRESHOLD = 3;
+export const HARD_MISS_THRESHOLD = 2;
 
 /**
- * Missed enough times to count, and not put right since.
+ * Wrong twice, and not yet earned its way back.
  *
- * The count alone was a lifetime tally that nothing ever reduced, so a card
- * missed three times in its first week stayed hard however many times it was
- * later answered correctly — a deck at ninety-seven per cent still reported
- * twenty-five hard cards, which is not a thing anyone can act on.
+ * The whole test is the count, because the count is no longer permanent: a miss
+ * adds one (at most one a day) and two correct answers in a row wipe it. So a
+ * card leaves this list by being answered right twice, which is a day's work
+ * apart under the one-promotion-a-day rule — one good answer is a guess as
+ * often as it is knowledge.
  *
- * The second half is what makes it a statement about now: get the card right
- * and it leaves, miss it again and it comes back. The lifetime count is still
- * on the card and still shown while studying; it is simply no longer the whole
- * test.
- *
- * "Not put right since" is read from the two stamps rather than from the streak,
- * because a card missed and then answered correctly on the same day keeps a
- * streak of zero — the one-promotion-a-day rule holds it there — and would
- * otherwise still read as hard on the evening you fixed it.
+ * Nothing here reads the answer stamps any more. An earlier version cleared a
+ * card the moment it was right once, which let a card you had guessed drop out
+ * of the list you keep it in precisely because you keep guessing it.
  */
 export function isHardCard(card: CardRow): boolean {
-  if (card.timesMissed < HARD_MISS_THRESHOLD) return false;
-  if (card.lastCorrectAt === null) return true;
-  return (
-    card.lastAnsweredAt !== null && card.lastAnsweredAt > card.lastCorrectAt
-  );
+  return card.timesMissed >= HARD_MISS_THRESHOLD;
 }
 
 /**

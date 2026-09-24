@@ -4,9 +4,10 @@ import { Flame, XCircle } from "lucide-react";
  * A card's record: how many times it has been missed, and its current streak.
  *
  * Two numbers rather than one because they answer different questions. The
- * streak is how it is going, the misses are how hard it has been — a card on a
- * streak of two that has been missed nine times is not the same card as one on
- * a streak of two that has never been missed, and only the pair says so.
+ * streak is how it is going; the misses are how much it still owes — they count
+ * up as the card is got wrong and are wiped by two correct answers in a row, so
+ * a card showing two has been missed twice since it last proved itself rather
+ * than twice in its life.
  *
  * Both are shown even at zero. A number that appears once it is interesting
  * would make its absence ambiguous: nothing yet, or nothing to report?

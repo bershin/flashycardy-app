@@ -152,13 +152,17 @@ export type CardRow = {
    */
   lastCorrectAt: Date | null;
   /**
-   * How many times this card has ever been answered wrong.
+   * How many times this card has been answered wrong since it last proved
+   * itself, at most one a day.
    *
-   * Cumulative and never reset — the streak already says how it is going now,
-   * so this is the counterweight: the card you keep getting wrong reads as
-   * difficult even on the day you finally get it right. Cards written before
-   * this existed read as 0, which understates them, but inventing a history for
-   * them would be worse than starting the count from here.
+   * Not a lifetime tally. It was one, and a count that only ever rose made
+   * "hard" a permanent label: a deck at ninety-seven per cent still reported
+   * most of its cards as difficult, which is not something anyone can act on.
+   * Two correct answers in a row wipe it, so it measures what the card owes now
+   * rather than what it once cost.
+   *
+   * Cards written before any of this read as 0, which understates them, but
+   * inventing a history for them would be worse than starting from here.
    */
   timesMissed: number;
   /**
@@ -185,6 +189,16 @@ export type CardRow = {
    * "Studied today" badge is asking.
    */
   lastAnsweredAt: Date | null;
+  /**
+   * When the card was last missed, or null if it never has been.
+   *
+   * The counterpart to `lastCorrectAt`, and there for the same reason: the
+   * streak may rise at most one step a day, and the miss count may rise at most
+   * one a day too. Without a stamp of its own, a card fumbled three times in one
+   * evening — which the review round makes easy — counted as three separate
+   * failures and was "hard" by bedtime.
+   */
+  lastMissedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -386,6 +400,7 @@ export type SerializedDbDoc = {
       | "timesMissed"
       | "editedAt"
       | "lastAnsweredAt"
+      | "lastMissedAt"
       | "createdAt"
       | "updatedAt"
     > & {
@@ -393,6 +408,8 @@ export type SerializedDbDoc = {
       editedAt?: string | null;
       /** Absent before misses were stamped; falls back to `lastCorrectAt`. */
       lastAnsweredAt?: string | null;
+      /** Absent before misses were capped at one a day; reads as never. */
+      lastMissedAt?: string | null;
       /**
        * Absent in version-1 documents, and may name a type this build no
        * longer has (vocabulary was removed). Normalised on read.
@@ -547,6 +564,7 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       // That understates a card whose last answer was wrong, so an old deck may
       // need one more pass before it reads as studied — better than claiming a
       // day's work that was never recorded.
+      lastMissedAt: c.lastMissedAt ? toDate(c.lastMissedAt) : null,
       lastAnsweredAt: c.lastAnsweredAt
         ? toDate(c.lastAnsweredAt)
         : c.lastCorrectAt
@@ -600,6 +618,7 @@ export function serializeDoc(doc: DbDoc): SerializedDbDoc {
       lastCorrectAt: toIso(c.lastCorrectAt),
       editedAt: toIso(c.editedAt),
       lastAnsweredAt: toIso(c.lastAnsweredAt),
+      lastMissedAt: toIso(c.lastMissedAt),
       createdAt: toIso(c.createdAt),
       updatedAt: toIso(c.updatedAt),
     })),
