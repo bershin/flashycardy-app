@@ -1,6 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
+import {
+  getToday,
+  getTodayServerSnapshot,
+  subscribeToday,
+} from "@/lib/today";
 import { LOCAL_USER_ID } from "@/lib/auth";
 import { useStore, useStoreReady } from "@/lib/store/use-store";
 import {
@@ -14,6 +19,10 @@ import { DashboardSearch } from "./dashboard-search";
 import { DashboardTodos } from "./day-todos";
 
 export default function DashboardPage() {
+  // Everything below answers "today" — what is due, what is new, whether a deck
+  // has been studied. Subscribing to the date means midnight re-renders it
+  // rather than leaving an overnight tab reporting yesterday.
+  useSyncExternalStore(subscribeToday, getToday, getTodayServerSnapshot);
   const ready = useStoreReady();
   // Owned here so the search control can sit in the header row beside the
   // New Deck button, while the results list below consumes the same query.

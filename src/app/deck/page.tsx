@@ -1,6 +1,11 @@
 "use client";
 
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useState, useSyncExternalStore } from "react";
+import {
+  getToday,
+  getTodayServerSnapshot,
+  subscribeToday,
+} from "@/lib/today";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { LOCAL_USER_ID } from "@/lib/auth";
@@ -28,6 +33,8 @@ import { SortableChildDecks } from "./sortable-child-decks";
  * HTML file serves every deck.
  */
 function DeckPageContent() {
+  // Sub-deck cards carry the same today-dependent counts as the dashboard's.
+  useSyncExternalStore(subscribeToday, getToday, getTodayServerSnapshot);
   /**
    * Whether the card grid is picking cards.
    *

@@ -477,8 +477,30 @@ export function selectCardsUnderDeck(
  */
 export const HARD_MISS_THRESHOLD = 3;
 
+/**
+ * Missed enough times to count, and not put right since.
+ *
+ * The count alone was a lifetime tally that nothing ever reduced, so a card
+ * missed three times in its first week stayed hard however many times it was
+ * later answered correctly — a deck at ninety-seven per cent still reported
+ * twenty-five hard cards, which is not a thing anyone can act on.
+ *
+ * The second half is what makes it a statement about now: get the card right
+ * and it leaves, miss it again and it comes back. The lifetime count is still
+ * on the card and still shown while studying; it is simply no longer the whole
+ * test.
+ *
+ * "Not put right since" is read from the two stamps rather than from the streak,
+ * because a card missed and then answered correctly on the same day keeps a
+ * streak of zero — the one-promotion-a-day rule holds it there — and would
+ * otherwise still read as hard on the evening you fixed it.
+ */
 export function isHardCard(card: CardRow): boolean {
-  return card.timesMissed >= HARD_MISS_THRESHOLD;
+  if (card.timesMissed < HARD_MISS_THRESHOLD) return false;
+  if (card.lastCorrectAt === null) return true;
+  return (
+    card.lastAnsweredAt !== null && card.lastAnsweredAt > card.lastCorrectAt
+  );
 }
 
 /**
@@ -488,10 +510,10 @@ export function isHardCard(card: CardRow): boolean {
  * French" means the hard ones in all of it rather than the ones that happen to
  * sit at the top level.
  *
- * Ordered by misses, then by how overdue it is: two cards missed five times
- * each are equally hard, and the one that has been waiting longest is the one
- * to see first. Not filtered by due date at all — the point of this list is the
- * cards you keep failing, and waiting for one to come round on its own is what
+ * Ordered by misses, then by how overdue it is: two cards outstanding since
+ * five misses each are equally hard, and the one waiting longest is the one to
+ * see first. Not filtered by due date at all — the point of this list is the
+ * cards beating you now, and waiting for one to come round on its own is what
  * let it get to five misses.
  */
 export function selectHardCards(

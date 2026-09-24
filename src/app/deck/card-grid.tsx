@@ -118,7 +118,7 @@ const FILTERS: Filter[] = [
   },
   {
     value: "hard",
-    label: `Hard (missed ${HARD_MISS_THRESHOLD}+)`,
+    label: `Hard (missed ${HARD_MISS_THRESHOLD}+, not yet right)`,
     test: (c) => isHardCard(c),
   },
   {
