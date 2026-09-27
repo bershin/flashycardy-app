@@ -16,6 +16,7 @@ import {
   Check,
   X,
   Trophy,
+  House,
   BookOpen,
   Volume2,
   VolumeX,
@@ -35,7 +36,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { deleteCardAction } from "@/app/deck/actions";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { accentStyle } from "@/lib/deck-accent";
 import { useStore } from "@/lib/store/use-store";
@@ -761,6 +763,17 @@ export function StudySession({
             <Shuffle className="size-4" />
             Shuffle &amp; Restart
           </Button>
+          {/* The only way off this screen that is not another session. Every
+              other button here starts the deck again, so finishing meant
+              reaching for the header — which is the one moment you are most
+              likely to be done rather than going round once more. */}
+          <Link
+            href="/dashboard"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <House className="size-4" />
+            Back to decks
+          </Link>
         </div>
       </div>
     );
