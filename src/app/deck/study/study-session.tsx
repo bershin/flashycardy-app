@@ -396,19 +396,7 @@ export function StudySession({
     }
   }, [current, currentIndex, bankTime, readElapsed]);
 
-  /**
-   * Move on without turning the card over — counted as a miss.
-   *
-   * Skipping used to record nothing, which left a card in an odd state: passed
-   * over, still due, and with nothing to say it had been seen. A card you could
-   * not face is a card you did not know, so it is scored as one — which also
-   * means a session of skips still counts as having been through the deck, and
-   * the skipped cards come back in ten minutes like any other miss.
-   *
-   * `rate` handles the advancing and the end of the deck, so this is only the
-   * naming.
-   */
-  const skip = useCallback(() => rate("missed"), [rate]);
+
 
   const restart = useCallback(() => {
     setDeal((n) => n + 1);
@@ -532,7 +520,10 @@ export function StudySession({
       // where a rating reflex must never delete, so up does it there. Up on a
       // basic card used to step back a card, which the button above still does.
       const deleteKey = interactive ? "ArrowLeft" : "ArrowUp";
-      if (e.key === deleteKey && !finished && current !== undefined) {
+      // Only once the answer is showing, for the same reason the button is: a
+      // card cannot be judged from its front, and the key is a single press
+      // away from the ones that rate it.
+      if (e.key === deleteKey && revealed && !finished && current !== undefined) {
         e.preventDefault();
         setDeleteOpen(true);
         return;
@@ -568,12 +559,15 @@ export function StudySession({
           }
           break;
         case "ArrowRight":
-          e.preventDefault();
-          // Face down it is a skip, which scores as a miss and moves on; once
-          // the answer is showing it is the right-hand rating, as the buttons
-          // underneath say. Left makes the same kind of swap.
-          if (!finished && !revealed) skip();
-          else if (!finished) rate("got_it");
+          // Only once the answer is showing, where it is the right-hand rating
+          // as the buttons underneath say. It used to skip the card face down,
+          // scoring it as a miss — which meant one stray press marked a card
+          // wrong without its ever having been read. Moving on without looking
+          // is not a thing to make easy.
+          if (!finished && revealed) {
+            e.preventDefault();
+            rate("got_it");
+          }
           break;
         case "2":
           if (!finished && revealed) {
@@ -589,7 +583,6 @@ export function StudySession({
   }, [
     reveal,
     goPrev,
-    skip,
     rate,
     finished,
     revealed,
@@ -831,28 +824,35 @@ export function StudySession({
               {soundOn ? "Mute timer chimes" : "Unmute timer chimes"}
             </span>
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setEditOpen(true)}
-            title="Edit this card"
-          >
-            <Pencil className="size-3.5" />
-            Edit
-          </Button>
-          {/* Studying is where a bad card is noticed — a duplicate, a typo, a
-              question that turned out to be wrong. Until now that meant
-              remembering it and going back to the deck afterwards. */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setDeleteOpen(true)}
-            title="Delete this card"
-            className="text-muted-foreground hover:text-destructive"
-          >
-            <Trash2 className="size-3.5" />
-            <span className="sr-only">Delete this card</span>
-          </Button>
+          {/* Both only once the answer is showing. Studying is where a bad card
+              is noticed — a duplicate, a typo, a question that turned out to be
+              wrong — but you cannot know it is bad until you have seen what it
+              says, and a card judged from its front alone is a card judged for
+              being hard. Hiding them rather than disabling them also keeps the
+              row from holding two controls that do nothing. */}
+          {revealed && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditOpen(true)}
+                title="Edit this card"
+              >
+                <Pencil className="size-3.5" />
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteOpen(true)}
+                title="Delete this card"
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="size-3.5" />
+                <span className="sr-only">Delete this card</span>
+              </Button>
+            </>
+          )}
           <Button variant="ghost" size="sm" onClick={shuffleCurrent}>
             <Shuffle className="size-3.5" />
             Shuffle
@@ -1053,9 +1053,11 @@ export function StudySession({
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
+              {/* Only the face-down keys. Once the card is over, the rating
+                  buttons carry their own line saying what the arrows do — two
+                  hints for one set of keys would be one to keep in step. */}
               <Key>space</Key> to turn the card over, <Key>&larr;</Key> for the
-              card before, <Key>&rarr;</Key> to skip it as missed,{" "}
-              <Key>&uarr;</Key> to delete
+              card before
             </p>
           )}
         </div>
