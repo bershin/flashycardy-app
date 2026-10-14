@@ -28,6 +28,11 @@ import {
   Redo,
 } from "lucide-react";
 import { useEffect, useCallback, useState } from "react";
+import {
+  Fraction,
+  FractionPanel,
+  type FractionDraft,
+} from "@/components/fraction-panel";
 import { transcribeImageAction } from "@/app/deck/actions";
 
 interface RichTextEditorProps {
@@ -304,7 +309,13 @@ const MATH_SYMBOLS = [
   { symbol: "√", title: "Square root" },
 ];
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({
+  editor,
+  onFraction,
+}: {
+  editor: Editor;
+  onFraction: () => void;
+}) {
   const handleImageUpload = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -392,6 +403,13 @@ function Toolbar({ editor }: { editor: Editor }) {
         title="Power / raised text (⌘.)"
       >
         <SuperscriptIcon className="size-3.5" />
+      </ToolbarButton>
+      <ToolbarButton onClick={onFraction} title="Fraction (top over bottom)">
+        <span className="flex flex-col items-center text-[9px] leading-[9px]">
+          <span>a</span>
+          <span className="my-px h-px w-2.5 bg-current" />
+          <span>b</span>
+        </span>
       </ToolbarButton>
       {MATH_SYMBOLS.map(({ symbol, title }) => (
         <ToolbarButton
@@ -481,12 +499,29 @@ export function RichTextEditor({
   disabled,
   id,
 }: RichTextEditorProps) {
+  /**
+   * The fraction being typed, or null when the panel is shut. The editor reads
+   * its options once, at creation; the setter is stable, so clicking a
+   * fraction can reach it from there.
+   */
+  const [fraction, setFraction] = useState<FractionDraft | null>(null);
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit,
       Underline,
       Superscript,
+      Fraction.configure({
+        katexOptions: { throwOnError: false },
+        onClick: (node, pos) =>
+          setFraction({
+            pos,
+            top: node.attrs.top ?? "",
+            bottom: node.attrs.bottom ?? "",
+            brackets: node.attrs.brackets === "true",
+          }),
+      }),
       Placeholder.configure({ placeholder: placeholder ?? "Write something…" }),
       Image.configure({ inline: false, allowBase64: true }),
       imagePastePlugin,
@@ -532,7 +567,21 @@ export function RichTextEditor({
 
   return (
     <div className="overflow-hidden rounded-md border border-input bg-background ring-ring/10 focus-within:ring-2 focus-within:ring-ring">
-      <Toolbar editor={editor} />
+      <Toolbar
+        editor={editor}
+        onFraction={() =>
+          setFraction({ top: "", bottom: "", brackets: false })
+        }
+      />
+      {fraction && (
+        <FractionPanel
+          // A fresh panel per fraction, so it opens with that one's values.
+          key={fraction.pos ?? "new"}
+          editor={editor}
+          draft={fraction}
+          onClose={() => setFraction(null)}
+        />
+      )}
       <EditorContent editor={editor} />
     </div>
   );

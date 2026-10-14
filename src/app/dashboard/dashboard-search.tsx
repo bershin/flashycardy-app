@@ -39,6 +39,7 @@ import { selectTodosMatching } from "@/db/queries/todos";
 import type { DbDoc } from "@/lib/store/types";
 import { DeckCard } from "./deck-card";
 import { moveDeckAction, reorderDecksAction } from "./actions";
+import { mathToText } from "@/lib/math";
 
 /** Droppable id prefix for the "nest inside this deck" zones. */
 const NEST_PREFIX = "nest-";
@@ -95,7 +96,7 @@ interface DashboardSearchProps {
 }
 
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, "").trim();
+  return mathToText(html).replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
 }
 
 function SortableDeckItem({

@@ -29,6 +29,7 @@ import {
   archiveLearnedCards,
   deleteCards,
 } from "@/db/queries/cards";
+import { mathToText } from "@/lib/math";
 
 /**
  * Ceiling on one side of a card, in characters of HTML.
@@ -587,7 +588,7 @@ export async function proposeGeneratedCardAction(cardId: number) {
   const card = await getCardByIdForUser(cardId, userId);
   if (!card) throw new Error("Card not found");
 
-  const text = `${card.front}\n\n${card.back}`
+  const text = mathToText(`${card.front}\n\n${card.back}`)
     .replace(/<img[^>]*>/g, " [image] ")
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")

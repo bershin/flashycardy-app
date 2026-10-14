@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import { withLazyImages } from "@/lib/card-html";
+import { MATH_SPAN, mathLatex } from "@/lib/math";
 import { imageRefs } from "@/lib/card-images";
 import { cachedUrl, resolveImage } from "@/lib/image-urls";
 import { IMAGE_PREFIX } from "@/lib/images";
@@ -100,5 +103,17 @@ function substitute(html: string, failed: Set<string>): string {
       return `<span data-pending-image="${hash}"></span>`;
     },
   );
-  return withLazyImages(withUrls);
+  return withLazyImages(withMath(withUrls));
+}
+
+/**
+ * Draw each fraction. The stored span is empty — it carries only its LaTeX —
+ * so without this a card shows a gap where the sum should be.
+ */
+function withMath(html: string): string {
+  if (!html.includes('data-type="inline-math"')) return html;
+  return html.replace(MATH_SPAN, (_span, attrs: string) => {
+    const drawn = katex.renderToString(mathLatex(attrs), { throwOnError: false });
+    return `<span data-type="inline-math">${drawn}</span>`;
+  });
 }

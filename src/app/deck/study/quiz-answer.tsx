@@ -5,6 +5,7 @@ import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CardRow } from "@/lib/store/types";
 import { CardHtml } from "@/components/card-html";
+import { mathToText } from "@/lib/math";
 
 interface QuizAnswerProps {
   card: CardRow;
@@ -217,7 +218,7 @@ export function QuizAnswer({
               {rolled.explanation}
             </p>
           ) : (
-            card.back.replace(/<[^>]*>/g, "").trim().length > 0 && (
+            mathToText(card.back).replace(/<[^>]*>/g, "").trim().length > 0 && (
               <CardHtml
                 className="rich-content rounded-lg border bg-muted/50 p-3 text-sm"
                 html={card.back}

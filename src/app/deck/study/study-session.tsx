@@ -62,6 +62,7 @@ import { CardTimer } from "./card-timer";
 import { useCardTimer } from "./use-card-timer";
 import { rateCardAction, markDeckStudiedAction } from "./actions";
 import { Trash2 } from "lucide-react";
+import { mathToText } from "@/lib/math";
 
 /** Study needs the whole card now, since behaviour branches on its type. */
 type StudyCard = CardRow;
@@ -103,7 +104,7 @@ function Key({ children }: { children: React.ReactNode }) {
 
 /** Card fronts are rich text; the summary list wants one plain line of it. */
 function plainText(html: string): string {
-  return html
+  return mathToText(html)
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
