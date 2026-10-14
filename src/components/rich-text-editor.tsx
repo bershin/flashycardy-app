@@ -8,6 +8,7 @@ import {
 } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
+import Superscript from "@tiptap/extension-superscript";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { Plugin } from "@tiptap/pm/state";
@@ -19,6 +20,7 @@ import {
   ListOrdered,
   Code,
   SquareCode,
+  Superscript as SuperscriptIcon,
   Heading2,
   ImagePlus,
   ScanText,
@@ -52,6 +54,10 @@ function ToolbarButton({
   return (
     <button
       type="button"
+      // Keep focus in the editor. Otherwise the button holds it until the
+      // command refocuses, and anything typed in that gap — the "5" straight
+      // after pressing superscript — goes nowhere.
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -293,6 +299,11 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
+const MATH_SYMBOLS = [
+  { symbol: "÷", title: "Divide" },
+  { symbol: "√", title: "Square root" },
+];
+
 function Toolbar({ editor }: { editor: Editor }) {
   const handleImageUpload = useCallback(() => {
     const input = document.createElement("input");
@@ -369,6 +380,28 @@ function Toolbar({ editor }: { editor: Editor }) {
       >
         <SquareCode className="size-3.5" />
       </ToolbarButton>
+
+      <div className="mx-1 h-4 w-px bg-border" />
+
+      {/* Maths. Raised text is the one way to write any power — squares and
+          cubes included — so 4² is stored the same on every card. ÷ and √
+          are plain characters. */}
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleSuperscript().run()}
+        active={editor.isActive("superscript")}
+        title="Power / raised text (⌘.)"
+      >
+        <SuperscriptIcon className="size-3.5" />
+      </ToolbarButton>
+      {MATH_SYMBOLS.map(({ symbol, title }) => (
+        <ToolbarButton
+          key={symbol}
+          onClick={() => editor.chain().focus().insertContent(symbol).run()}
+          title={title}
+        >
+          <span className="text-base leading-none">{symbol}</span>
+        </ToolbarButton>
+      ))}
 
       <div className="mx-1 h-4 w-px bg-border" />
 
@@ -453,6 +486,7 @@ export function RichTextEditor({
     extensions: [
       StarterKit,
       Underline,
+      Superscript,
       Placeholder.configure({ placeholder: placeholder ?? "Write something…" }),
       Image.configure({ inline: false, allowBase64: true }),
       imagePastePlugin,
