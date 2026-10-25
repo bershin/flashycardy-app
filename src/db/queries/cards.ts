@@ -25,6 +25,11 @@ import {
 } from "@/lib/store/selectors";
 import type { GeneratedPayload } from "@/lib/generated-card";
 import {
+  newOcclusionId,
+  planGroupSave,
+  type OcclusionBox,
+} from "@/lib/occlusion";
+import {
   NEW_CARD_SCHEDULE,
   type CardRow,
   type CardType,
@@ -157,10 +162,139 @@ export async function updateCard(
         type === "generated"
           ? (data.generated ?? current.generated)
           : undefined,
+      // Kept only while it is still a picture card. A picture card is never
+      // retyped from the editor — it is edited as a set, below — so this only
+      // matters for a card turned into something else by other means.
+      occlusion: type === "occlusion" ? current.occlusion : undefined,
     };
     draft.cards[index] = updated;
     return updated;
   });
+}
+
+/**
+ * Write a picture's cards: one per box, all carrying the same question, notes
+ * and boxes.
+ *
+ * With `fromCardId` this edits the set that card belongs to — or, for a card
+ * that is not a picture card yet, turns it into the first of a new set and
+ * makes the rest. Either way it is one mutation, so a sync never sees half a
+ * picture.
+ *
+ * What happens to each existing card is `planGroupSave`'s decision: a box that
+ * moved keeps its card's progress, a relabelled box counts as new until it is
+ * answered again, and a removed box takes its card with it.
+ *
+ * Returns the set as saved, or undefined when the card is not the user's.
+ */
+export async function saveOcclusionGroup(
+  userId: string,
+  data: {
+    deckId: number;
+    front: string;
+    back: string;
+    boxes: OcclusionBox[];
+    fromCardId?: number;
+  },
+): Promise<CardRow[] | undefined> {
+  return mutate((draft) => {
+    const now = new Date();
+    const from =
+      data.fromCardId === undefined
+        ? undefined
+        : draft.cards.find((c) => c.id === data.fromCardId);
+    if (data.fromCardId !== undefined) {
+      if (!from || !ownsCard(draft, from, userId)) return undefined;
+    }
+
+    const group = from?.occlusion?.group ?? newOcclusionId();
+    // A card becoming a picture card stands in for the first box, so it keeps
+    // its place, its history and its id.
+    const siblings: CardRow[] = from?.occlusion
+      ? draft.cards.filter(
+          (c) => c.occlusion?.group === group && ownsCard(draft, c, userId),
+        )
+      : from
+        ? [{ ...from, occlusion: { group, boxId: data.boxes[0].id, boxes: [] } }]
+        : [];
+    const plan = planGroupSave(siblings, data.boxes);
+    const deckId = from?.deckId ?? data.deckId;
+
+    const saved: CardRow[] = [];
+    for (const { card, box, relabelled } of plan.keep) {
+      const reworded = card.front !== data.front || card.back !== data.back;
+      const updated: CardRow = {
+        ...card,
+        type: "occlusion",
+        front: data.front,
+        back: data.back,
+        quiz: undefined,
+        generated: undefined,
+        occlusion: { group, boxId: box.id, boxes: data.boxes },
+        editedAt: relabelled || reworded ? now : card.editedAt,
+        updatedAt: now,
+      };
+      const index = draft.cards.findIndex((c) => c.id === card.id);
+      draft.cards[index] = updated;
+      saved.push(updated);
+    }
+
+    for (const box of plan.add) {
+      const card: CardRow = {
+        id: allocateCardId(draft),
+        deckId,
+        type: "occlusion",
+        front: data.front,
+        back: data.back,
+        occlusion: { group, boxId: box.id, boxes: data.boxes },
+        schedule: NEW_CARD_SCHEDULE,
+        nextReviewAt: now,
+        consecutiveCorrect: 0,
+        lastCorrectAt: null,
+        timesMissed: 0,
+        lastMissedAt: null,
+        editedAt: now,
+        lastAnsweredAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      draft.cards.push(card);
+      saved.push(card);
+    }
+
+    const gone = new Set(plan.remove.map((c) => c.id));
+    draft.cards = draft.cards.filter((c) => !gone.has(c.id));
+    return saved;
+  });
+}
+
+/**
+ * Take deleted picture cards' boxes off the cards left from the same picture.
+ *
+ * Otherwise the box would stay covered on every sibling with no card asking
+ * about it, and the next edit of the set would find a box without a card and
+ * make one — bringing back the card that was just deleted.
+ */
+function pruneOcclusionBoxes(draft: DbDoc, removed: readonly CardRow[]) {
+  const groups = new Set(
+    removed.flatMap((c) => (c.occlusion ? [c.occlusion.group] : [])),
+  );
+  if (groups.size === 0) return;
+  const now = new Date();
+  for (const group of groups) {
+    const left = draft.cards.filter((c) => c.occlusion?.group === group);
+    const live = new Set(left.map((c) => c.occlusion!.boxId));
+    for (const card of left) {
+      const boxes = card.occlusion!.boxes.filter((b) => live.has(b.id));
+      if (boxes.length === card.occlusion!.boxes.length) continue;
+      const index = draft.cards.indexOf(card);
+      draft.cards[index] = {
+        ...card,
+        occlusion: { ...card.occlusion!, boxes },
+        updatedAt: now,
+      };
+    }
+  }
 }
 
 export async function getDueCardsByDeckForUser(deckId: number, userId: string) {
@@ -669,11 +803,13 @@ export async function deleteCards(
 
   const removed = await mutate((draft) => {
     const wanted = new Set(cardIds);
-    const before = draft.cards.length;
-    draft.cards = draft.cards.filter(
-      (card) => !(wanted.has(card.id) && ownsCard(draft, card, userId)),
+    const doomed = draft.cards.filter(
+      (card) => wanted.has(card.id) && ownsCard(draft, card, userId),
     );
-    return before - draft.cards.length;
+    const gone = new Set(doomed);
+    draft.cards = draft.cards.filter((card) => !gone.has(card));
+    pruneOcclusionBoxes(draft, doomed);
+    return doomed.length;
   });
   return removed ?? 0;
 }
@@ -817,6 +953,7 @@ export async function deleteCard(cardId: number, userId: string) {
     if (!ownsCard(draft, card, userId)) return undefined;
 
     draft.cards = draft.cards.filter((c) => c.id !== cardId);
+    pruneOcclusionBoxes(draft, [card]);
     return card;
   });
 }

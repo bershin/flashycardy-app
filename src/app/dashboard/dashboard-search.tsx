@@ -40,6 +40,12 @@ import type { DbDoc } from "@/lib/store/types";
 import { DeckCard } from "./deck-card";
 import { moveDeckAction, reorderDecksAction } from "./actions";
 import { mathToText } from "@/lib/math";
+import { occlusionLabel, type OcclusionPayload } from "@/lib/occlusion";
+
+/** The answer side as text. A picture card's answer is its box's label. */
+function backText(card: CardData): string {
+  return [occlusionLabel(card), stripHtml(card.back)].filter(Boolean).join(" ");
+}
 
 /** Droppable id prefix for the "nest inside this deck" zones. */
 const NEST_PREFIX = "nest-";
@@ -75,6 +81,7 @@ interface CardData {
   id: number;
   front: string;
   back: string;
+  occlusion?: OcclusionPayload;
 }
 
 interface DeckWithCards {
@@ -192,7 +199,7 @@ export function DashboardSearch({ decks, query }: DashboardSearchProps) {
         const matchingCards = deck.cards.filter(
           (card) =>
             stripHtml(card.front).toLowerCase().includes(q) ||
-            stripHtml(card.back).toLowerCase().includes(q),
+            backText(card).toLowerCase().includes(q),
         );
 
         return { deck, matchingCards, titleMatch };
@@ -433,7 +440,7 @@ function MatchingCard({ card, query }: { card: CardData; query: string }) {
         <span className="text-muted-foreground mr-1.5 text-xs font-medium uppercase">
           Back
         </span>
-        <Highlighted text={stripHtml(card.back)} query={query} />
+        <Highlighted text={backText(card)} query={query} />
       </div>
     </div>
   );

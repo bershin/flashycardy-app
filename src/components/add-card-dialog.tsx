@@ -17,7 +17,7 @@ import {
   validateDraft,
   type CardDraft,
 } from "@/components/card-fields";
-import { addCardAction } from "@/app/deck/actions";
+import { addCardAction, saveOcclusionCardsAction } from "@/app/deck/actions";
 
 interface AddCardDialogProps {
   deckId: number;
@@ -51,7 +51,16 @@ export function AddCardDialog({
 
     startTransition(async () => {
       try {
-        await addCardAction({ deckId, ...draftToInput(draft) });
+        if (draft.type === "occlusion") {
+          await saveOcclusionCardsAction({
+            deckId,
+            front: draft.front,
+            back: draft.back,
+            boxes: draft.boxes,
+          });
+        } else {
+          await addCardAction({ deckId, ...draftToInput(draft) });
+        }
         setDraft(emptyDraft());
         onOpenChange(false);
       } catch (error) {
@@ -85,7 +94,11 @@ export function AddCardDialog({
 
           <DialogFooter className="mt-4">
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Adding…" : "Add card"}
+              {isPending
+                ? "Adding…"
+                : draft.type === "occlusion" && draft.boxes.length > 1
+                  ? `Add ${draft.boxes.length} cards`
+                  : "Add card"}
             </Button>
           </DialogFooter>
         </form>

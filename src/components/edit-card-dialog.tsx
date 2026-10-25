@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,8 +17,12 @@ import {
   validateDraft,
   type CardDraft,
 } from "@/components/card-fields";
-import type { CardRow } from "@/lib/store/types";
-import { updateCardAction } from "@/app/deck/actions";
+import type { CardRow, DbDoc } from "@/lib/store/types";
+import {
+  saveOcclusionCardsAction,
+  updateCardAction,
+} from "@/app/deck/actions";
+import { useStore } from "@/lib/store/use-store";
 
 interface EditCardDialogProps {
   card: CardRow;
@@ -50,6 +54,17 @@ export function EditCardDialog({
   const [error, setError] = useState<string | null>(null);
   const [prevCardId, setPrevCardId] = useState(card.id);
   const [prevOpen, setPrevOpen] = useState(open);
+  /** How many cards share this one's picture, when it is a picture card. */
+  const group = card.occlusion?.group;
+  const pictureSet = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        group === undefined
+          ? undefined
+          : db.cards.filter((c) => c.occlusion?.group === group).length,
+      [group],
+    ),
+  );
 
   // Reload the draft when a different card is opened, or the same one reopened
   // — otherwise edits abandoned last time would still be sitting in the form.
@@ -71,11 +86,24 @@ export function EditCardDialog({
 
     startTransition(async () => {
       try {
-        const updated = await updateCardAction({
-          cardId: card.id,
-          ...draftToInput(draft),
-        });
-        if (updated) onSaved?.(updated);
+        if (draft.type === "occlusion") {
+          const saved = await saveOcclusionCardsAction({
+            deckId: card.deckId,
+            fromCardId: card.id,
+            front: draft.front,
+            back: draft.back,
+            boxes: draft.boxes,
+          });
+          // This card's own box may have been the one removed.
+          const mine = saved.find((c) => c.id === card.id);
+          if (mine) onSaved?.(mine);
+        } else {
+          const updated = await updateCardAction({
+            cardId: card.id,
+            ...draftToInput(draft),
+          });
+          if (updated) onSaved?.(updated);
+        }
         onOpenChange(false);
       } catch (error) {
         // See `add-card-dialog.tsx`: the real message matters, because the
@@ -105,7 +133,12 @@ export function EditCardDialog({
           </DialogHeader>
 
           <div className="mt-4">
-            <CardFields draft={draft} onChange={setDraft} disabled={isPending} />
+            <CardFields
+              draft={draft}
+              onChange={setDraft}
+              disabled={isPending}
+              pictureSet={pictureSet}
+            />
             {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
           </div>
 

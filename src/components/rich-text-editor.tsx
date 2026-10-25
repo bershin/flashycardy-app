@@ -10,7 +10,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Superscript from "@tiptap/extension-superscript";
 import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
+import { StoredImage } from "@/components/stored-image";
 import { Plugin } from "@tiptap/pm/state";
 import {
   Bold,
@@ -523,7 +523,7 @@ export function RichTextEditor({
           }),
       }),
       Placeholder.configure({ placeholder: placeholder ?? "Write something…" }),
-      Image.configure({ inline: false, allowBase64: true }),
+      StoredImage.configure({ inline: false, allowBase64: true }),
       imagePastePlugin,
     ],
     content,

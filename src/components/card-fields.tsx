@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/rich-text-editor";
+import { OcclusionEditor } from "@/components/occlusion-editor";
+import { firstImageSrc, type OcclusionBox } from "@/lib/occlusion";
 import {
   NEW_CARD_SCHEDULE,
   type CardRow,
@@ -28,6 +30,8 @@ export type CardDraft = {
   back: string;
   options: string[];
   correctIndex: number;
+  /** A picture card's boxes, one card each. */
+  boxes: OcclusionBox[];
   schedule: ReviewSchedule;
 };
 
@@ -38,6 +42,7 @@ export function emptyDraft(): CardDraft {
     back: "",
     options: ["", "", "", ""],
     correctIndex: 0,
+    boxes: [],
     schedule: NEW_CARD_SCHEDULE,
   };
 }
@@ -49,6 +54,7 @@ export function draftFromCard(card: CardRow): CardDraft {
     back: card.back,
     options: card.quiz?.options ?? ["", "", "", ""],
     correctIndex: card.quiz?.correctIndex ?? 0,
+    boxes: card.occlusion?.boxes ?? [],
     schedule: card.schedule,
   };
 }
@@ -69,6 +75,17 @@ export function validateDraft(draft: CardDraft): string | null {
 
   if (draft.type === "basic" && isBlank(draft.back)) {
     return "The answer is required.";
+  }
+
+  if (draft.type === "occlusion") {
+    if (!firstImageSrc(draft.front)) {
+      return "Add the picture to the question first.";
+    }
+    if (draft.boxes.length === 0) {
+      return "Drag across at least one label on the picture to hide it.";
+    }
+    const blank = draft.boxes.findIndex((b) => !b.label.trim());
+    if (blank !== -1) return `Box ${blank + 1} needs a label.`;
   }
 
   if (draft.type === "quiz") {
@@ -113,15 +130,30 @@ export function draftToInput(draft: CardDraft) {
 const TYPES: Array<{ value: CardType; label: string; hint: string }> = [
   { value: "basic", label: "Basic", hint: "Question and answer, self-rated" },
   { value: "quiz", label: "Quiz", hint: "Multiple choice, graded instantly" },
+  {
+    value: "occlusion",
+    label: "Hide labels",
+    hint: "A picture, one card per label",
+  },
 ];
 
 interface CardFieldsProps {
   draft: CardDraft;
   onChange: (draft: CardDraft) => void;
   disabled?: boolean;
+  /**
+   * Set when editing one of a picture's cards. Those are edited as a set, so
+   * turning one of them into a basic card would leave a hole in the picture.
+   */
+  pictureSet?: number;
 }
 
-export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
+export function CardFields({
+  draft,
+  onChange,
+  disabled,
+  pictureSet,
+}: CardFieldsProps) {
   const set = (patch: Partial<CardDraft>) => onChange({ ...draft, ...patch });
 
   const setOption = (index: number, text: string) => {
@@ -144,9 +176,16 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
 
   return (
     <div className="grid gap-4">
+      {pictureSet !== undefined ? (
+        <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+          This card is one of {pictureSet} made from the same picture.{" "}
+          Changes
+          here apply to all of them; removing a box deletes that box&apos;s card.
+        </p>
+      ) : (
       <div className="grid gap-2">
         <Label>Card type</Label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {/* A generated card matches neither button, which reads as a bug
               rather than a state. Saying what it is — and what picking one of
               these would cost — is the difference. */}
@@ -177,16 +216,39 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
           ))}
         </div>
       </div>
+      )}
 
       <div className="grid gap-2">
-        <Label>Question</Label>
+        <Label>{draft.type === "occlusion" ? "Picture" : "Question"}</Label>
         <RichTextEditor
           content={draft.front}
           onChange={(front) => set({ front })}
-          placeholder="Question or term…"
+          placeholder={
+            draft.type === "occlusion"
+              ? "Paste or add the picture, and a question above it if you like…"
+              : "Question or term…"
+          }
           disabled={disabled}
         />
       </div>
+
+      {draft.type === "occlusion" && (
+        <div className="grid gap-2">
+          <Label>Labels to hide</Label>
+          {firstImageSrc(draft.front) ? (
+            <OcclusionEditor
+              src={firstImageSrc(draft.front)!}
+              boxes={draft.boxes}
+              onChange={(boxes) => set({ boxes })}
+              disabled={disabled}
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Add the picture above, then cover each label you want to learn.
+            </p>
+          )}
+        </div>
+      )}
 
       {draft.type === "quiz" && (
         <div className="grid gap-2">
@@ -252,7 +314,11 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
 
       <div className="grid gap-2">
         <Label>
-          {draft.type === "basic" ? "Answer" : "Explanation (optional)"}
+          {draft.type === "basic"
+            ? "Answer"
+            : draft.type === "occlusion"
+              ? "Notes (optional)"
+              : "Explanation (optional)"}
         </Label>
         <RichTextEditor
           content={draft.back}
@@ -260,7 +326,9 @@ export function CardFields({ draft, onChange, disabled }: CardFieldsProps) {
           placeholder={
             draft.type === "basic"
               ? "Answer or definition…"
-              : "Shown after you answer…"
+              : draft.type === "occlusion"
+                ? "Shown with every label's answer…"
+                : "Shown after you answer…"
           }
           disabled={disabled}
         />

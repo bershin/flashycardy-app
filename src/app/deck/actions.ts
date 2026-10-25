@@ -28,6 +28,7 @@ import {
   bulkInsertCards,
   archiveLearnedCards,
   deleteCards,
+  saveOcclusionGroup,
 } from "@/db/queries/cards";
 import { mathToText } from "@/lib/math";
 
@@ -44,7 +45,7 @@ const MAX_FIELD = 2_000_000;
 const TOO_LARGE =
   "This side of the card is too large. Try fewer or smaller images.";
 
-const cardTypeSchema = z.enum(["basic", "quiz", "generated"]);
+const cardTypeSchema = z.enum(["basic", "quiz", "generated", "occlusion"]);
 
 /**
  * A card that rolls its own numbers.
@@ -211,6 +212,63 @@ export async function updateCardAction(data: UpdateCardInput) {
     quiz: parsed.quiz,
     generated: parsed.generated,
   });
+}
+
+const occlusionSchema = z.object({
+  /** The deck new cards go in; ignored when editing, which keeps their deck. */
+  deckId: z.number(),
+  /** Any card of the set being edited, or absent for a new picture. */
+  fromCardId: z.number().optional(),
+  front: z
+    .string()
+    .max(MAX_FIELD, TOO_LARGE)
+    .refine((html) => /<img\b/i.test(html), "Add the picture to the question."),
+  back: z.string().max(MAX_FIELD, TOO_LARGE),
+  boxes: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(40),
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+        w: z.number().positive().max(1),
+        h: z.number().positive().max(1),
+        label: z.string().trim().min(1, "Every box needs a label.").max(200),
+      }),
+    )
+    .min(1, "Draw a box over at least one label.")
+    .max(200),
+});
+
+/**
+ * Save a picture's cards: one per box. Adding and editing are the same call —
+ * see `saveOcclusionGroup` for what editing keeps and what it replaces.
+ */
+export async function saveOcclusionCardsAction(
+  data: z.input<typeof occlusionSchema>,
+) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = occlusionSchema.parse(data);
+  if (parsed.fromCardId === undefined) {
+    const deck = await getDeckByIdForUser(parsed.deckId, userId);
+    if (!deck) throw new Error("Deck not found");
+  }
+
+  // Once, before any card is written: every card from this picture then refers
+  // to the same stored file.
+  const front = (await storeInlineImages(parsed.front)).html;
+  const back = (await storeInlineImages(parsed.back)).html;
+
+  const saved = await saveOcclusionGroup(userId, {
+    deckId: parsed.deckId,
+    fromCardId: parsed.fromCardId,
+    front,
+    back,
+    boxes: parsed.boxes,
+  });
+  if (!saved) throw new Error("Card not found");
+  return saved;
 }
 
 const deleteCardSchema = z.object({

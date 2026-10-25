@@ -40,6 +40,49 @@ import { EditCardDialog } from "@/components/edit-card-dialog";
 import { MoveCardDialog } from "@/components/move-card-dialog";
 import { VaryCardDialog } from "@/components/vary-card-dialog";
 import type { CardRow } from "@/lib/store/types";
+import { OcclusionPicture } from "@/components/occlusion-picture";
+import { occlusionLabel } from "@/lib/occlusion";
+
+/**
+ * The question side as the deck shows it. A picture card shows its picture with
+ * its own box opened and the rest covered, so a column of twenty cards from one
+ * diagram reads as twenty different questions rather than one picture repeated.
+ */
+function CardFront({ card }: { card: CardRow }) {
+  if (card.type === "occlusion" && card.occlusion) {
+    return (
+      <OcclusionPicture
+        className="min-w-0 text-base font-semibold"
+        html={card.front}
+        occlusion={card.occlusion}
+        state="answer"
+      />
+    );
+  }
+  return (
+    <CardHtml
+      className="rich-content min-w-0 overflow-hidden text-base font-semibold"
+      html={card.front}
+    />
+  );
+}
+
+/** The answer side: for a picture card, the label its box hides, then notes. */
+function CardBack({ card }: { card: CardRow }) {
+  return (
+    <>
+      {card.type === "occlusion" && (
+        <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+          {occlusionLabel(card)}
+        </p>
+      )}
+      <CardHtml
+        className="rich-content min-w-0 overflow-hidden text-muted-foreground"
+        html={card.back}
+      />
+    </>
+  );
+}
 import { cloneCardAction, deleteCardAction, updateCardAction } from "./actions";
 
 interface FlashCardProps {
@@ -137,10 +180,7 @@ export function FlashCard({
       >
         <Card className={selected ? "bg-primary/5" : undefined}>
           <CardHeader>
-            <CardHtml
-              className="rich-content min-w-0 overflow-hidden text-base font-semibold"
-              html={card.front}
-            />
+            <CardFront card={card} />
             <CardAction className="flex items-center gap-2">
               <CardHistory
                 compact
@@ -159,10 +199,7 @@ export function FlashCard({
             </CardAction>
           </CardHeader>
           <CardContent>
-            <CardHtml
-              className="rich-content min-w-0 overflow-hidden text-muted-foreground"
-              html={card.back}
-            />
+            <CardBack card={card} />
           </CardContent>
         </Card>
       </button>
@@ -173,10 +210,7 @@ export function FlashCard({
     <>
       <Card>
         <CardHeader>
-          <CardHtml
-            className="rich-content min-w-0 overflow-hidden text-base font-semibold"
-            html={card.front}
-          />
+          <CardFront card={card} />
           <CardAction className="flex items-center gap-2">
             {/* Beside the menu rather than in the corner: browsing a deck is
                 where a card's record is worth scanning down a column, and it
@@ -206,20 +240,26 @@ export function FlashCard({
                   <Pencil />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleClone} disabled={isPending}>
-                  <Copy />
-                  Clone
-                </DropdownMenuItem>
+                {/* A picture card is one of a set; a lone copy of it would
+                    share the set's boxes but belong to none of them. */}
+                {card.type !== "occlusion" && (
+                  <DropdownMenuItem onClick={handleClone} disabled={isPending}>
+                    <Copy />
+                    Clone
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => setMoveOpen(true)}>
                   <FolderInput />
                   Move to deck…
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setVaryOpen(true)}>
-                  <Wand2 />
-                  {card.type === "generated"
-                    ? "Rebuild the template…"
-                    : "Make a varying version…"}
-                </DropdownMenuItem>
+                {card.type !== "occlusion" && (
+                  <DropdownMenuItem onClick={() => setVaryOpen(true)}>
+                    <Wand2 />
+                    {card.type === "generated"
+                      ? "Rebuild the template…"
+                      : "Make a varying version…"}
+                  </DropdownMenuItem>
+                )}
                 {card.type === "generated" && (
                   <DropdownMenuItem onClick={handleRevert} disabled={isPending}>
                     <Undo2 />
@@ -259,10 +299,7 @@ export function FlashCard({
               ))}
             </ul>
           ) : (
-            <CardHtml
-              className="rich-content text-muted-foreground"
-              html={card.back}
-            />
+            <CardBack card={card} />
           )}
           {card.type === "quiz" && (
             <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">

@@ -63,6 +63,8 @@ import { useCardTimer } from "./use-card-timer";
 import { rateCardAction, markDeckStudiedAction } from "./actions";
 import { Trash2 } from "lucide-react";
 import { mathToText } from "@/lib/math";
+import { mixSiblings, occlusionLabel } from "@/lib/occlusion";
+import { OcclusionPicture } from "@/components/occlusion-picture";
 
 /** Study needs the whole card now, since behaviour branches on its type. */
 type StudyCard = CardRow;
@@ -130,7 +132,11 @@ export function StudySession({
   initialRound = 1,
   onAnswerShowing,
 }: StudySessionProps) {
-  const [studyCards, setStudyCards] = useState(initialOrder ?? cards);
+  // A picture's cards are mixed among themselves, so a diagram is learned as
+  // parts rather than as an order. A resumed session keeps the order it had.
+  const [studyCards, setStudyCards] = useState(
+    () => initialOrder ?? mixSiblings(cards),
+  );
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [revealed, setRevealed] = useState(false);
   /** What the clock read when the answer went up. Only meaningful while revealed. */
@@ -401,7 +407,7 @@ export function StudySession({
 
   const restart = useCallback(() => {
     setDeal((n) => n + 1);
-    setStudyCards(cards);
+    setStudyCards(mixSiblings(cards));
     setCurrentIndex(0);
     setRevealed(false);
     setFinished(false);
@@ -716,7 +722,9 @@ export function StudySession({
                       <X className="size-3.5 shrink-0 text-red-500" />
                     )}
                     <span className="min-w-0 flex-1 truncate">
-                      {plainText(card.front) || "Untitled card"}
+                      {[plainText(card.front), occlusionLabel(card)]
+                        .filter(Boolean)
+                        .join(" · ") || "Untitled card"}
                     </span>
                     {ms === undefined ? (
                       <span
@@ -921,6 +929,20 @@ export function StudySession({
                 <p className="w-full text-left text-lg leading-relaxed md:text-xl">
                   {rolled.question}
                 </p>
+              ) : current.type === "occlusion" && current.occlusion ? (
+                <>
+                  <OcclusionPicture
+                    className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
+                    html={current.front}
+                    occlusion={current.occlusion}
+                    state={revealed ? "answer" : "question"}
+                  />
+                  {!revealed && (
+                    <p className="mt-2 text-center text-base font-medium">
+                      What is under the purple box?
+                    </p>
+                  )}
+                </>
               ) : (
                 <CardHtml
                   className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
@@ -955,7 +977,8 @@ export function StudySession({
             onRevealed={reveal}
           />
         )}
-        {current.type === "basic" && revealed && (
+        {(current.type === "basic" || current.type === "occlusion") &&
+          revealed && (
           <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
             <CardContent
               className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3"
@@ -966,6 +989,11 @@ export function StudySession({
                 <p className="mb-1 text-center text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
                   Answer
                 </p>
+                {current.type === "occlusion" && (
+                  <p className="text-center text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                    {occlusionLabel(current)}
+                  </p>
+                )}
                 <CardHtml
                   className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
                   html={current.back}

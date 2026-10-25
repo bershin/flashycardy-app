@@ -1,4 +1,5 @@
 import type { GeneratedPayload } from "@/lib/generated-card";
+import type { OcclusionPayload } from "@/lib/occlusion";
 
 /**
  * Shape of the local database.
@@ -32,8 +33,11 @@ export type DeckRow = {
  *              numbers are rolled fresh every time it appears, so the answer
  *              has to be worked out rather than remembered. Graded like a quiz,
  *              and equally offline: the template is stored, not fetched.
+ *  - `occlusion` — one label on a picture, covered. A picture with twenty
+ *              labels makes twenty of these; see `lib/occlusion.ts`. Self-rated
+ *              like a basic card.
  */
-export const CARD_TYPES = ["basic", "quiz", "generated"] as const;
+export const CARD_TYPES = ["basic", "quiz", "generated", "occlusion"] as const;
 
 export type CardType = (typeof CARD_TYPES)[number];
 
@@ -140,6 +144,8 @@ export type CardRow = {
   quiz?: QuizPayload;
   /** Present on `generated` cards — the template the numbers are rolled from. */
   generated?: GeneratedPayload;
+  /** Present on `occlusion` cards — the picture's boxes and which is this one's. */
+  occlusion?: OcclusionPayload;
   schedule: ReviewSchedule;
   nextReviewAt: Date;
   consecutiveCorrect: number;
