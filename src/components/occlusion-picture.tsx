@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CardHtml } from "@/components/card-html";
+import type { CardRow } from "@/lib/store/types";
 import { cachedUrl, resolveImage } from "@/lib/image-urls";
 import { IMAGE_PREFIX } from "@/lib/images";
 import {
@@ -98,7 +99,7 @@ export function OcclusionPicture({
           </div>
         )}
         {url &&
-          occlusion.boxes.map((box) => {
+          occlusion.boxes.map((box, index) => {
             const mine = box.id === target?.id;
             if (mine && state === "answer") {
               return (
@@ -116,14 +117,79 @@ export function OcclusionPicture({
                 className={`absolute flex items-center justify-center rounded-sm text-xs font-bold ${
                   mine
                     ? "bg-violet-600 text-white shadow-[0_0_0_3px_rgb(124_58_237/0.35)]"
-                    : "bg-amber-300 dark:bg-amber-400"
+                    : "bg-amber-300 text-amber-950 dark:bg-amber-400"
                 }`}
               >
-                {mine ? "?" : ""}
+                {/* Numbered as on the editor and the deck's tile, so "box 7"
+                    means the same box wherever it is mentioned. */}
+                {mine ? "?" : index + 1}
               </span>
             );
           })}
       </div>
+    </div>
+  );
+}
+
+/** How a label is going, from its card's record. */
+export function labelStatus(card: CardRow | undefined): "new" | "missed" | "known" {
+  if (!card) return "new";
+  if (card.timesMissed > 0) return "missed";
+  if (card.consecutiveCorrect > 0) return "known";
+  return "new";
+}
+
+const PIP_TONE = {
+  new: "bg-muted text-muted-foreground",
+  missed: "bg-red-500/15 text-red-600 dark:text-red-400",
+  known: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+};
+
+/**
+ * One chip per label on a picture, in box order, coloured by how each is
+ * going: the whole picture's progress at a glance, where twenty separate cards
+ * would each say a twentieth of it.
+ */
+export function PicturePips({
+  boxes,
+  cards,
+  current,
+  onPick,
+}: {
+  boxes: OcclusionBox[];
+  /** The picture's cards; a box with no card here reads as new. */
+  cards: readonly CardRow[];
+  /** The box to ring, if any. */
+  current?: string;
+  onPick?: (boxId: string) => void;
+}) {
+  const byBox = new Map(cards.map((c) => [c.occlusion?.boxId, c]));
+  return (
+    <div className="flex flex-wrap gap-1">
+      {boxes.map((box, index) => {
+        const card = byBox.get(box.id);
+        const tone = PIP_TONE[labelStatus(card)];
+        const ring = box.id === current ? "ring-2 ring-violet-500" : "";
+        const className = `inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1 font-mono text-[0.7rem] font-semibold tabular-nums ${tone} ${ring}`;
+        return onPick ? (
+          <button
+            key={box.id}
+            type="button"
+            title={`Box ${index + 1}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPick(box.id);
+            }}
+            className={`${className} cursor-pointer hover:ring-2 hover:ring-violet-300`}
+          >
+            {index + 1}
+          </button>
+        ) : (
+          <span key={box.id} className={className}>
+            {index + 1}
+          </span>
+        );
+      })}
     </div>
   );
 }

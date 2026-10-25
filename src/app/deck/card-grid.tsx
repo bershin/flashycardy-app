@@ -39,6 +39,36 @@ import { useRouter } from "next/navigation";
 import { VaryDeckDialog } from "@/components/vary-deck-dialog";
 import type { CardRow } from "@/lib/store/types";
 import { FlashCard } from "./flash-card";
+import { PictureCard } from "./picture-card";
+
+type GridItem =
+  | { kind: "card"; card: CardRow }
+  | { kind: "picture"; group: string; cards: CardRow[] };
+
+/**
+ * The cards as the grid lays them out: a picture's labels gathered into one
+ * tile, placed where the first of them falls, and every other card on its own.
+ */
+function gridItems(cards: readonly CardRow[]): GridItem[] {
+  const items: GridItem[] = [];
+  const pictures = new Map<string, CardRow[]>();
+  for (const card of cards) {
+    const group = card.occlusion?.group;
+    if (!group) {
+      items.push({ kind: "card", card });
+      continue;
+    }
+    const set = pictures.get(group);
+    if (set) {
+      set.push(card);
+      continue;
+    }
+    const fresh = [card];
+    pictures.set(group, fresh);
+    items.push({ kind: "picture", group, cards: fresh });
+  }
+  return items;
+}
 
 interface CardGridProps {
   cards: CardRow[];
@@ -273,6 +303,19 @@ export function CardGrid({
     });
   }, []);
 
+  /** A picture is picked as a whole: all of its labels, or none of them. */
+  const toggleMany = useCallback((ids: number[]) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const all = ids.every((id) => next.has(id));
+      for (const id of ids) {
+        if (all) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
   function exitSelection() {
     onSelectingChange(false);
     setSelected(new Set());
@@ -485,15 +528,25 @@ export function CardGrid({
       )}
 
       <div className="card-list grid gap-4 sm:grid-cols-2">
-        {visibleCards.map((card) => (
-          <FlashCard
-            key={card.id}
-            card={card}
-            selecting={selecting}
-            selected={selected.has(card.id)}
-            onToggleSelected={toggle}
-          />
-        ))}
+        {gridItems(visibleCards).map((item) =>
+          item.kind === "picture" ? (
+            <PictureCard
+              key={item.group}
+              cards={item.cards}
+              selecting={selecting}
+              selected={item.cards.every((c) => selected.has(c.id))}
+              onToggleSelected={toggleMany}
+            />
+          ) : (
+            <FlashCard
+              key={item.card.id}
+              card={item.card}
+              selecting={selecting}
+              selected={selected.has(item.card.id)}
+              onToggleSelected={toggle}
+            />
+          ),
+        )}
       </div>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>

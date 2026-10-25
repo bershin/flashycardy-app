@@ -64,7 +64,12 @@ import { rateCardAction, markDeckStudiedAction } from "./actions";
 import { Trash2 } from "lucide-react";
 import { mathToText } from "@/lib/math";
 import { mixSiblings, occlusionLabel } from "@/lib/occlusion";
-import { OcclusionPicture } from "@/components/occlusion-picture";
+import {
+  OcclusionPicture,
+  PicturePips,
+} from "@/components/occlusion-picture";
+
+const NO_CARDS: CardRow[] = [];
 
 /** Study needs the whole card now, since behaviour branches on its type. */
 type StudyCard = CardRow;
@@ -243,6 +248,20 @@ export function StudySession({
         };
       },
       [current],
+    ),
+  );
+  /**
+   * Every card from the current card's picture, read live so the chips under
+   * it change colour as each label is answered.
+   */
+  const pictureGroup = current?.occlusion?.group;
+  const pictureCards = useStore(
+    useCallback(
+      (db: DbDoc) =>
+        pictureGroup
+          ? db.cards.filter((c) => c.occlusion?.group === pictureGroup)
+          : NO_CARDS,
+      [pictureGroup],
     ),
   );
   /**
@@ -942,6 +961,13 @@ export function StudySession({
                       What is under the purple box?
                     </p>
                   )}
+                  <div className="mt-3 flex justify-center">
+                    <PicturePips
+                      boxes={current.occlusion.boxes}
+                      cards={pictureCards}
+                      current={current.occlusion.boxId}
+                    />
+                  </div>
                 </>
               ) : (
                 <CardHtml
