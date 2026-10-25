@@ -29,6 +29,7 @@ import {
   archiveLearnedCards,
   deleteCards,
   saveOcclusionGroup,
+  saveQuestionParts,
 } from "@/db/queries/cards";
 import { mathToText } from "@/lib/math";
 
@@ -45,7 +46,13 @@ const MAX_FIELD = 2_000_000;
 const TOO_LARGE =
   "This side of the card is too large. Try fewer or smaller images.";
 
-const cardTypeSchema = z.enum(["basic", "quiz", "generated", "occlusion"]);
+const cardTypeSchema = z.enum([
+  "basic",
+  "quiz",
+  "generated",
+  "occlusion",
+  "parts",
+]);
 
 /**
  * A card that rolls its own numbers.
@@ -214,6 +221,16 @@ export async function updateCardAction(data: UpdateCardInput) {
   });
 }
 
+/**
+ * Empty when there is nothing in it. The editor hands back `<p></p>` for an
+ * empty box, which would read as a change from the empty string a set was
+ * saved with — and mark every card of the set as new on any edit.
+ */
+function blankAsEmpty(html: string): string {
+  if (/<(?:img|video|audio)\b/i.test(html)) return html;
+  return html.replace(/<[^>]*>/g, "").trim() ? html : "";
+}
+
 const occlusionSchema = z.object({
   /** The deck new cards go in; ignored when editing, which keeps their deck. */
   deckId: z.number(),
@@ -264,8 +281,58 @@ export async function saveOcclusionCardsAction(
     deckId: parsed.deckId,
     fromCardId: parsed.fromCardId,
     front,
-    back,
+    back: blankAsEmpty(back),
     boxes: parsed.boxes,
+  });
+  if (!saved) throw new Error("Card not found");
+  return saved;
+}
+
+const partsSchema = z.object({
+  /** The deck new cards go in; ignored when editing, which keeps their deck. */
+  deckId: z.number(),
+  /** Any card of the question being edited, or one being split into parts. */
+  fromCardId: z.number().optional(),
+  /** Instructions above the parts; may be empty. */
+  front: z.string().max(MAX_FIELD, TOO_LARGE),
+  back: z.string().max(MAX_FIELD, TOO_LARGE),
+  items: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(40),
+        question: z.string().trim().min(1, "Every part needs a question.").max(500),
+        answer: z.string().trim().min(1, "Every part needs an answer.").max(500),
+      }),
+    )
+    .min(1, "Add at least one part.")
+    .max(52),
+});
+
+/**
+ * Save a lettered question's cards: one per part. Adding, editing and
+ * splitting an ordinary card are the same call — see `saveQuestionParts`.
+ */
+export async function saveQuestionPartsAction(
+  data: z.input<typeof partsSchema>,
+) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = partsSchema.parse(data);
+  if (parsed.fromCardId === undefined) {
+    const deck = await getDeckByIdForUser(parsed.deckId, userId);
+    if (!deck) throw new Error("Deck not found");
+  }
+
+  const front = (await storeInlineImages(parsed.front)).html;
+  const back = (await storeInlineImages(parsed.back)).html;
+
+  const saved = await saveQuestionParts(userId, {
+    deckId: parsed.deckId,
+    fromCardId: parsed.fromCardId,
+    front: blankAsEmpty(front),
+    back: blankAsEmpty(back),
+    items: parsed.items,
   });
   if (!saved) throw new Error("Card not found");
   return saved;

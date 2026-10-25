@@ -1,51 +1,76 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import {
-  BookOpen,
-  Check,
-  Ellipsis,
-  FolderInput,
-  Pencil,
-  Trash2,
-} from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { CardHtml } from "@/components/card-html";
+import { useState } from "react";
 import { CardHistory } from "@/components/card-history";
-import { Card, CardAction, CardContent, CardHeader } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { EditCardDialog } from "@/components/edit-card-dialog";
-import { MoveCardDialog } from "@/components/move-card-dialog";
-import {
-  PicturePips,
+  SetPips,
+  boxSlots,
   boxStyle,
   labelStatus,
   usePictureUrl,
 } from "@/components/occlusion-picture";
 import { firstImageSrc, withoutFirstImage } from "@/lib/occlusion";
-import { setStudyPicks } from "@/lib/study-picks";
 import type { CardRow } from "@/lib/store/types";
-import { deleteCardsAction } from "./actions";
+import { CardSetTile } from "./card-set-tile";
 
 const BOX_TONE = {
   new: "bg-amber-300 text-amber-950 dark:bg-amber-400",
   missed: "bg-red-300 text-red-950 dark:bg-red-400",
   known: "bg-emerald-300 text-emerald-950 dark:bg-emerald-400",
 };
+
+/** What the chip and box colours mean, said once under them. */
+export function StatusKey() {
+  return (
+    <p className="flex flex-wrap gap-x-3 gap-y-1 text-[0.7rem] text-muted-foreground">
+      <span className="inline-flex items-center gap-1">
+        <span className="size-2.5 rounded-sm bg-amber-300" /> new
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span className="size-2.5 rounded-sm bg-emerald-300" /> going well
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span className="size-2.5 rounded-sm bg-red-300" /> missed
+      </span>
+    </p>
+  );
+}
+
+/** One card's record, shown when it is peeked at on a tile. */
+export function Peek({
+  title,
+  answer,
+  card,
+  onClose,
+}: {
+  title: string;
+  answer: string;
+  card: CardRow | undefined;
+  onClose: () => void;
+}) {
+  return (
+    <div className="grid gap-1.5 rounded-lg bg-muted/60 p-3">
+      <p className="text-xs text-muted-foreground">{title}</p>
+      <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+        {answer}
+      </p>
+      {card && (
+        <CardHistory
+          compact
+          timesMissed={card.timesMissed}
+          streak={card.consecutiveCorrect}
+        />
+      )}
+      <button
+        type="button"
+        onClick={onClose}
+        className="justify-self-start text-xs text-muted-foreground underline-offset-2 hover:underline"
+      >
+        Hide it again
+      </button>
+    </div>
+  );
+}
 
 /**
  * A picture's labels as one tile in the deck.
@@ -54,7 +79,7 @@ const BOX_TONE = {
  * tiles of the same skeleton is a picture repeated, not a deck you can read.
  * Here the picture appears once, its boxes numbered and coloured by how each
  * label is going. Click a box or its number to see what is under it and that
- * label's record; everything in the menu acts on the whole picture.
+ * label's record.
  */
 export function PictureCard({
   cards,
@@ -68,36 +93,13 @@ export function PictureCard({
   selected?: boolean;
   onToggleSelected?: (ids: number[]) => void;
 }) {
-  const router = useRouter();
   const first = cards[0];
   const boxes = first.occlusion!.boxes;
-  const ids = cards.map((c) => c.id);
   const url = usePictureUrl(firstImageSrc(first.front));
   const words = withoutFirstImage(first.front);
   const byBox = new Map(cards.map((c) => [c.occlusion!.boxId, c]));
-
   const [peek, setPeek] = useState<string | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [moveOpen, setMoveOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
-
-  const peeked = peek ? byBox.get(peek) : undefined;
   const peekedIndex = boxes.findIndex((b) => b.id === peek);
-  const missed = cards.filter((c) => labelStatus(c) === "missed").length;
-  const known = cards.filter((c) => labelStatus(c) === "known").length;
-
-  function study() {
-    setStudyPicks(first.deckId, ids);
-    router.push(`/deck/study/?id=${first.deckId}`);
-  }
-
-  function handleDelete() {
-    startTransition(async () => {
-      await deleteCardsAction({ cardIds: ids });
-      setDeleteOpen(false);
-    });
-  }
 
   const picture = (
     <div className="relative mx-auto w-fit max-w-full select-none">
@@ -141,180 +143,43 @@ export function PictureCard({
     </div>
   );
 
-  const summary = (
-    <p className="text-xs text-muted-foreground">
-      {cards.length} label{cards.length === 1 ? "" : "s"}
-      {known > 0 && <> · {known} going well</>}
-      {missed > 0 && <> · {missed} missed</>}
-    </p>
-  );
-
-  if (selecting) {
-    return (
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={selected}
-        onClick={() => onToggleSelected?.(ids)}
-        className={`rounded-xl text-left transition-colors sm:col-span-2 ${
-          selected ? "ring-2 ring-primary" : "ring-1 ring-transparent"
-        }`}
-      >
-        <Card className={selected ? "bg-primary/5" : undefined}>
-          <CardHeader>
-            {summary}
-            <CardAction>
-              <span
-                className={`flex size-5 items-center justify-center rounded border ${
-                  selected
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-input"
-                }`}
-              >
-                {selected && <Check className="size-3.5" />}
-              </span>
-            </CardAction>
-          </CardHeader>
-          <CardContent>{picture}</CardContent>
-        </Card>
-      </button>
-    );
-  }
-
   return (
-    <>
-      {/* Two columns wide: a diagram squeezed into half a row is too small to
-          tell one numbered box from the next. */}
-      <Card className="sm:col-span-2">
-        <CardHeader>
-          <div className="grid gap-1">
-            {words && (
-              <CardHtml
-                className="rich-content text-base font-semibold"
-                html={words}
-              />
-            )}
-            {summary}
-          </div>
-          <CardAction>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className={buttonVariants({ variant: "ghost", size: "icon-xs" })}
-              >
-                <Ellipsis className="size-3.5" />
-                <span className="sr-only">Picture actions</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-52">
-                <DropdownMenuItem onClick={study}>
-                  <BookOpen />
-                  Study this picture
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setEditOpen(true)}>
-                  <Pencil />
-                  Edit picture and labels
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setMoveOpen(true)}>
-                  <FolderInput />
-                  Move to deck…
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2 />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-[minmax(0,1fr)_16rem]">
+    <CardSetTile
+      cards={cards}
+      heading={words || undefined}
+      noun="label"
+      selecting={selecting}
+      selected={selected}
+      onToggleSelected={onToggleSelected}
+    >
+      {selecting ? (
+        picture
+      ) : (
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_16rem]">
           {picture}
           <div className="grid content-start gap-3">
-            {peeked ? (
-              <div className="grid gap-1.5 rounded-lg bg-muted/60 p-3">
-                <p className="text-xs text-muted-foreground">
-                  Box {peekedIndex + 1}
-                </p>
-                <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
-                  {boxes[peekedIndex]?.label}
-                </p>
-                <CardHistory
-                  compact
-                  timesMissed={peeked.timesMissed}
-                  streak={peeked.consecutiveCorrect}
-                />
-                <button
-                  type="button"
-                  onClick={() => setPeek(null)}
-                  className="justify-self-start text-xs text-muted-foreground underline-offset-2 hover:underline"
-                >
-                  Cover it again
-                </button>
-              </div>
+            {peek && peekedIndex !== -1 ? (
+              <Peek
+                title={`Box ${peekedIndex + 1}`}
+                answer={boxes[peekedIndex].label}
+                card={byBox.get(peek)}
+                onClose={() => setPeek(null)}
+              />
             ) : (
               <p className="text-xs text-muted-foreground">
                 Click a box or its number to see what&apos;s under it.
               </p>
             )}
-            <PicturePips
-              boxes={boxes}
+            <SetPips
+              slots={boxSlots(boxes)}
               cards={cards}
               current={peek ?? undefined}
               onPick={setPeek}
             />
-            <p className="flex flex-wrap gap-x-3 gap-y-1 text-[0.7rem] text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <span className="size-2.5 rounded-sm bg-amber-300" /> new
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="size-2.5 rounded-sm bg-emerald-300" /> going
-                well
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="size-2.5 rounded-sm bg-red-300" /> missed
-              </span>
-            </p>
+            <StatusKey />
           </div>
-        </CardContent>
-      </Card>
-
-      <EditCardDialog card={first} open={editOpen} onOpenChange={setEditOpen} />
-
-      <MoveCardDialog
-        cardIds={ids}
-        currentDeckId={first.deckId}
-        open={moveOpen}
-        onOpenChange={setMoveOpen}
-      />
-
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete this picture?</DialogTitle>
-            <DialogDescription>
-              This deletes the picture and all {cards.length} of its labels,
-              with their progress. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isPending}
-            >
-              {isPending ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+      )}
+    </CardSetTile>
   );
 }

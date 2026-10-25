@@ -1,5 +1,6 @@
 import type { GeneratedPayload } from "@/lib/generated-card";
 import type { OcclusionPayload } from "@/lib/occlusion";
+import type { PartsPayload } from "@/lib/parts";
 
 /**
  * Shape of the local database.
@@ -36,8 +37,16 @@ export type DeckRow = {
  *  - `occlusion` — one label on a picture, covered. A picture with twenty
  *              labels makes twenty of these; see `lib/occlusion.ts`. Self-rated
  *              like a basic card.
+ *  - `parts` — one part of a lettered question, a) b) c). A question with
+ *              four parts makes four of these; see `lib/parts.ts`. Self-rated.
  */
-export const CARD_TYPES = ["basic", "quiz", "generated", "occlusion"] as const;
+export const CARD_TYPES = [
+  "basic",
+  "quiz",
+  "generated",
+  "occlusion",
+  "parts",
+] as const;
 
 export type CardType = (typeof CARD_TYPES)[number];
 
@@ -146,6 +155,8 @@ export type CardRow = {
   generated?: GeneratedPayload;
   /** Present on `occlusion` cards — the picture's boxes and which is this one's. */
   occlusion?: OcclusionPayload;
+  /** Present on `parts` cards — the question's parts and which is this one's. */
+  parts?: PartsPayload;
   schedule: ReviewSchedule;
   nextReviewAt: Date;
   consecutiveCorrect: number;

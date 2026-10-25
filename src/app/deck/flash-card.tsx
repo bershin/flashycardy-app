@@ -9,6 +9,7 @@ import {
   ListChecks,
   Dices,
   Pencil,
+  Rows3,
   Undo2,
   Trash2,
   Wand2,
@@ -83,7 +84,23 @@ function CardBack({ card }: { card: CardRow }) {
     </>
   );
 }
-import { cloneCardAction, deleteCardAction, updateCardAction } from "./actions";
+import {
+  cloneCardAction,
+  deleteCardAction,
+  saveQuestionPartsAction,
+  updateCardAction,
+} from "./actions";
+import { newPartId, parseParts } from "@/lib/parts";
+import { mathToText } from "@/lib/math";
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Lines of plain text back into paragraphs. */
+function paragraphs(lines: string[]): string {
+  return lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+}
 
 interface FlashCardProps {
   card: CardRow;
@@ -147,6 +164,38 @@ export function FlashCard({
           front: card.front,
           back: card.back,
           schedule: card.schedule,
+        });
+      } catch {
+        // left as it was; the menu can be tried again
+      }
+    });
+  }
+
+  /**
+   * The card read as lettered parts, or null. Worked out once per card rather
+   * than per render of the menu: the menu is closed far more often than open.
+   */
+  const split =
+    card.type === "basic"
+      ? parseParts(mathToText(card.front), mathToText(card.back))
+      : null;
+
+  /**
+   * Turn a card written as a) b) c) into one card per part.
+   *
+   * This card becomes part a and keeps its history; the others start new.
+   * Lines that were not parts stay as the instructions and the notes.
+   */
+  function handleSplit() {
+    if (!split) return;
+    startTransition(async () => {
+      try {
+        await saveQuestionPartsAction({
+          deckId: card.deckId,
+          fromCardId: card.id,
+          front: paragraphs(split.stem),
+          back: paragraphs(split.notes),
+          items: split.items.map((p) => ({ ...p, id: newPartId() })),
         });
       } catch {
         // left as it was; the menu can be tried again
@@ -258,6 +307,12 @@ export function FlashCard({
                     {card.type === "generated"
                       ? "Rebuild the template…"
                       : "Make a varying version…"}
+                  </DropdownMenuItem>
+                )}
+                {split && (
+                  <DropdownMenuItem onClick={handleSplit} disabled={isPending}>
+                    <Rows3 />
+                    Split into {split.items.length} parts
                   </DropdownMenuItem>
                 )}
                 {card.type === "generated" && (

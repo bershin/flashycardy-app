@@ -63,11 +63,14 @@ import { useCardTimer } from "./use-card-timer";
 import { rateCardAction, markDeckStudiedAction } from "./actions";
 import { Trash2 } from "lucide-react";
 import { mathToText } from "@/lib/math";
-import { mixSiblings, occlusionLabel } from "@/lib/occlusion";
+import { mixSiblings, occlusionLabel, setGroup } from "@/lib/occlusion";
 import {
   OcclusionPicture,
-  PicturePips,
+  SetPips,
+  boxSlots,
 } from "@/components/occlusion-picture";
+import { PartsQuestion } from "@/components/parts-question";
+import { ownPart, partLetter, partLine } from "@/lib/parts";
 
 const NO_CARDS: CardRow[] = [];
 
@@ -115,6 +118,22 @@ function plainText(html: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** A part's question and its answer, as the answer side shows it. */
+function PartAnswer({ parts }: { parts: NonNullable<CardRow["parts"]> }) {
+  const own = ownPart(parts);
+  if (!own) return null;
+  return (
+    <p className="text-center text-2xl">
+      <span className="text-muted-foreground">
+        {own.letter}) {own.question} ={" "}
+      </span>
+      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+        {own.answer}
+      </span>
+    </p>
+  );
 }
 
 function shuffleArray<T>(arr: T[]): T[] {
@@ -251,17 +270,17 @@ export function StudySession({
     ),
   );
   /**
-   * Every card from the current card's picture, read live so the chips under
-   * it change colour as each label is answered.
+   * Every card from the current card's picture or question, read live so the
+   * chips under it change colour as each one is answered.
    */
-  const pictureGroup = current?.occlusion?.group;
-  const pictureCards = useStore(
+  const currentSet = current ? setGroup(current) : undefined;
+  const setCards = useStore(
     useCallback(
       (db: DbDoc) =>
-        pictureGroup
-          ? db.cards.filter((c) => c.occlusion?.group === pictureGroup)
+        currentSet
+          ? db.cards.filter((c) => setGroup(c) === currentSet)
           : NO_CARDS,
-      [pictureGroup],
+      [currentSet],
     ),
   );
   /**
@@ -741,7 +760,7 @@ export function StudySession({
                       <X className="size-3.5 shrink-0 text-red-500" />
                     )}
                     <span className="min-w-0 flex-1 truncate">
-                      {[plainText(card.front), occlusionLabel(card)]
+                      {[plainText(card.front), occlusionLabel(card), partLine(card)]
                         .filter(Boolean)
                         .join(" · ") || "Untitled card"}
                     </span>
@@ -948,6 +967,25 @@ export function StudySession({
                 <p className="w-full text-left text-lg leading-relaxed md:text-xl">
                   {rolled.question}
                 </p>
+              ) : current.type === "parts" && current.parts ? (
+                <>
+                  <PartsQuestion
+                    className="w-full text-left text-lg leading-relaxed md:text-xl"
+                    html={current.front}
+                    parts={current.parts}
+                    state={revealed ? "answer" : "question"}
+                  />
+                  <div className="mt-3 flex justify-center">
+                    <SetPips
+                      slots={current.parts.items.map((p, i) => ({
+                        id: p.id,
+                        label: partLetter(i),
+                      }))}
+                      cards={setCards}
+                      current={current.parts.partId}
+                    />
+                  </div>
+                </>
               ) : current.type === "occlusion" && current.occlusion ? (
                 <>
                   <OcclusionPicture
@@ -962,9 +1000,9 @@ export function StudySession({
                     </p>
                   )}
                   <div className="mt-3 flex justify-center">
-                    <PicturePips
-                      boxes={current.occlusion.boxes}
-                      cards={pictureCards}
+                    <SetPips
+                      slots={boxSlots(current.occlusion.boxes)}
+                      cards={setCards}
                       current={current.occlusion.boxId}
                     />
                   </div>
@@ -1003,7 +1041,9 @@ export function StudySession({
             onRevealed={reveal}
           />
         )}
-        {(current.type === "basic" || current.type === "occlusion") &&
+        {(current.type === "basic" ||
+          current.type === "occlusion" ||
+          current.type === "parts") &&
           revealed && (
           <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
             <CardContent
@@ -1015,6 +1055,9 @@ export function StudySession({
                 <p className="mb-1 text-center text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
                   Answer
                 </p>
+                {current.type === "parts" && current.parts && (
+                  <PartAnswer parts={current.parts} />
+                )}
                 {current.type === "occlusion" && (
                   <p className="text-center text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                     {occlusionLabel(current)}

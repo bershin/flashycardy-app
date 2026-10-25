@@ -41,10 +41,13 @@ import { DeckCard } from "./deck-card";
 import { moveDeckAction, reorderDecksAction } from "./actions";
 import { mathToText } from "@/lib/math";
 import { occlusionLabel, type OcclusionPayload } from "@/lib/occlusion";
+import { partLine, type PartsPayload } from "@/lib/parts";
 
 /** The answer side as text. A picture card's answer is its box's label. */
 function backText(card: CardData): string {
-  return [occlusionLabel(card), stripHtml(card.back)].filter(Boolean).join(" ");
+  return [occlusionLabel(card), partLine(card), stripHtml(card.back)]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /** Droppable id prefix for the "nest inside this deck" zones. */
@@ -82,6 +85,7 @@ interface CardData {
   front: string;
   back: string;
   occlusion?: OcclusionPayload;
+  parts?: PartsPayload;
 }
 
 interface DeckWithCards {

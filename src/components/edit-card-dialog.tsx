@@ -14,14 +14,17 @@ import {
   CardFields,
   draftFromCard,
   draftToInput,
+  filledParts,
   validateDraft,
   type CardDraft,
 } from "@/components/card-fields";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import {
   saveOcclusionCardsAction,
+  saveQuestionPartsAction,
   updateCardAction,
 } from "@/app/deck/actions";
+import { setGroup } from "@/lib/occlusion";
 import { useStore } from "@/lib/store/use-store";
 
 interface EditCardDialogProps {
@@ -54,17 +57,21 @@ export function EditCardDialog({
   const [error, setError] = useState<string | null>(null);
   const [prevCardId, setPrevCardId] = useState(card.id);
   const [prevOpen, setPrevOpen] = useState(open);
-  /** How many cards share this one's picture, when it is a picture card. */
-  const group = card.occlusion?.group;
-  const pictureSet = useStore(
+  /** How many cards share this one's picture or question, if it has one. */
+  const group = setGroup(card);
+  const setSize = useStore(
     useCallback(
       (db: DbDoc) =>
         group === undefined
           ? undefined
-          : db.cards.filter((c) => c.occlusion?.group === group).length,
+          : db.cards.filter((c) => setGroup(c) === group).length,
       [group],
     ),
   );
+  const cardSet =
+    setSize === undefined
+      ? undefined
+      : { kind: card.parts ? ("parts" as const) : ("occlusion" as const), size: setSize };
 
   // Reload the draft when a different card is opened, or the same one reopened
   // — otherwise edits abandoned last time would still be sitting in the form.
@@ -95,6 +102,16 @@ export function EditCardDialog({
             boxes: draft.boxes,
           });
           // This card's own box may have been the one removed.
+          const mine = saved.find((c) => c.id === card.id);
+          if (mine) onSaved?.(mine);
+        } else if (draft.type === "parts") {
+          const saved = await saveQuestionPartsAction({
+            deckId: card.deckId,
+            fromCardId: card.id,
+            front: draft.front,
+            back: draft.back,
+            items: filledParts(draft),
+          });
           const mine = saved.find((c) => c.id === card.id);
           if (mine) onSaved?.(mine);
         } else {
@@ -137,7 +154,7 @@ export function EditCardDialog({
               draft={draft}
               onChange={setDraft}
               disabled={isPending}
-              pictureSet={pictureSet}
+              cardSet={cardSet}
             />
             {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
           </div>

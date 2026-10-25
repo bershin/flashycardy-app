@@ -14,10 +14,15 @@ import {
   CardFields,
   draftToInput,
   emptyDraft,
+  filledParts,
   validateDraft,
   type CardDraft,
 } from "@/components/card-fields";
-import { addCardAction, saveOcclusionCardsAction } from "@/app/deck/actions";
+import {
+  addCardAction,
+  saveOcclusionCardsAction,
+  saveQuestionPartsAction,
+} from "@/app/deck/actions";
 
 interface AddCardDialogProps {
   deckId: number;
@@ -57,6 +62,13 @@ export function AddCardDialog({
             front: draft.front,
             back: draft.back,
             boxes: draft.boxes,
+          });
+        } else if (draft.type === "parts") {
+          await saveQuestionPartsAction({
+            deckId,
+            front: draft.front,
+            back: draft.back,
+            items: filledParts(draft),
           });
         } else {
           await addCardAction({ deckId, ...draftToInput(draft) });
@@ -98,7 +110,9 @@ export function AddCardDialog({
                 ? "Adding…"
                 : draft.type === "occlusion" && draft.boxes.length > 1
                   ? `Add ${draft.boxes.length} cards`
-                  : "Add card"}
+                  : draft.type === "parts" && filledParts(draft).length > 1
+                    ? `Add ${filledParts(draft).length} cards`
+                    : "Add card"}
             </Button>
           </DialogFooter>
         </form>

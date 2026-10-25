@@ -15,6 +15,19 @@
  * Nothing here touches the store or the DOM, so it can be tested on its own.
  */
 
+import type { PartsPayload } from "./parts";
+
+/**
+ * Which set a card belongs to — a picture's labels or a question's parts — or
+ * undefined for a card on its own.
+ */
+export function setGroup(card: {
+  occlusion?: OcclusionPayload;
+  parts?: PartsPayload;
+}): string | undefined {
+  return card.occlusion?.group ?? card.parts?.group;
+}
+
 /** A covered area, in fractions of the picture so it holds at any size. */
 export type OcclusionBox = {
   id: string;
@@ -81,17 +94,20 @@ export function clampBox(box: OcclusionBox): OcclusionBox {
  * Shuffle each picture's cards among the places they already hold.
  *
  * Drawn top to bottom every time, a diagram is learned as a sequence — "after
- * Clavicle comes Backbone" — rather than as bones. Every other card stays
+ * Clavicle comes Backbone" — rather than as bones, and a question's parts as
+ * "the one after the 48". Every other card stays
  * exactly where it was, so this changes nothing for a deck with no pictures.
  */
-export function mixSiblings<T extends { occlusion?: OcclusionPayload }>(
+export function mixSiblings<
+  T extends { occlusion?: OcclusionPayload; parts?: PartsPayload },
+>(
   cards: readonly T[],
   random: () => number = Math.random,
 ): T[] {
   const out = [...cards];
   const slots = new Map<string, number[]>();
   out.forEach((card, index) => {
-    const group = card.occlusion?.group;
+    const group = setGroup(card);
     if (!group) return;
     slots.set(group, [...(slots.get(group) ?? []), index]);
   });

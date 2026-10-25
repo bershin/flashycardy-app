@@ -146,50 +146,57 @@ const PIP_TONE = {
 };
 
 /**
- * One chip per label on a picture, in box order, coloured by how each is
- * going: the whole picture's progress at a glance, where twenty separate cards
- * would each say a twentieth of it.
+ * One chip per card of a set — a picture's labels, a question's parts — in
+ * order, coloured by how each is going: the whole set's progress at a glance,
+ * where separate cards would each say only their own share of it.
  */
-export function PicturePips({
-  boxes,
+export function SetPips({
+  slots,
   cards,
   current,
   onPick,
 }: {
-  boxes: OcclusionBox[];
-  /** The picture's cards; a box with no card here reads as new. */
+  /** The boxes or parts, in order, with what each chip should say. */
+  slots: Array<{ id: string; label: string }>;
+  /** The set's cards; a slot with no card here reads as new. */
   cards: readonly CardRow[];
-  /** The box to ring, if any. */
+  /** The slot to ring, if any. */
   current?: string;
-  onPick?: (boxId: string) => void;
+  onPick?: (id: string) => void;
 }) {
-  const byBox = new Map(cards.map((c) => [c.occlusion?.boxId, c]));
+  const bySlot = new Map(
+    cards.map((c) => [c.occlusion?.boxId ?? c.parts?.partId, c]),
+  );
   return (
     <div className="flex flex-wrap gap-1">
-      {boxes.map((box, index) => {
-        const card = byBox.get(box.id);
-        const tone = PIP_TONE[labelStatus(card)];
-        const ring = box.id === current ? "ring-2 ring-violet-500" : "";
+      {slots.map((slot) => {
+        const tone = PIP_TONE[labelStatus(bySlot.get(slot.id))];
+        const ring = slot.id === current ? "ring-2 ring-violet-500" : "";
         const className = `inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1 font-mono text-[0.7rem] font-semibold tabular-nums ${tone} ${ring}`;
         return onPick ? (
           <button
-            key={box.id}
+            key={slot.id}
             type="button"
-            title={`Box ${index + 1}`}
+            title={slot.label}
             onClick={(e) => {
               e.stopPropagation();
-              onPick(box.id);
+              onPick(slot.id);
             }}
             className={`${className} cursor-pointer hover:ring-2 hover:ring-violet-300`}
           >
-            {index + 1}
+            {slot.label}
           </button>
         ) : (
-          <span key={box.id} className={className}>
-            {index + 1}
+          <span key={slot.id} className={className}>
+            {slot.label}
           </span>
         );
       })}
     </div>
   );
+}
+
+/** A picture's boxes as chip slots, numbered as they are drawn. */
+export function boxSlots(boxes: OcclusionBox[]) {
+  return boxes.map((b, i) => ({ id: b.id, label: String(i + 1) }));
 }

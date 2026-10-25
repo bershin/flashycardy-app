@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { OcclusionEditor } from "@/components/occlusion-editor";
 import { firstImageSrc, type OcclusionBox } from "@/lib/occlusion";
+import { PartsEditor } from "@/components/parts-editor";
+import { newPartId, type Part } from "@/lib/parts";
 import {
   NEW_CARD_SCHEDULE,
   type CardRow,
@@ -32,6 +34,8 @@ export type CardDraft = {
   correctIndex: number;
   /** A picture card's boxes, one card each. */
   boxes: OcclusionBox[];
+  /** A question's parts, one card each. */
+  items: Part[];
   schedule: ReviewSchedule;
 };
 
@@ -43,6 +47,7 @@ export function emptyDraft(): CardDraft {
     options: ["", "", "", ""],
     correctIndex: 0,
     boxes: [],
+    items: blankParts(),
     schedule: NEW_CARD_SCHEDULE,
   };
 }
@@ -55,8 +60,29 @@ export function draftFromCard(card: CardRow): CardDraft {
     options: card.quiz?.options ?? ["", "", "", ""],
     correctIndex: card.quiz?.correctIndex ?? 0,
     boxes: card.occlusion?.boxes ?? [],
+    items: card.parts?.items ?? blankParts(),
     schedule: card.schedule,
   };
+}
+
+/** Two empty rows, so a) and b) show what the form is for. */
+function blankParts(): Part[] {
+  return [
+    { id: newPartId(), question: "", answer: "" },
+    { id: newPartId(), question: "", answer: "" },
+  ];
+}
+
+/** The parts worth saving: rows left wholly empty are dropped, not refused. */
+export function filledParts(draft: CardDraft): Part[] {
+  return draft.items
+    .map((p) => ({
+      ...p,
+      // Pasted text can still carry a keyboard's star for times.
+      question: p.question.replace(/\*/g, "×").trim(),
+      answer: p.answer.replace(/\*/g, "×").trim(),
+    }))
+    .filter((p) => p.question || p.answer);
 }
 
 export function isBlank(html: string): boolean {
@@ -69,6 +95,18 @@ export function isBlank(html: string): boolean {
 
 /** Returns an error message, or null when the draft can be saved. */
 export function validateDraft(draft: CardDraft): string | null {
+  if (draft.type === "parts") {
+    const parts = filledParts(draft);
+    if (parts.length === 0) return "Add at least one part.";
+    const gap = parts.findIndex((p) => !p.question || !p.answer);
+    if (gap !== -1) {
+      return `Part ${String.fromCharCode(97 + gap)} needs ${
+        parts[gap].question ? "an answer" : "a question"
+      }.`;
+    }
+    return null;
+  }
+
   if (isBlank(draft.front)) {
     return "The question is required.";
   }
@@ -135,6 +173,7 @@ const TYPES: Array<{ value: CardType; label: string; hint: string }> = [
     label: "Hide labels",
     hint: "A picture, one card per label",
   },
+  { value: "parts", label: "Parts", hint: "a) b) c) — one card per part" },
 ];
 
 interface CardFieldsProps {
@@ -142,17 +181,18 @@ interface CardFieldsProps {
   onChange: (draft: CardDraft) => void;
   disabled?: boolean;
   /**
-   * Set when editing one of a picture's cards. Those are edited as a set, so
-   * turning one of them into a basic card would leave a hole in the picture.
+   * Set when editing one card of a picture's labels or a question's parts.
+   * Those are edited as a set, so turning one of them into a basic card would
+   * leave a hole in it.
    */
-  pictureSet?: number;
+  cardSet?: { kind: "occlusion" | "parts"; size: number };
 }
 
 export function CardFields({
   draft,
   onChange,
   disabled,
-  pictureSet,
+  cardSet,
 }: CardFieldsProps) {
   const set = (patch: Partial<CardDraft>) => onChange({ ...draft, ...patch });
 
@@ -176,16 +216,16 @@ export function CardFields({
 
   return (
     <div className="grid gap-4">
-      {pictureSet !== undefined ? (
+      {cardSet !== undefined ? (
         <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-          This card is one of {pictureSet} made from the same picture.{" "}
-          Changes
-          here apply to all of them; removing a box deletes that box&apos;s card.
+          {cardSet.kind === "occlusion"
+            ? `This card is one of ${cardSet.size} made from the same picture. Changes here apply to all of them; removing a box deletes that box's card.`
+            : `This card is one of ${cardSet.size} parts of the same question. Changes here apply to all of them; removing a part deletes that part's card.`}
         </p>
       ) : (
       <div className="grid gap-2">
         <Label>Card type</Label>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2">
           {/* A generated card matches neither button, which reads as a bug
               rather than a state. Saying what it is — and what picking one of
               these would cost — is the difference. */}
@@ -219,18 +259,37 @@ export function CardFields({
       )}
 
       <div className="grid gap-2">
-        <Label>{draft.type === "occlusion" ? "Picture" : "Question"}</Label>
+        <Label>
+          {draft.type === "occlusion"
+            ? "Picture"
+            : draft.type === "parts"
+              ? "Instructions (optional)"
+              : "Question"}
+        </Label>
         <RichTextEditor
           content={draft.front}
           onChange={(front) => set({ front })}
           placeholder={
             draft.type === "occlusion"
               ? "Paste or add the picture, and a question above it if you like…"
-              : "Question or term…"
+              : draft.type === "parts"
+                ? "Work out:"
+                : "Question or term…"
           }
           disabled={disabled}
         />
       </div>
+
+      {draft.type === "parts" && (
+        <div className="grid gap-2">
+          <Label>Parts</Label>
+          <PartsEditor
+            items={draft.items}
+            onChange={(items) => set({ items })}
+            disabled={disabled}
+          />
+        </div>
+      )}
 
       {draft.type === "occlusion" && (
         <div className="grid gap-2">
@@ -316,7 +375,7 @@ export function CardFields({
         <Label>
           {draft.type === "basic"
             ? "Answer"
-            : draft.type === "occlusion"
+            : draft.type === "occlusion" || draft.type === "parts"
               ? "Notes (optional)"
               : "Explanation (optional)"}
         </Label>

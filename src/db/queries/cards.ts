@@ -29,6 +29,7 @@ import {
   planGroupSave,
   type OcclusionBox,
 } from "@/lib/occlusion";
+import { planPartsSave, type Part } from "@/lib/parts";
 import {
   NEW_CARD_SCHEDULE,
   type CardRow,
@@ -166,6 +167,7 @@ export async function updateCard(
       // retyped from the editor — it is edited as a set, below — so this only
       // matters for a card turned into something else by other means.
       occlusion: type === "occlusion" ? current.occlusion : undefined,
+      parts: type === "parts" ? current.parts : undefined,
     };
     draft.cards[index] = updated;
     return updated;
@@ -269,6 +271,104 @@ export async function saveOcclusionGroup(
 }
 
 /**
+ * Write a lettered question's cards: one per part, all carrying the same
+ * instructions, notes and list of parts.
+ *
+ * The parts counterpart of `saveOcclusionGroup`, with the same rules: with
+ * `fromCardId` it edits that card's set, or turns an ordinary card into the
+ * first part of a new one — which is how "Split into parts" keeps the card's
+ * history. One mutation, so a sync never sees half a question.
+ */
+export async function saveQuestionParts(
+  userId: string,
+  data: {
+    deckId: number;
+    front: string;
+    back: string;
+    items: Part[];
+    fromCardId?: number;
+  },
+): Promise<CardRow[] | undefined> {
+  return mutate((draft) => {
+    const now = new Date();
+    const from =
+      data.fromCardId === undefined
+        ? undefined
+        : draft.cards.find((c) => c.id === data.fromCardId);
+    if (data.fromCardId !== undefined) {
+      if (!from || !ownsCard(draft, from, userId)) return undefined;
+    }
+
+    const group = from?.parts?.group ?? newOcclusionId();
+    const siblings: CardRow[] = from?.parts
+      ? draft.cards.filter(
+          (c) => c.parts?.group === group && ownsCard(draft, c, userId),
+        )
+      : from
+        ? [
+            {
+              ...from,
+              parts: {
+                group,
+                partId: data.items[0].id,
+                items: [{ ...data.items[0], question: "", answer: "" }],
+              },
+            },
+          ]
+        : [];
+    const plan = planPartsSave(siblings, data.items);
+    const deckId = from?.deckId ?? data.deckId;
+
+    const saved: CardRow[] = [];
+    for (const { card, part, changed } of plan.keep) {
+      const reworded = card.front !== data.front || card.back !== data.back;
+      const updated: CardRow = {
+        ...card,
+        type: "parts",
+        front: data.front,
+        back: data.back,
+        quiz: undefined,
+        generated: undefined,
+        occlusion: undefined,
+        parts: { group, partId: part.id, items: data.items },
+        editedAt: changed || reworded ? now : card.editedAt,
+        updatedAt: now,
+      };
+      const index = draft.cards.findIndex((c) => c.id === card.id);
+      draft.cards[index] = updated;
+      saved.push(updated);
+    }
+
+    for (const part of plan.add) {
+      const card: CardRow = {
+        id: allocateCardId(draft),
+        deckId,
+        type: "parts",
+        front: data.front,
+        back: data.back,
+        parts: { group, partId: part.id, items: data.items },
+        schedule: NEW_CARD_SCHEDULE,
+        nextReviewAt: now,
+        consecutiveCorrect: 0,
+        lastCorrectAt: null,
+        timesMissed: 0,
+        lastMissedAt: null,
+        editedAt: now,
+        lastAnsweredAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      draft.cards.push(card);
+      saved.push(card);
+    }
+
+    const gone = new Set(plan.remove.map((c) => c.id));
+    draft.cards = draft.cards.filter((c) => !gone.has(c.id));
+    return saved;
+  });
+}
+
+/**
  * Take deleted picture cards' boxes off the cards left from the same picture.
  *
  * Otherwise the box would stay covered on every sibling with no card asking
@@ -279,7 +379,6 @@ function pruneOcclusionBoxes(draft: DbDoc, removed: readonly CardRow[]) {
   const groups = new Set(
     removed.flatMap((c) => (c.occlusion ? [c.occlusion.group] : [])),
   );
-  if (groups.size === 0) return;
   const now = new Date();
   for (const group of groups) {
     const left = draft.cards.filter((c) => c.occlusion?.group === group);
@@ -291,6 +390,25 @@ function pruneOcclusionBoxes(draft: DbDoc, removed: readonly CardRow[]) {
       draft.cards[index] = {
         ...card,
         occlusion: { ...card.occlusion!, boxes },
+        updatedAt: now,
+      };
+    }
+  }
+
+  // The same for a question's parts: a deleted part leaves the list.
+  const questions = new Set(
+    removed.flatMap((c) => (c.parts ? [c.parts.group] : [])),
+  );
+  for (const group of questions) {
+    const left = draft.cards.filter((c) => c.parts?.group === group);
+    const live = new Set(left.map((c) => c.parts!.partId));
+    for (const card of left) {
+      const items = card.parts!.items.filter((p) => live.has(p.id));
+      if (items.length === card.parts!.items.length) continue;
+      const index = draft.cards.indexOf(card);
+      draft.cards[index] = {
+        ...card,
+        parts: { ...card.parts!, items },
         updatedAt: now,
       };
     }

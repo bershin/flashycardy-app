@@ -40,20 +40,23 @@ import { VaryDeckDialog } from "@/components/vary-deck-dialog";
 import type { CardRow } from "@/lib/store/types";
 import { FlashCard } from "./flash-card";
 import { PictureCard } from "./picture-card";
+import { PartsCard } from "./parts-card";
+import { setGroup } from "@/lib/occlusion";
 
 type GridItem =
   | { kind: "card"; card: CardRow }
-  | { kind: "picture"; group: string; cards: CardRow[] };
+  | { kind: "set"; group: string; cards: CardRow[] };
 
 /**
- * The cards as the grid lays them out: a picture's labels gathered into one
- * tile, placed where the first of them falls, and every other card on its own.
+ * The cards as the grid lays them out: a picture's labels, or a question's
+ * parts, gathered into one tile placed where the first of them falls, and
+ * every other card on its own.
  */
 function gridItems(cards: readonly CardRow[]): GridItem[] {
   const items: GridItem[] = [];
   const pictures = new Map<string, CardRow[]>();
   for (const card of cards) {
-    const group = card.occlusion?.group;
+    const group = setGroup(card);
     if (!group) {
       items.push({ kind: "card", card });
       continue;
@@ -65,7 +68,7 @@ function gridItems(cards: readonly CardRow[]): GridItem[] {
     }
     const fresh = [card];
     pictures.set(group, fresh);
-    items.push({ kind: "picture", group, cards: fresh });
+    items.push({ kind: "set", group, cards: fresh });
   }
   return items;
 }
@@ -529,14 +532,24 @@ export function CardGrid({
 
       <div className="card-list grid gap-4 sm:grid-cols-2">
         {gridItems(visibleCards).map((item) =>
-          item.kind === "picture" ? (
-            <PictureCard
-              key={item.group}
-              cards={item.cards}
-              selecting={selecting}
-              selected={item.cards.every((c) => selected.has(c.id))}
-              onToggleSelected={toggleMany}
-            />
+          item.kind === "set" ? (
+            item.cards[0].parts ? (
+              <PartsCard
+                key={item.group}
+                cards={item.cards}
+                selecting={selecting}
+                selected={item.cards.every((c) => selected.has(c.id))}
+                onToggleSelected={toggleMany}
+              />
+            ) : (
+              <PictureCard
+                key={item.group}
+                cards={item.cards}
+                selecting={selecting}
+                selected={item.cards.every((c) => selected.has(c.id))}
+                onToggleSelected={toggleMany}
+              />
+            )
           ) : (
             <FlashCard
               key={item.card.id}
