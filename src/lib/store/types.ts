@@ -453,8 +453,21 @@ export type SerializedDbDoc = {
  * Either way the card survives as a basic card rather than disappearing or
  * rendering as nothing.
  */
-function normaliseType(type: string | undefined): CardType {
-  return CARD_TYPES.includes(type as CardType) ? (type as CardType) : "basic";
+function normaliseType(card: {
+  type?: string;
+  occlusion?: unknown;
+  parts?: unknown;
+}): CardType {
+  // The payload is the evidence. A copy of the app built before picture cards
+  // and parts existed reads their type as basic but carries the payload
+  // through untouched, and when it records an answer it saves the card back
+  // as basic — a picture card with its boxes still on it, drawn as a plain
+  // picture with every label showing. The boxes say what the card is.
+  if (card.occlusion) return "occlusion";
+  if (card.parts) return "parts";
+  return CARD_TYPES.includes(card.type as CardType)
+    ? (card.type as CardType)
+    : "basic";
 }
 
 /**
@@ -562,7 +575,7 @@ export function deserializeDoc(raw: SerializedDbDoc): DbDoc {
       ...c,
       // Per-card rather than keyed on the document version, so a hand-edited or
       // partially-written file can't produce a card with no usable type.
-      type: normaliseType(c.type),
+      type: normaliseType(c),
       schedule: normaliseSchedule(c.schedule),
       nextReviewAt: toDate(c.nextReviewAt),
       // A card that predates the stamp reads as never credited, so its next

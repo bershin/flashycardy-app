@@ -17,7 +17,13 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   // The image optimizer needs a server, and `next/image` isn't used anyway.
   images: { unoptimized: true },
-  env: { NEXT_PUBLIC_BASE_PATH: basePath },
+  // The release this build is, compared against the deployed `version.json`
+  // so an open tab can notice it has been superseded. GitHub Actions supplies
+  // the commit; a local build is "dev" and never asks.
+  env: {
+    NEXT_PUBLIC_BASE_PATH: basePath,
+    NEXT_PUBLIC_BUILD_ID: process.env.GITHUB_SHA ?? "dev",
+  },
 
   // The security headers that used to live here were dropped: a static export
   // emits no server, so Next cannot set response headers. GitHub Pages sends

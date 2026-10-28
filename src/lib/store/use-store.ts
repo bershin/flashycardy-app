@@ -12,6 +12,7 @@ import {
 import type { DbDoc } from "./types";
 import { startSync } from "./github-sync";
 import { requestPersistenceOnce } from "@/lib/storage-persistence";
+import { watchForNewRelease } from "@/lib/app-version";
 
 /**
  * Boot the local store and the GitHub sync loop. Mounted once, from the root
@@ -28,7 +29,13 @@ export function useStoreBootstrap() {
       // when deciding whether to honour the request.
       void requestPersistenceOnce();
     });
-    return () => disposeSync?.();
+    // Started before the store, so a copy that is already out of date reloads
+    // rather than syncing with cards it cannot read.
+    const stopWatching = watchForNewRelease();
+    return () => {
+      disposeSync?.();
+      stopWatching();
+    };
   }, []);
 }
 
