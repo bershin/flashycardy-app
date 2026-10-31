@@ -255,6 +255,8 @@ const occlusionSchema = z.object({
     )
     .min(1, "Draw a box over at least one label.")
     .max(200),
+  /** Studied by typing the hidden words, all at once. */
+  typed: z.boolean().optional(),
 });
 
 /**
@@ -284,6 +286,7 @@ export async function saveOcclusionCardsAction(
     front,
     back: blankAsEmpty(back),
     boxes: parsed.boxes,
+    typed: parsed.typed,
   });
   if (!saved) throw new Error("Card not found");
   return saved;

@@ -62,6 +62,11 @@ export function boxStyle(box: OcclusionBox): React.CSSProperties {
  *  - `answer`   — this card's box opened and outlined, the others still covered:
  *                 the next card from the picture should not be given away.
  *
+ * A typed picture passes `typed` instead, and `state` is ignored: every word
+ * being asked is covered until it is found, words not being asked (their cards
+ * are not due) are left showing, and once the round is over the ones not found
+ * open outlined in red.
+ *
  * The picture ignores the pointer. The study screen opens any picture that is
  * clicked at full size, and full size has no boxes on it — clicking a covered
  * label would show every answer on the picture.
@@ -70,11 +75,17 @@ export function OcclusionPicture({
   html,
   occlusion,
   state,
+  typed,
   className,
 }: {
   html: string;
   occlusion: OcclusionPayload;
   state: "question" | "answer";
+  typed?: {
+    asked: ReadonlySet<string>;
+    found: ReadonlySet<string>;
+    done: boolean;
+  };
   className?: string;
 }) {
   const url = usePictureUrl(firstImageSrc(html));
@@ -100,6 +111,28 @@ export function OcclusionPicture({
         )}
         {url &&
           occlusion.boxes.map((box, index) => {
+            if (typed) {
+              if (!typed.asked.has(box.id)) return null;
+              const found = typed.found.has(box.id);
+              if (found || typed.done) {
+                return (
+                  <span
+                    key={box.id}
+                    style={boxStyle(box)}
+                    className={`absolute rounded-sm ring-3 ${
+                      found ? "ring-emerald-500" : "ring-red-500"
+                    }`}
+                  />
+                );
+              }
+              return (
+                <span
+                  key={box.id}
+                  style={boxStyle(box)}
+                  className="absolute rounded-sm bg-amber-300 dark:bg-amber-400"
+                />
+              );
+            }
             const mine = box.id === target?.id;
             if (mine && state === "answer") {
               return (

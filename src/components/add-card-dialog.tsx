@@ -62,6 +62,7 @@ export function AddCardDialog({
             front: draft.front,
             back: draft.back,
             boxes: draft.boxes,
+            typed: draft.typed,
           });
         } else if (draft.type === "parts") {
           await saveQuestionPartsAction({

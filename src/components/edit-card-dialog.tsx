@@ -100,6 +100,7 @@ export function EditCardDialog({
             front: draft.front,
             back: draft.back,
             boxes: draft.boxes,
+            typed: draft.typed,
           });
           // This card's own box may have been the one removed.
           const mine = saved.find((c) => c.id === card.id);

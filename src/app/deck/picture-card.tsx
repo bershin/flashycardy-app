@@ -155,7 +155,7 @@ export function PictureCard({
     <CardSetTile
       cards={cards}
       heading={words || undefined}
-      noun="label"
+      noun={first.occlusion!.typed ? "word" : "label"}
       selecting={selecting}
       selected={selected}
       onToggleSelected={onToggleSelected}

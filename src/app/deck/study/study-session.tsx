@@ -64,11 +64,14 @@ import { rateCardAction, markDeckStudiedAction } from "./actions";
 import { Trash2 } from "lucide-react";
 import { mathToText } from "@/lib/math";
 import {
+  gatherTyped,
   mixSiblings,
   occlusionLabel,
   occlusionNote,
   setGroup,
+  typedSpan,
 } from "@/lib/occlusion";
+import { TypedRound } from "./typed-round";
 import {
   OcclusionPicture,
   SetPips,
@@ -163,8 +166,9 @@ export function StudySession({
 }: StudySessionProps) {
   // A picture's cards are mixed among themselves, so a diagram is learned as
   // parts rather than as an order. A resumed session keeps the order it had.
-  const [studyCards, setStudyCards] = useState(
-    () => initialOrder ?? mixSiblings(cards),
+  // A typed picture's cards sit together, since they are answered in one go.
+  const [studyCards, setStudyCards] = useState(() =>
+    gatherTyped(initialOrder ?? mixSiblings(cards)),
   );
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [revealed, setRevealed] = useState(false);
@@ -255,6 +259,22 @@ export function StudySession({
   const total = studyCards.length;
 
   /**
+   * A typed picture's round: the cards it covers, side by side from here.
+   * Null for any other card. The index always sits on the first of them —
+   * answering moves past the whole run and stepping back lands on its start.
+   */
+  const typedRound = useMemo(() => {
+    if (!current?.occlusion?.typed) return null;
+    const { end } = typedSpan(studyCards, currentIndex);
+    const roundCards = studyCards.slice(currentIndex, end + 1);
+    return {
+      cards: roundCards,
+      end,
+      asked: new Set(roundCards.map((c) => c.occlusion!.boxId)),
+    };
+  }, [current, studyCards, currentIndex]);
+
+  /**
    * The current card's counters, read live rather than off `studyCards`.
    *
    * The session holds the cards it was handed when it started, so a card missed
@@ -309,7 +329,10 @@ export function StudySession({
   }, [current, round]);
 
   /** Answered in its own surface rather than by flipping and self-rating. */
-  const interactive = current?.type === "quiz" || current?.type === "generated";
+  const interactive =
+    current?.type === "quiz" ||
+    current?.type === "generated" ||
+    typedRound !== null;
   /**
    * How many options the card in hand shows — the last number the hint offers.
    * A card with two spellings answers to 1 and 2 only, and a hint that promised
@@ -438,19 +461,66 @@ export function StudySession({
     [current, currentIndex, total, deckId, bankTime, readElapsed],
   );
 
+  /**
+   * End a typed round: every card in it graded at once, found or not.
+   *
+   * The round's time is shared out evenly, since the words were all looked for
+   * together and no one of them took the time on its own.
+   */
+  const finishTyped = useCallback(
+    (found: ReadonlySet<string>) => {
+      if (!typedRound) return;
+      const elapsed = readElapsed();
+      const graded = typedRound.cards.map(
+        (card) =>
+          [
+            card,
+            found.has(card.occlusion!.boxId) ? "got_it" : "missed",
+          ] as const,
+      );
+      for (const [card] of graded) {
+        bankTime(card.id, elapsed / graded.length);
+      }
+      setRatings((prev) => {
+        const next = new Map(prev);
+        for (const [card, rating] of graded) next.set(card.id, rating);
+        return next;
+      });
+      setRevealedMs(elapsed);
+      setRevealed(true);
+      startTransition(async () => {
+        for (const [card, rating] of graded) {
+          await rateCardAction({ cardId: card.id, deckId, rating });
+        }
+      });
+    },
+    [typedRound, readElapsed, bankTime, deckId],
+  );
+
+  const continueTyped = useCallback(() => {
+    if (!typedRound) return;
+    if (typedRound.end < total - 1) {
+      setRevealed(false);
+      setCurrentIndex(typedRound.end + 1);
+    } else {
+      setFinished(true);
+    }
+  }, [typedRound, total]);
+
   const goPrev = useCallback(() => {
     if (currentIndex > 0) {
       bankTime(current.id, readElapsed());
-      setCurrentIndex((i) => i - 1);
+      // Onto the start of a typed picture's run, which is where its round is.
+      setCurrentIndex(typedSpan(studyCards, currentIndex - 1).start);
       setRevealed(false);
     }
-  }, [current, currentIndex, bankTime, readElapsed]);
+  }, [current, currentIndex, studyCards, bankTime, readElapsed]);
 
 
 
   const restart = useCallback(() => {
     setDeal((n) => n + 1);
-    setStudyCards(mixSiblings(cards));
+    setStudyCards(gatherTyped(mixSiblings(cards)));
     setCurrentIndex(0);
     setRevealed(false);
     setFinished(false);
@@ -461,7 +531,7 @@ export function StudySession({
 
   const shuffleAndRestart = useCallback(() => {
     setDeal((n) => n + 1);
-    setStudyCards(shuffleArray(cards));
+    setStudyCards(gatherTyped(shuffleArray(cards)));
     setCurrentIndex(0);
     setRevealed(false);
     setFinished(false);
@@ -472,7 +542,7 @@ export function StudySession({
 
   const reviewMissed = useCallback(() => {
     setDeal((n) => n + 1);
-    setStudyCards(shuffleArray(missedCards));
+    setStudyCards(gatherTyped(shuffleArray(missedCards)));
     setCurrentIndex(0);
     setRevealed(false);
     setFinished(false);
@@ -484,7 +554,7 @@ export function StudySession({
   const shuffleCurrent = useCallback(() => {
     const unrated = studyCards.slice(currentIndex);
     const rated = studyCards.slice(0, currentIndex);
-    setStudyCards([...rated, ...shuffleArray(unrated)]);
+    setStudyCards([...rated, ...gatherTyped(shuffleArray(unrated))]);
   }, [studyCards, currentIndex]);
 
   useEffect(() => {
@@ -560,6 +630,10 @@ export function StudySession({
       // The confirmation owns the keyboard while it is up: Escape and Enter are
       // its business, and nothing behind it should flip or rate.
       if (deleteOpen) return;
+
+      // A typed round is answered in its own box and carried on by its own
+      // button. Deleting one word mid-round would leave the round half-graded.
+      if (typedRound) return;
 
       // Delete asks first, whichever key raises it — a session runs at finger
       // speed and a deleted card does not come back.
@@ -641,6 +715,7 @@ export function StudySession({
     zoomed,
     current,
     deleteOpen,
+    typedRound,
   ]);
 
   if (finished) {
@@ -832,7 +907,9 @@ export function StudySession({
       {/* Progress header */}
       <div className="flex w-full items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Card {currentIndex + 1} of {total}
+          {typedRound && typedRound.end > currentIndex
+            ? `Cards ${currentIndex + 1}–${typedRound.end + 1} of ${total}`
+            : `Card ${currentIndex + 1} of ${total}`}
           {round > 1 && <span className="ml-2 text-xs">(Round {round})</span>}
         </p>
         <div className="flex items-center gap-3">
@@ -882,7 +959,7 @@ export function StudySession({
               says, and a card judged from its front alone is a card judged for
               being hard. Hiding them rather than disabling them also keeps the
               row from holding two controls that do nothing. */}
-          {revealed && (
+          {revealed && !typedRound && (
             <>
               <Button
                 variant="ghost"
@@ -924,7 +1001,7 @@ export function StudySession({
 
       {/* Flashcard */}
       <div
-        className={`grid min-h-0 w-full flex-1 gap-3 ${revealed ? "md:grid-cols-2" : ""}`}
+        className={`grid min-h-0 w-full flex-1 gap-3 ${revealed && !typedRound ? "md:grid-cols-2" : ""}`}
       >
         {/* Question */}
         <Card
@@ -948,12 +1025,16 @@ export function StudySession({
             aria-hidden
             className="absolute inset-x-0 top-0 h-1.5 bg-[var(--deck-accent)]"
           />
-          <div className="absolute top-3 right-3 z-10">
-            <CardHistory
-              timesMissed={history.timesMissed}
-              streak={history.streak}
-            />
-          </div>
+          {/* Not on a typed round: it covers several words, and one word's
+              record in the corner would read as the whole picture's. */}
+          {!typedRound && (
+            <div className="absolute top-3 right-3 z-10">
+              <CardHistory
+                timesMissed={history.timesMissed}
+                streak={history.streak}
+              />
+            </div>
+          )}
           <CardContent
             className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3"
             onClickCapture={openImageOnClick}
@@ -991,6 +1072,24 @@ export function StudySession({
                     />
                   </div>
                 </>
+              ) : typedRound ? (
+                <TypedRound
+                  key={`${current.id}:${round}:${deal}`}
+                  html={current.front}
+                  occlusion={current.occlusion!}
+                  asked={typedRound.asked}
+                  previous={
+                    typedRound.cards.every((c) => ratings.has(c.id))
+                      ? new Set(
+                          typedRound.cards
+                            .filter((c) => ratings.get(c.id) === "got_it")
+                            .map((c) => c.occlusion!.boxId),
+                        )
+                      : undefined
+                  }
+                  onFinished={finishTyped}
+                  onContinue={continueTyped}
+                />
               ) : current.type === "occlusion" && current.occlusion ? (
                 <>
                   <OcclusionPicture
@@ -1049,7 +1148,8 @@ export function StudySession({
         {(current.type === "basic" ||
           current.type === "occlusion" ||
           current.type === "parts") &&
-          revealed && (
+          revealed &&
+          !typedRound && (
           <Card className="min-h-0 animate-in fade-in slide-in-from-bottom-2 border-[var(--deck-accent-line)] bg-[var(--deck-accent-soft)] duration-200">
             <CardContent
               className="study-media flex h-full flex-col items-center overflow-y-auto px-6 py-3"
@@ -1158,7 +1258,12 @@ export function StudySession({
           {/* A quiz card answers to its own keys: up and down walk the options
               there, so the card underneath cannot also step back on up, and
               saying it could was the one hint on this screen that was wrong. */}
-          {interactive ? (
+          {typedRound ? (
+            <p className="text-xs text-muted-foreground">
+              <Key>Enter</Key> to check a word, then to continue once the round
+              is over
+            </p>
+          ) : interactive ? (
             <p className="text-xs text-muted-foreground">
               <Key>1</Key>
               {optionCount > 1 && (

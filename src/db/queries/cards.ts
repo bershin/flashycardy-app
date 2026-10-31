@@ -196,6 +196,8 @@ export async function saveOcclusionGroup(
     front: string;
     back: string;
     boxes: OcclusionBox[];
+    /** Studied by typing the hidden words; see `OcclusionPayload.typed`. */
+    typed?: boolean;
     fromCardId?: number;
   },
 ): Promise<CardRow[] | undefined> {
@@ -221,6 +223,14 @@ export async function saveOcclusionGroup(
         : [];
     const plan = planGroupSave(siblings, data.boxes);
     const deckId = from?.deckId ?? data.deckId;
+    // Left off rather than written false, so a set that was never typed reads
+    // exactly as it did before typing existed.
+    const payload = (boxId: string) => ({
+      group,
+      boxId,
+      boxes: data.boxes,
+      ...(data.typed ? { typed: true } : {}),
+    });
 
     const saved: CardRow[] = [];
     for (const { card, box, relabelled } of plan.keep) {
@@ -232,7 +242,7 @@ export async function saveOcclusionGroup(
         back: data.back,
         quiz: undefined,
         generated: undefined,
-        occlusion: { group, boxId: box.id, boxes: data.boxes },
+        occlusion: payload(box.id),
         editedAt: relabelled || reworded ? now : card.editedAt,
         updatedAt: now,
       };
@@ -248,7 +258,7 @@ export async function saveOcclusionGroup(
         type: "occlusion",
         front: data.front,
         back: data.back,
-        occlusion: { group, boxId: box.id, boxes: data.boxes },
+        occlusion: payload(box.id),
         schedule: NEW_CARD_SCHEDULE,
         nextReviewAt: now,
         consecutiveCorrect: 0,

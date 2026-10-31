@@ -34,6 +34,8 @@ export type CardDraft = {
   correctIndex: number;
   /** A picture card's boxes, one card each. */
   boxes: OcclusionBox[];
+  /** A picture card answered by typing its hidden words. */
+  typed: boolean;
   /** A question's parts, one card each. */
   items: Part[];
   schedule: ReviewSchedule;
@@ -47,6 +49,7 @@ export function emptyDraft(): CardDraft {
     options: ["", "", "", ""],
     correctIndex: 0,
     boxes: [],
+    typed: false,
     items: blankParts(),
     schedule: NEW_CARD_SCHEDULE,
   };
@@ -60,6 +63,7 @@ export function draftFromCard(card: CardRow): CardDraft {
     options: card.quiz?.options ?? ["", "", "", ""],
     correctIndex: card.quiz?.correctIndex ?? 0,
     boxes: card.occlusion?.boxes ?? [],
+    typed: card.occlusion?.typed ?? false,
     items: card.parts?.items ?? blankParts(),
     schedule: card.schedule,
   };
@@ -165,7 +169,13 @@ export function draftToInput(draft: CardDraft) {
   };
 }
 
-const TYPES: Array<{ value: CardType; label: string; hint: string }> = [
+const TYPES: Array<{
+  value: CardType;
+  /** A picture card answered by typing; the same card type underneath. */
+  typed?: boolean;
+  label: string;
+  hint: string;
+}> = [
   { value: "basic", label: "Basic", hint: "Question and answer, self-rated" },
   { value: "quiz", label: "Quiz", hint: "Multiple choice, graded instantly" },
   {
@@ -174,6 +184,12 @@ const TYPES: Array<{ value: CardType; label: string; hint: string }> = [
     hint: "A picture, one card per label",
   },
   { value: "parts", label: "Parts", hint: "a) b) c) — one card per part" },
+  {
+    value: "occlusion",
+    typed: true,
+    label: "Type the words",
+    hint: "Hidden words on a picture, typed to reveal",
+  },
 ];
 
 interface CardFieldsProps {
@@ -238,12 +254,13 @@ export function CardFields({
           )}
           {TYPES.map((option) => (
             <button
-              key={option.value}
+              key={option.label}
               type="button"
               disabled={disabled}
-              onClick={() => set({ type: option.value })}
+              onClick={() => set({ type: option.value, typed: !!option.typed })}
               className={`rounded-lg border p-2 text-left transition-colors disabled:opacity-50 ${
-                draft.type === option.value
+                draft.type === option.value &&
+                (option.value !== "occlusion" || draft.typed === !!option.typed)
                   ? "border-primary bg-primary/10"
                   : "border-border hover:bg-muted"
               }`}
@@ -293,7 +310,19 @@ export function CardFields({
 
       {draft.type === "occlusion" && (
         <div className="grid gap-2">
-          <Label>Labels to hide</Label>
+          <Label>{draft.typed ? "Words to hide" : "Labels to hide"}</Label>
+          {/* Here as well as in the picker, because the picker is not shown
+              when editing a set: this is how an existing picture switches. */}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draft.typed}
+              disabled={disabled}
+              onChange={(e) => set({ typed: e.target.checked })}
+              className="size-4 accent-[var(--color-primary)]"
+            />
+            Study by typing the words — all hidden at once, each one found opens
+          </label>
           {firstImageSrc(draft.front) ? (
             <OcclusionEditor
               src={firstImageSrc(draft.front)!}

@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  checkTyped,
   clampBox,
   firstImageSrc,
+  gatherTyped,
   mixSiblings,
+  normalizeWord,
   planGroupSave,
+  typedSpan,
   withoutFirstImage,
   type OcclusionBox,
   type OcclusionPayload,
@@ -84,4 +88,38 @@ test("a changed explanation keeps the card's progress", () => {
     plan.keep.map((k) => [k.card.id, k.relabelled]),
     [[1, false]],
   );
+});
+
+test("a typed word matches whatever its case, spacing or edge punctuation", () => {
+  assert.equal(normalizeWord("  EUGLENA: "), "euglena");
+  assert.equal(normalizeWord("contractile   Vacuole"), "contractile vacuole");
+  assert.equal(normalizeWord("it’s"), "it's");
+  assert.equal(normalizeWord("cliché") === normalizeWord("cliche"), false);
+});
+
+test("a guess opens a hidden box, says it was found already, or is wrong", () => {
+  const boxes = [box("a", "thief"), box("b", "nucleus"), box("c", "nucleus"), box("d", "piece")];
+  const asked = new Set(["a", "b", "c"]);
+  assert.deepEqual(checkTyped(boxes, asked, new Set(), "Thief"), { kind: "found", boxId: "a" });
+  assert.deepEqual(checkTyped(boxes, asked, new Set(), "theif"), { kind: "wrong" });
+  assert.deepEqual(checkTyped(boxes, asked, new Set(["a"]), "thief"), { kind: "again" });
+  // The same word twice opens one box per guess.
+  assert.deepEqual(checkTyped(boxes, asked, new Set(["b"]), "nucleus"), { kind: "found", boxId: "c" });
+  // A word not being asked — its card isn't due — is shown, not guessed.
+  assert.deepEqual(checkTyped(boxes, asked, new Set(), "piece"), { kind: "showing" });
+  assert.deepEqual(checkTyped(boxes, asked, new Set(), "   "), { kind: "wrong" });
+});
+
+test("a typed picture's cards are brought together, and its run found from any of them", () => {
+  const typed = (id: number, group: string) => ({
+    id,
+    occlusion: { group, boxId: String(id), boxes: [], typed: true } satisfies OcclusionPayload,
+  });
+  const plain = (id: number) => ({ id, occlusion: undefined });
+  const list = [plain(1), typed(2, "t"), plain(3), typed(4, "t"), card(5, "a", []), typed(6, "t")];
+  const gathered = gatherTyped(list);
+  assert.deepEqual(gathered.map((c) => c.id), [1, 2, 4, 6, 3, 5]);
+  assert.deepEqual(typedSpan(gathered, 2), { start: 1, end: 3 });
+  assert.deepEqual(typedSpan(gathered, 4), { start: 4, end: 4 });
+  assert.deepEqual(typedSpan(gathered, 0), { start: 0, end: 0 });
 });

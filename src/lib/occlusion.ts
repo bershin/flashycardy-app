@@ -50,6 +50,13 @@ export type OcclusionPayload = {
   /** Which of `boxes` this card asks about. */
   boxId: string;
   boxes: OcclusionBox[];
+  /**
+   * Answered by typing rather than by turning over: the picture comes up with
+   * every due word hidden at once, and each word typed correctly opens. Each
+   * word is still its own card — found counts as got it, not found as missed —
+   * so the ones that keep escaping come back sooner.
+   */
+  typed?: boolean;
 };
 
 /** The first picture in a card's HTML, as written: `cue:<hash>` or `data:`. */
@@ -171,6 +178,100 @@ export function planGroupSave<C extends { id: number; occlusion?: OcclusionPaylo
   }
   remove.push(...byBox.values());
   return { keep, add, remove };
+}
+
+/**
+ * A typed word as it is compared: case, spacing, curly quotes and the
+ * punctuation a label picks up round its edges ("EUGLENA:") do not count.
+ * Letters do, accents included — on a spelling sheet *theif* is the mistake
+ * being tested for, so nothing closer than the word itself is accepted.
+ */
+export function normalizeWord(text: string): string {
+  return text
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * What a typed guess does to a round: open the first still-hidden box it
+ * names, say it was already found, say it is one of the words left showing
+ * (its card is not due), or say it is wrong. Two boxes with the same word
+ * open one guess at a time, so each still has to be typed.
+ */
+export function checkTyped(
+  boxes: readonly OcclusionBox[],
+  asked: ReadonlySet<string>,
+  found: ReadonlySet<string>,
+  guess: string,
+):
+  | { kind: "found"; boxId: string }
+  | { kind: "again" }
+  | { kind: "showing" }
+  | { kind: "wrong" } {
+  const word = normalizeWord(guess);
+  if (!word) return { kind: "wrong" };
+  const named = boxes.filter(
+    (b) => asked.has(b.id) && normalizeWord(b.label) === word,
+  );
+  const open = named.find((b) => !found.has(b.id));
+  if (open) return { kind: "found", boxId: open.id };
+  if (named.length > 0) return { kind: "again" };
+  return boxes.some((b) => normalizeWord(b.label) === word)
+    ? { kind: "showing" }
+    : { kind: "wrong" };
+}
+
+function typedGroup(card: { occlusion?: OcclusionPayload }): string | undefined {
+  return card.occlusion?.typed ? card.occlusion.group : undefined;
+}
+
+/**
+ * Bring each typed picture's cards together, at the place of the first.
+ *
+ * A typed picture is answered in one go, so its cards have to sit side by
+ * side for the round to cover them and move on past them. Everything else
+ * keeps its order.
+ */
+export function gatherTyped<T extends { occlusion?: OcclusionPayload }>(
+  cards: readonly T[],
+): T[] {
+  const groups = new Map<string, T[]>();
+  for (const card of cards) {
+    const group = typedGroup(card);
+    if (group) groups.set(group, [...(groups.get(group) ?? []), card]);
+  }
+  if (groups.size === 0) return [...cards];
+  const out: T[] = [];
+  for (const card of cards) {
+    const group = typedGroup(card);
+    if (!group) out.push(card);
+    else if (groups.has(group)) {
+      out.push(...groups.get(group)!);
+      groups.delete(group);
+    }
+  }
+  return out;
+}
+
+/**
+ * The run of one typed picture's cards that `index` falls in, as first and
+ * last positions — or just `index` itself for any other card.
+ */
+export function typedSpan(
+  cards: readonly { occlusion?: OcclusionPayload }[],
+  index: number,
+): { start: number; end: number } {
+  const group = cards[index] ? typedGroup(cards[index]) : undefined;
+  if (!group) return { start: index, end: index };
+  let start = index;
+  let end = index;
+  while (start > 0 && typedGroup(cards[start - 1]) === group) start--;
+  while (end < cards.length - 1 && typedGroup(cards[end + 1]) === group) end++;
+  return { start, end };
 }
 
 /** The explanation for the label a card asks for, or "" if it has none. */
