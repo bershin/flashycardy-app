@@ -210,27 +210,54 @@ export function draftToInput(draft: CardDraft) {
   };
 }
 
-const TYPES: Array<{
-  value: CardType;
-  /** A picture card answered by typing; the same card type underneath. */
-  typed?: boolean;
-  label: string;
-  hint: string;
-}> = [
-  { value: "basic", label: "Basic", hint: "Question and answer, self-rated" },
-  { value: "quiz", label: "Quiz", hint: "Multiple choice, graded instantly" },
+/**
+ * The choices the picker offers, which are not quite the card types.
+ *
+ * A picture's labels and a question's parts are one choice — both make a card
+ * per item, each self-rated — with a switch underneath for which; a typed
+ * set is its own choice though it is a picture card underneath.
+ */
+type Choice = "basic" | "quiz" | "set" | "typed";
+
+const TYPES: Array<{ choice: Choice; label: string; hint: string }> = [
+  { choice: "basic", label: "Basic", hint: "Question and answer, self-rated" },
+  { choice: "quiz", label: "Quiz", hint: "Multiple choice, graded instantly" },
   {
-    value: "occlusion",
-    label: "Hide labels",
-    hint: "A picture, one card per label",
+    choice: "set",
+    label: "Labels or parts",
+    hint: "One card each — labels on a picture, or a) b) c) parts",
   },
-  { value: "parts", label: "Parts", hint: "a) b) c) — one card per part" },
   {
-    value: "occlusion",
-    typed: true,
+    choice: "typed",
     label: "Type the words",
     hint: "Hidden words — on a picture or a list — typed to reveal",
   },
+];
+
+/** Which picker choice a draft is. A generated card is none of them. */
+function choiceOf(draft: CardDraft): Choice | null {
+  if (draft.type === "basic" || draft.type === "quiz") return draft.type;
+  if (draft.type === "parts") return "set";
+  if (draft.type === "occlusion") return draft.typed ? "typed" : "set";
+  return null;
+}
+
+/** The draft as a choice makes it. Labels-or-parts keeps whichever it was. */
+function choose(draft: CardDraft, choice: Choice): Partial<CardDraft> {
+  switch (choice) {
+    case "basic":
+    case "quiz":
+      return { type: choice, typed: false };
+    case "set":
+      return { type: draft.type === "parts" ? "parts" : "occlusion", typed: false };
+    case "typed":
+      return { type: "occlusion", typed: true };
+  }
+}
+
+const SET_MODES: Array<{ type: "occlusion" | "parts"; label: string }> = [
+  { type: "occlusion", label: "Labels on a picture" },
+  { type: "parts", label: "Parts a) b) c)" },
 ];
 
 interface CardFieldsProps {
@@ -297,13 +324,12 @@ export function CardFields({
           )}
           {TYPES.map((option) => (
             <button
-              key={option.label}
+              key={option.choice}
               type="button"
               disabled={disabled}
-              onClick={() => set({ type: option.value, typed: !!option.typed })}
+              onClick={() => set(choose(draft, option.choice))}
               className={`rounded-lg border p-2 text-left transition-colors disabled:opacity-50 ${
-                draft.type === option.value &&
-                (option.value !== "occlusion" || draft.typed === !!option.typed)
+                choiceOf(draft) === option.choice
                   ? "border-primary bg-primary/10"
                   : "border-border hover:bg-muted"
               }`}
@@ -314,6 +340,34 @@ export function CardFields({
               </span>
             </button>
           ))}
+          {/* Chosen rather than guessed from whether there is a picture, as
+              Type the words does: a question in parts may well have a diagram
+              in its instructions, and that should not turn it into labels. */}
+          {choiceOf(draft) === "set" && (
+            <div
+              role="radiogroup"
+              aria-label="Labels or parts"
+              className="col-span-full inline-flex w-fit gap-1 rounded-lg bg-muted p-1"
+            >
+              {SET_MODES.map((mode) => (
+                <button
+                  key={mode.type}
+                  type="button"
+                  role="radio"
+                  aria-checked={draft.type === mode.type}
+                  disabled={disabled}
+                  onClick={() => set({ type: mode.type, typed: false })}
+                  className={`rounded-md px-3 py-1 text-sm transition-colors disabled:opacity-50 ${
+                    draft.type === mode.type
+                      ? "bg-background font-medium shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       )}
