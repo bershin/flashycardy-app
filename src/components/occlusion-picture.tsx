@@ -9,6 +9,7 @@ import {
   firstImageSrc,
   targetBox,
   withoutFirstImage,
+  wordHint,
   type OcclusionBox,
   type OcclusionPayload,
 } from "@/lib/occlusion";
@@ -54,6 +55,59 @@ export function boxStyle(box: OcclusionBox): React.CSSProperties {
   };
 }
 
+export type WordTile = {
+  id: string;
+  text: string;
+  tone: "hidden" | "found" | "missed" | "shown" | "new" | "known";
+  title?: string;
+  onClick?: () => void;
+};
+
+const TILE_TONE: Record<WordTile["tone"], string> = {
+  hidden: "bg-amber-300/80 text-amber-950 dark:bg-amber-400/80",
+  new: "bg-amber-300/80 text-amber-950 dark:bg-amber-400/80",
+  found:
+    "bg-emerald-500/10 font-semibold text-emerald-700 ring-2 ring-emerald-500 dark:text-emerald-400",
+  known: "bg-emerald-300 text-emerald-950 dark:bg-emerald-400",
+  missed:
+    "bg-red-500/10 font-semibold text-red-700 ring-2 ring-red-500 dark:text-red-400",
+  shown: "bg-muted text-muted-foreground",
+};
+
+/**
+ * A typed set's words with no picture behind them: a tile per word, showing
+ * its clue (or a blank per letter) while hidden and the word once it is out.
+ * The tiles stand where the picture would, so the round reads the same way.
+ */
+export function WordTiles({ tiles }: { tiles: WordTile[] }) {
+  return (
+    // Not a <ul>: the study card's rich-text styles would put bullets on it.
+    <div role="list" className="flex flex-wrap justify-center gap-2">
+      {tiles.map((tile) => {
+        const className = `min-w-24 rounded-lg px-3 py-2 text-center text-base leading-snug ${TILE_TONE[tile.tone]}`;
+        return (
+          <div key={tile.id} role="listitem">
+            {tile.onClick ? (
+              <button
+                type="button"
+                title={tile.title}
+                onClick={tile.onClick}
+                className={`${className} cursor-pointer hover:ring-2 hover:ring-violet-300`}
+              >
+                {tile.text}
+              </button>
+            ) : (
+              <span title={tile.title} className={`block ${className}`}>
+                {tile.text}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * A picture card's question: its words, then the picture with the labels
  * covered and this card's box picked out.
@@ -88,9 +142,38 @@ export function OcclusionPicture({
   };
   className?: string;
 }) {
-  const url = usePictureUrl(firstImageSrc(html));
+  const src = firstImageSrc(html);
+  const url = usePictureUrl(src);
   const words = withoutFirstImage(html);
   const target = targetBox(occlusion);
+
+  // A typed set of words with no picture: the tiles stand in for it.
+  if (!src) {
+    const tiles: WordTile[] = occlusion.boxes.map((box) => {
+      if (typed) {
+        if (!typed.asked.has(box.id)) {
+          return { id: box.id, text: box.label, tone: "shown" };
+        }
+        if (typed.found.has(box.id)) {
+          return { id: box.id, text: box.label, tone: "found" };
+        }
+        if (typed.done) return { id: box.id, text: box.label, tone: "missed" };
+        return { id: box.id, text: wordHint(box), tone: "hidden" };
+      }
+      const open = box.id === target?.id && state === "answer";
+      return {
+        id: box.id,
+        text: open ? box.label : wordHint(box),
+        tone: open ? "found" : "hidden",
+      };
+    });
+    return (
+      <div className={className}>
+        {words && <CardHtml className="rich-content mb-3" html={words} />}
+        <WordTiles tiles={tiles} />
+      </div>
+    );
+  }
 
   return (
     <div className={className}>

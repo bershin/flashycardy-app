@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  boxesToSave,
   CardFields,
   draftToInput,
   emptyDraft,
@@ -61,7 +62,7 @@ export function AddCardDialog({
             deckId,
             front: draft.front,
             back: draft.back,
-            boxes: draft.boxes,
+            boxes: boxesToSave(draft),
             typed: draft.typed,
           });
         } else if (draft.type === "parts") {

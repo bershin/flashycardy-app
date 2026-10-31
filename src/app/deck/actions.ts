@@ -236,10 +236,8 @@ const occlusionSchema = z.object({
   deckId: z.number(),
   /** Any card of the set being edited, or absent for a new picture. */
   fromCardId: z.number().optional(),
-  front: z
-    .string()
-    .max(MAX_FIELD, TOO_LARGE)
-    .refine((html) => /<img\b/i.test(html), "Add the picture to the question."),
+  /** The picture and any words above it. A typed set may have no picture. */
+  front: z.string().max(MAX_FIELD, TOO_LARGE),
   back: z.string().max(MAX_FIELD, TOO_LARGE),
   boxes: z
     .array(
@@ -251,13 +249,19 @@ const occlusionSchema = z.object({
         h: z.number().positive().max(1),
         label: z.string().trim().min(1, "Every box needs a label.").max(200),
         note: z.string().trim().max(2000).optional().transform((s) => s || undefined),
+        clue: z.string().trim().max(500).optional().transform((s) => s || undefined),
       }),
     )
     .min(1, "Draw a box over at least one label.")
     .max(200),
   /** Studied by typing the hidden words, all at once. */
   typed: z.boolean().optional(),
-});
+})
+  // A list of words typed in needs no picture; covering labels does.
+  .refine((data) => data.typed || /<img\b/i.test(data.front), {
+    message: "Add the picture to the question.",
+    path: ["front"],
+  });
 
 /**
  * Save a picture's cards: one per box. Adding and editing are the same call —

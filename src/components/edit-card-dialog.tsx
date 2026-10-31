@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  boxesToSave,
   CardFields,
   draftFromCard,
   draftToInput,
@@ -99,7 +100,7 @@ export function EditCardDialog({
             fromCardId: card.id,
             front: draft.front,
             back: draft.back,
-            boxes: draft.boxes,
+            boxes: boxesToSave(draft),
             typed: draft.typed,
           });
           // This card's own box may have been the one removed.

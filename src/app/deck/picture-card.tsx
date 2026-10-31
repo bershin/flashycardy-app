@@ -4,12 +4,13 @@ import { useState } from "react";
 import { CardHistory } from "@/components/card-history";
 import {
   SetPips,
+  WordTiles,
   boxSlots,
   boxStyle,
   labelStatus,
   usePictureUrl,
 } from "@/components/occlusion-picture";
-import { firstImageSrc, withoutFirstImage } from "@/lib/occlusion";
+import { firstImageSrc, withoutFirstImage, wordHint } from "@/lib/occlusion";
 import type { CardRow } from "@/lib/store/types";
 import { CardSetTile } from "./card-set-tile";
 
@@ -103,13 +104,36 @@ export function PictureCard({
 }) {
   const first = cards[0];
   const boxes = first.occlusion!.boxes;
-  const url = usePictureUrl(firstImageSrc(first.front));
+  const src = firstImageSrc(first.front);
+  const url = usePictureUrl(src);
   const words = withoutFirstImage(first.front);
   const byBox = new Map(cards.map((c) => [c.occlusion!.boxId, c]));
   const [peek, setPeek] = useState<string | null>(null);
   const peekedIndex = boxes.findIndex((b) => b.id === peek);
 
-  const picture = (
+  // A typed set of words with no picture: a tile per word, coloured by how it
+  // is going, with its clue or blanks on it. The peek works as on a picture.
+  const picture = !src ? (
+    <WordTiles
+      tiles={boxes.map((box, index) => {
+        const status = labelStatus(byBox.get(box.id));
+        return {
+          id: box.id,
+          text: box.id === peek ? box.label : wordHint(box),
+          tone:
+            box.id === peek
+              ? "found"
+              : status === "known"
+                ? "known"
+                : status === "missed"
+                  ? "missed"
+                  : "new",
+          title: `Word ${index + 1}`,
+          onClick: selecting ? undefined : () => setPeek(box.id),
+        };
+      })}
+    />
+  ) : (
     <div className="relative mx-auto w-fit max-w-full select-none">
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- an object URL, which next/image cannot optimise
@@ -168,7 +192,7 @@ export function PictureCard({
           <div className="grid content-start gap-3">
             {peek && peekedIndex !== -1 ? (
               <Peek
-                title={`Box ${peekedIndex + 1}`}
+                title={`${src ? "Box" : "Word"} ${peekedIndex + 1}`}
                 answer={boxes[peekedIndex].label}
                 note={boxes[peekedIndex].note}
                 card={byBox.get(peek)}
@@ -176,7 +200,9 @@ export function PictureCard({
               />
             ) : (
               <p className="text-xs text-muted-foreground">
-                Click a box or its number to see what&apos;s under it.
+                {src
+                  ? "Click a box or its number to see what\u2019s under it."
+                  : "Click a word or its number to see it."}
               </p>
             )}
             <SetPips

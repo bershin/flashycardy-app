@@ -9,6 +9,7 @@ import {
   normalizeWord,
   planGroupSave,
   typedSpan,
+  wordHint,
   withoutFirstImage,
   type OcclusionBox,
   type OcclusionPayload,
@@ -122,4 +123,11 @@ test("a typed picture's cards are brought together, and its run found from any o
   assert.deepEqual(typedSpan(gathered, 2), { start: 1, end: 3 });
   assert.deepEqual(typedSpan(gathered, 4), { start: 4, end: 4 });
   assert.deepEqual(typedSpan(gathered, 0), { start: 0, end: 0 });
+});
+
+test("a word with no picture shows its clue, or a blank per letter", () => {
+  assert.equal(wordHint({ label: "thief", clue: " a robber " }), "a robber");
+  assert.equal(wordHint({ label: "thief" }), "_ _ _ _ _");
+  assert.equal(wordHint({ label: "it's", clue: "" }), "_ _ ' _");
+  assert.equal(wordHint({ label: "ice cream" }), "_ _ _   _ _ _ _ _");
 });

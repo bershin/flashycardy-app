@@ -6,7 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { OcclusionEditor } from "@/components/occlusion-editor";
-import { firstImageSrc, type OcclusionBox } from "@/lib/occlusion";
+import {
+  firstImageSrc,
+  newWordBox,
+  type OcclusionBox,
+} from "@/lib/occlusion";
+import { WordListEditor } from "@/components/word-list-editor";
 import { PartsEditor } from "@/components/parts-editor";
 import { newPartId, type Part } from "@/lib/parts";
 import {
@@ -17,6 +22,13 @@ import {
 } from "@/lib/store/types";
 
 export const MIN_OPTIONS = 2;
+
+/**
+ * The row an empty word list shows. One shared object rather than a fresh
+ * one per render, so its id — and the focus on it — holds while it is typed
+ * into; the first keystroke turns it into a box of the draft's own.
+ */
+const EMPTY_ROW = newWordBox();
 export const MAX_OPTIONS = 6;
 
 /**
@@ -97,6 +109,26 @@ export function isBlank(html: string): boolean {
   return html.replace(/<[^>]*>/g, "").trim().length === 0;
 }
 
+/**
+ * A row left empty in the word list: no word, no clue, and still the
+ * whole-picture box a typed word starts as (a box drawn on a picture never is).
+ */
+function isEmptyWordRow(box: OcclusionBox): boolean {
+  return (
+    !box.label.trim() &&
+    !box.clue?.trim() &&
+    box.x === 0 &&
+    box.y === 0 &&
+    box.w === 1 &&
+    box.h === 1
+  );
+}
+
+/** The boxes worth saving: rows left wholly empty are dropped, not refused. */
+export function boxesToSave(draft: CardDraft): OcclusionBox[] {
+  return draft.boxes.filter((b) => !isEmptyWordRow(b));
+}
+
 /** Returns an error message, or null when the draft can be saved. */
 export function validateDraft(draft: CardDraft): string | null {
   if (draft.type === "parts") {
@@ -108,6 +140,15 @@ export function validateDraft(draft: CardDraft): string | null {
         parts[gap].question ? "an answer" : "a question"
       }.`;
     }
+    return null;
+  }
+
+  // A typed list of words is the question itself; the picture is optional.
+  if (draft.type === "occlusion" && draft.typed && !firstImageSrc(draft.front)) {
+    const words = boxesToSave(draft);
+    if (words.length === 0) return "Type at least one word, or add a picture.";
+    const blank = words.findIndex((b) => !b.label.trim());
+    if (blank !== -1) return `Word ${blank + 1} needs the word as well as its clue.`;
     return null;
   }
 
@@ -188,7 +229,7 @@ const TYPES: Array<{
     value: "occlusion",
     typed: true,
     label: "Type the words",
-    hint: "Hidden words on a picture, typed to reveal",
+    hint: "Hidden words — on a picture or a list — typed to reveal",
   },
 ];
 
@@ -234,7 +275,9 @@ export function CardFields({
     <div className="grid gap-4">
       {cardSet !== undefined ? (
         <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-          {cardSet.kind === "occlusion"
+          {cardSet.kind === "occlusion" && draft.typed && !firstImageSrc(draft.front)
+            ? `This card is one of ${cardSet.size} words in the same list. Changes here apply to all of them; removing a word deletes that word's card.`
+            : cardSet.kind === "occlusion"
             ? `This card is one of ${cardSet.size} made from the same picture. Changes here apply to all of them; removing a box deletes that box's card.`
             : `This card is one of ${cardSet.size} parts of the same question. Changes here apply to all of them; removing a part deletes that part's card.`}
         </p>
@@ -278,7 +321,9 @@ export function CardFields({
       <div className="grid gap-2">
         <Label>
           {draft.type === "occlusion"
-            ? "Picture"
+            ? draft.typed
+              ? "Picture (optional)"
+              : "Picture"
             : draft.type === "parts"
               ? "Instructions (optional)"
               : "Question"}
@@ -288,7 +333,9 @@ export function CardFields({
           onChange={(front) => set({ front })}
           placeholder={
             draft.type === "occlusion"
-              ? "Paste or add the picture, and a question above it if you like…"
+              ? draft.typed
+                ? "Add a picture to hide words on it — or leave this for instructions and type the words below…"
+                : "Paste or add the picture, and a question above it if you like…"
               : draft.type === "parts"
                 ? "Work out:"
                 : "Question or term…"
@@ -326,7 +373,15 @@ export function CardFields({
           {firstImageSrc(draft.front) ? (
             <OcclusionEditor
               src={firstImageSrc(draft.front)!}
-              boxes={draft.boxes}
+              // Empty rows from the word list are not boxes to draw.
+              boxes={draft.boxes.filter((b) => !isEmptyWordRow(b))}
+              onChange={(boxes) => set({ boxes })}
+              disabled={disabled}
+            />
+          ) : draft.typed ? (
+            <WordListEditor
+              // Never an empty list: one row says what the form is for.
+              boxes={draft.boxes.length > 0 ? draft.boxes : [EMPTY_ROW]}
               onChange={(boxes) => set({ boxes })}
               disabled={disabled}
             />

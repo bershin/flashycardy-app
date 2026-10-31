@@ -42,6 +42,12 @@ export type OcclusionBox = {
    * part of the answer, so changing it leaves the card's progress alone.
    */
   note?: string;
+  /**
+   * What stands in for the word while it is hidden, on a typed set with no
+   * picture: a meaning, a sentence with a gap. Without one the word shows as
+   * a blank per letter.
+   */
+  clue?: string;
 };
 
 export type OcclusionPayload = {
@@ -79,6 +85,31 @@ export function withoutFirstImage(html: string): string {
 
 export function newOcclusionId(): string {
   return crypto.randomUUID().slice(0, 8);
+}
+
+/**
+ * A word on a typed set with no picture. It has no place to cover, so it
+ * takes the whole of the picture that is not there — kept in the box shape
+ * so the rest of the set (saving, siblings, study) need not tell the two
+ * apart, and so a picture added later shows every word ready to be moved.
+ */
+export function newWordBox(label = "", clue = ""): OcclusionBox {
+  return { id: newOcclusionId(), x: 0, y: 0, w: 1, h: 1, label, clue };
+}
+
+/**
+ * What a hidden word shows on a set with no picture: its clue, or a blank for
+ * each letter. Spaces, hyphens and apostrophes stay, since they are part of
+ * the word's shape rather than its spelling.
+ */
+export function wordHint(box: Pick<OcclusionBox, "label" | "clue">): string {
+  const clue = box.clue?.trim();
+  if (clue) return clue;
+  return box.label
+    .trim()
+    .replace(/[\p{L}\p{N}]/gu, "_")
+    .split("")
+    .join(" ");
 }
 
 /** The box a card asks about, or undefined for a card whose box has gone. */
