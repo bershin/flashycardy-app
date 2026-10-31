@@ -90,6 +90,11 @@ export function PartsCard({
                     streak={card.consecutiveCorrect}
                   />
                 )}
+                {open && part.note?.trim() && (
+                  <p className="basis-full whitespace-pre-line pl-5 text-sm text-muted-foreground">
+                    {part.note.trim()}
+                  </p>
+                )}
               </li>
             );
           })}

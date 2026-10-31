@@ -42,7 +42,7 @@ import { MoveCardDialog } from "@/components/move-card-dialog";
 import { VaryCardDialog } from "@/components/vary-card-dialog";
 import type { CardRow } from "@/lib/store/types";
 import { OcclusionPicture } from "@/components/occlusion-picture";
-import { occlusionLabel } from "@/lib/occlusion";
+import { occlusionLabel, occlusionNote } from "@/lib/occlusion";
 
 /**
  * The question side as the deck shows it. A picture card shows its picture with
@@ -76,6 +76,9 @@ function CardBack({ card }: { card: CardRow }) {
         <p className="font-semibold text-emerald-600 dark:text-emerald-400">
           {occlusionLabel(card)}
         </p>
+      )}
+      {card.type === "occlusion" && occlusionNote(card) && (
+        <p className="whitespace-pre-line text-sm">{occlusionNote(card)}</p>
       )}
       <CardHtml
         className="rich-content min-w-0 overflow-hidden text-muted-foreground"

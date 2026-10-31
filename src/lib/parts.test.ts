@@ -57,7 +57,7 @@ test("editing keeps each part's card, and flags only the changed one", () => {
   const plan = planPartsSave(
     [card(1, "a"), card(2, "b")],
     [
-      { id: "a", question: "1 + 1", answer: "2" },
+      { id: "a", question: "1 + 1", answer: "2", note: "One and one more" },
       { id: "b", question: "2 + 2", answer: "5" },
       { id: "c", question: "3 + 3", answer: "6" },
     ],

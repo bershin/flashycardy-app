@@ -63,7 +63,12 @@ import { useCardTimer } from "./use-card-timer";
 import { rateCardAction, markDeckStudiedAction } from "./actions";
 import { Trash2 } from "lucide-react";
 import { mathToText } from "@/lib/math";
-import { mixSiblings, occlusionLabel, setGroup } from "@/lib/occlusion";
+import {
+  mixSiblings,
+  occlusionLabel,
+  occlusionNote,
+  setGroup,
+} from "@/lib/occlusion";
 import {
   OcclusionPicture,
   SetPips,
@@ -1063,6 +1068,21 @@ export function StudySession({
                     {occlusionLabel(current)}
                   </p>
                 )}
+                {/* This label's or part's own explanation, between the answer
+                    and the notes the whole set shares. */}
+                {(() => {
+                  const note =
+                    current.type === "occlusion"
+                      ? occlusionNote(current)
+                      : current.type === "parts" && current.parts
+                        ? (ownPart(current.parts)?.note?.trim() ?? "")
+                        : "";
+                  return note ? (
+                    <p className="mx-auto mt-2 mb-4 max-w-prose whitespace-pre-line text-center text-lg leading-relaxed md:text-xl">
+                      {note}
+                    </p>
+                  ) : null;
+                })()}
                 <CardHtml
                   className="rich-content w-full text-left text-lg leading-relaxed md:text-xl"
                   html={current.back}

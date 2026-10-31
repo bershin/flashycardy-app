@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { newPartId, partLetter, type Part } from "@/lib/parts";
 
 /** Signs with no key of their own, typed into whichever box was last used. */
@@ -119,23 +120,36 @@ export function PartsEditor({
 
       <ol className="grid gap-1.5">
         {items.map((part, index) => (
-          <li key={part.id} className="flex items-center gap-2">
-            <span className="w-6 shrink-0 text-right text-sm font-semibold text-muted-foreground">
-              {partLetter(index)})
-            </span>
-            {field(part, "question", index)}
-            <span className="text-muted-foreground">=</span>
-            {field(part, "answer", index)}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              disabled={disabled || items.length === 1}
-              onClick={() => onChange(items.filter((p) => p.id !== part.id))}
-            >
-              <X className="size-4" />
-              <span className="sr-only">Remove part {partLetter(index)}</span>
-            </Button>
+          <li key={part.id} className="grid gap-1">
+            <div className="flex items-center gap-2">
+              <span className="w-6 shrink-0 text-right text-sm font-semibold text-muted-foreground">
+                {partLetter(index)})
+              </span>
+              {field(part, "question", index)}
+              <span className="text-muted-foreground">=</span>
+              {field(part, "answer", index)}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={disabled || items.length === 1}
+                onClick={() => onChange(items.filter((p) => p.id !== part.id))}
+              >
+                <X className="size-4" />
+                <span className="sr-only">Remove part {partLetter(index)}</span>
+              </Button>
+            </div>
+            {/* Left out of the Enter chain: a worksheet goes in question,
+                answer, question, and the explanations are added after. */}
+            <Textarea
+              value={part.note ?? ""}
+              disabled={disabled}
+              rows={1}
+              placeholder="Explanation, shown with the answer (optional)"
+              aria-label={`Part ${partLetter(index)} explanation`}
+              onChange={(e) => set(part.id, { note: e.target.value })}
+              className="ml-8 min-h-8 w-auto py-1 text-xs md:text-xs"
+            />
           </li>
         ))}
       </ol>

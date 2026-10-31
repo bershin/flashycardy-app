@@ -40,11 +40,14 @@ export function StatusKey() {
 export function Peek({
   title,
   answer,
+  note,
   card,
   onClose,
 }: {
   title: string;
   answer: string;
+  /** The label's explanation, if it has one. */
+  note?: string;
   card: CardRow | undefined;
   onClose: () => void;
 }) {
@@ -54,6 +57,11 @@ export function Peek({
       <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
         {answer}
       </p>
+      {note?.trim() && (
+        <p className="whitespace-pre-line text-sm text-muted-foreground">
+          {note.trim()}
+        </p>
+      )}
       {card && (
         <CardHistory
           compact
@@ -162,6 +170,7 @@ export function PictureCard({
               <Peek
                 title={`Box ${peekedIndex + 1}`}
                 answer={boxes[peekedIndex].label}
+                note={boxes[peekedIndex].note}
                 card={byBox.get(peek)}
                 onClose={() => setPeek(null)}
               />

@@ -17,6 +17,11 @@ export type Part = {
   question: string;
   /** What it comes to, e.g. `2489`. */
   answer: string;
+  /**
+   * How it was worked out, shown under the answer once it is up. Not part of
+   * the answer, so changing it leaves the card's progress alone.
+   */
+  note?: string;
 };
 
 export type PartsPayload = {

@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Loader2, ScanText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { boxStyle, usePictureUrl } from "@/components/occlusion-picture";
 import { transcribeImageAction } from "@/app/deck/actions";
 import {
@@ -159,6 +160,10 @@ export function OcclusionEditor({
     onChange(boxes.map((b) => (b.id === id ? { ...b, label } : b)));
   }
 
+  function setExplanation(id: string, note: string) {
+    onChange(boxes.map((b) => (b.id === id ? { ...b, note } : b)));
+  }
+
   /**
    * Read each unlabelled box's word off the picture.
    *
@@ -277,36 +282,50 @@ export function OcclusionEditor({
           {boxes.map((box, index) => (
             <li
               key={box.id}
-              className={`flex items-center gap-2 rounded-md px-1 ${
+              className={`grid gap-1 rounded-md px-1 py-0.5 ${
                 box.id === selected ? "bg-violet-500/10" : ""
               }`}
             >
-              <span className="w-6 shrink-0 text-right font-mono text-xs text-muted-foreground tabular-nums">
-                {index + 1}
-              </span>
-              <Input
-                id={`occlusion-label-${box.id}`}
-                value={box.label}
+              <div className="flex items-center gap-2">
+                <span className="w-6 shrink-0 text-right font-mono text-xs text-muted-foreground tabular-nums">
+                  {index + 1}
+                </span>
+                <Input
+                  id={`occlusion-label-${box.id}`}
+                  value={box.label}
+                  disabled={disabled}
+                  placeholder="What's under this box?"
+                  aria-label={`Label for box ${index + 1}`}
+                  onFocus={() => setSelected(box.id)}
+                  onChange={(e) => setLabel(box.id, e.target.value)}
+                  // Enter here would submit the card with the other labels unfilled.
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.preventDefault();
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={disabled}
+                  onClick={() => remove(box.id)}
+                >
+                  <X className="size-4" />
+                  <span className="sr-only">Remove box {index + 1}</span>
+                </Button>
+              </div>
+              {/* Under the label rather than beside it: an explanation runs to
+                  a sentence or two, and the label is what is being learned. */}
+              <Textarea
+                value={box.note ?? ""}
                 disabled={disabled}
-                placeholder="What's under this box?"
-                aria-label={`Label for box ${index + 1}`}
+                rows={1}
+                placeholder="Explanation, shown with the answer (optional)"
+                aria-label={`Explanation for box ${index + 1}`}
                 onFocus={() => setSelected(box.id)}
-                onChange={(e) => setLabel(box.id, e.target.value)}
-                // Enter here would submit the card with the other labels unfilled.
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.preventDefault();
-                }}
+                onChange={(e) => setExplanation(box.id, e.target.value)}
+                className="ml-8 min-h-8 w-auto py-1 text-xs md:text-xs"
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={disabled}
-                onClick={() => remove(box.id)}
-              >
-                <X className="size-4" />
-                <span className="sr-only">Remove box {index + 1}</span>
-              </Button>
             </li>
           ))}
         </ol>

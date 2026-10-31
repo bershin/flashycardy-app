@@ -75,3 +75,13 @@ test("a box is kept inside the picture", () => {
   assert.deepEqual([b.x, b.y, b.h], [0.9, 0, 0.01]);
   assert.ok(Math.abs(b.w - 0.1) < 1e-9);
 });
+
+test("a changed explanation keeps the card's progress", () => {
+  const before = [box("a", "Femur")];
+  const after = [{ ...box("a", "Femur"), note: "The thigh bone, the longest in the body" }];
+  const plan = planGroupSave([card(1, "a", before)], after);
+  assert.deepEqual(
+    plan.keep.map((k) => [k.card.id, k.relabelled]),
+    [[1, false]],
+  );
+});

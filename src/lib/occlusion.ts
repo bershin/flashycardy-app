@@ -37,6 +37,11 @@ export type OcclusionBox = {
   h: number;
   /** What is under the box: the answer to that box's card. */
   label: string;
+  /**
+   * Why the label is what it is, shown under it once the answer is up. Not
+   * part of the answer, so changing it leaves the card's progress alone.
+   */
+  note?: string;
 };
 
 export type OcclusionPayload = {
@@ -166,6 +171,11 @@ export function planGroupSave<C extends { id: number; occlusion?: OcclusionPaylo
   }
   remove.push(...byBox.values());
   return { keep, add, remove };
+}
+
+/** The explanation for the label a card asks for, or "" if it has none. */
+export function occlusionNote(card: { occlusion?: OcclusionPayload }): string {
+  return card.occlusion ? (targetBox(card.occlusion)?.note?.trim() ?? "") : "";
 }
 
 /** The label a card is asking for, as plain text, for search and summaries. */

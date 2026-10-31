@@ -250,6 +250,7 @@ const occlusionSchema = z.object({
         w: z.number().positive().max(1),
         h: z.number().positive().max(1),
         label: z.string().trim().min(1, "Every box needs a label.").max(200),
+        note: z.string().trim().max(2000).optional().transform((s) => s || undefined),
       }),
     )
     .min(1, "Draw a box over at least one label.")
@@ -302,6 +303,7 @@ const partsSchema = z.object({
         id: z.string().min(1).max(40),
         question: z.string().trim().min(1, "Every part needs a question.").max(500),
         answer: z.string().trim().min(1, "Every part needs an answer.").max(500),
+        note: z.string().trim().max(2000).optional().transform((s) => s || undefined),
       }),
     )
     .min(1, "Add at least one part.")
