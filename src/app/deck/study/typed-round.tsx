@@ -91,6 +91,7 @@ export function TypedRound({
         occlusion={occlusion}
         state="question"
         typed={{ asked, found, done }}
+        hints
       />
 
       <p className="text-center text-sm text-muted-foreground">

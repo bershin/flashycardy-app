@@ -43,9 +43,10 @@ export type OcclusionBox = {
    */
   note?: string;
   /**
-   * What stands in for the word while it is hidden, on a typed set with no
-   * picture: a meaning, a sentence with a gap. Without one the word shows as
-   * a blank per letter.
+   * What stands in for the word while it is hidden: a meaning, a sentence
+   * with a gap. On a typed set with no picture it is the word's tile (without
+   * one, a blank per letter); on a picture it is the hint shown when the box
+   * is pointed at (without one, the word's first letter and blanks).
    */
   clue?: string;
 };
@@ -209,6 +210,31 @@ export function planGroupSave<C extends { id: number; occlusion?: OcclusionPaylo
   }
   remove.push(...byBox.values());
   return { keep, add, remove };
+}
+
+/**
+ * The hint a covered box gives when it is pointed at: its clue, or the first
+ * letter of each word with a blank for every letter after — enough to jog a
+ * memory that has the word nearly, without handing it over.
+ */
+export function boxHint(box: Pick<OcclusionBox, "label" | "clue">): string {
+  const clue = box.clue?.trim();
+  if (clue) return clue;
+  return box.label
+    .trim()
+    .split(/\s+/)
+    .map((word) => {
+      let first = true;
+      return word
+        .replace(/[\p{L}\p{N}]/gu, (ch) => {
+          if (!first) return "_";
+          first = false;
+          return ch;
+        })
+        .split("")
+        .join(" ");
+    })
+    .join("   ");
 }
 
 /**

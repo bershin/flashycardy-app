@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  boxHint,
   checkTyped,
   clampBox,
   firstImageSrc,
@@ -130,4 +131,11 @@ test("a word with no picture shows its clue, or a blank per letter", () => {
   assert.equal(wordHint({ label: "thief" }), "_ _ _ _ _");
   assert.equal(wordHint({ label: "it's", clue: "" }), "_ _ ' _");
   assert.equal(wordHint({ label: "ice cream" }), "_ _ _   _ _ _ _ _");
+});
+
+test("pointing at a covered box hints with its clue, or its first letters", () => {
+  assert.equal(boxHint({ label: "chloroplast", clue: "makes food from light" }), "makes food from light");
+  assert.equal(boxHint({ label: "chloroplast" }), "c _ _ _ _ _ _ _ _ _ _");
+  assert.equal(boxHint({ label: "Cell Wall" }), "C _ _ _   W _ _ _");
+  assert.equal(boxHint({ label: "EUGLENA:" }), "E _ _ _ _ _ _ :");
 });

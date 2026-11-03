@@ -1097,10 +1097,14 @@ export function StudySession({
                     html={current.front}
                     occlusion={current.occlusion}
                     state={revealed ? "answer" : "question"}
+                    hints
                   />
                   {!revealed && (
                     <p className="mt-2 text-center text-base font-medium">
                       What is under the purple box?
+                      <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                        Point at it or tap it for a hint
+                      </span>
                     </p>
                   )}
                   <div className="mt-3 flex justify-center">

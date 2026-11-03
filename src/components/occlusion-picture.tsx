@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CardHtml } from "@/components/card-html";
 import type { CardRow } from "@/lib/store/types";
 import { cachedUrl, resolveImage } from "@/lib/image-urls";
 import { IMAGE_PREFIX } from "@/lib/images";
 import {
+  boxHint,
   firstImageSrc,
   targetBox,
   withoutFirstImage,
@@ -124,17 +125,24 @@ export function WordTiles({ tiles }: { tiles: WordTile[] }) {
  * The picture ignores the pointer. The study screen opens any picture that is
  * clicked at full size, and full size has no boxes on it — clicking a covered
  * label would show every answer on the picture.
+ *
+ * With `hints`, the box being asked about — or, in a typed round, any word
+ * still hidden — gives a hint when pointed at: on hover with a mouse, on a tap
+ * with a finger. The tap is kept from the card behind, which would otherwise
+ * take it as turning the card over.
  */
 export function OcclusionPicture({
   html,
   occlusion,
   state,
   typed,
+  hints = false,
   className,
 }: {
   html: string;
   occlusion: OcclusionPayload;
   state: "question" | "answer";
+  hints?: boolean;
   typed?: {
     asked: ReadonlySet<string>;
     found: ReadonlySet<string>;
@@ -146,6 +154,51 @@ export function OcclusionPicture({
   const url = usePictureUrl(src);
   const words = withoutFirstImage(html);
   const target = targetBox(occlusion);
+
+  /** The box whose hint is showing, if any. */
+  const [hinted, setHinted] = useState<string | null>(null);
+  /** How the last press came, so a tap can toggle where a hover cannot. */
+  const lastPointer = useRef<string>("mouse");
+
+  /** Whether a box offers a hint right now: covered, and being asked. */
+  function hintable(box: OcclusionBox): boolean {
+    if (!hints) return false;
+    if (typed) {
+      return (
+        typed.asked.has(box.id) && !typed.found.has(box.id) && !typed.done
+      );
+    }
+    return box.id === target?.id && state === "question";
+  }
+
+  // Checked against the box as it is now, so a hint left open does not carry
+  // on to the next card, or stay up once its box is answered.
+  const hintBox = occlusion.boxes.find((b) => b.id === hinted && hintable(b));
+
+  function hintHandlers(box: OcclusionBox) {
+    if (!hintable(box)) return {};
+    return {
+      onPointerEnter: (e: React.PointerEvent) => {
+        if (e.pointerType === "mouse") setHinted(box.id);
+      },
+      onPointerLeave: (e: React.PointerEvent) => {
+        if (e.pointerType === "mouse") {
+          setHinted((h) => (h === box.id ? null : h));
+        }
+      },
+      onPointerDown: (e: React.PointerEvent) => {
+        lastPointer.current = e.pointerType;
+        // Keeps the typing box focused in a typed round.
+        e.preventDefault();
+      },
+      onClick: (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setHinted((h) =>
+          h === box.id && lastPointer.current !== "mouse" ? null : box.id,
+        );
+      },
+    };
+  }
 
   // A typed set of words with no picture: the tiles stand in for it.
   if (!src) {
@@ -212,7 +265,10 @@ export function OcclusionPicture({
                 <span
                   key={box.id}
                   style={boxStyle(box)}
-                  className="absolute rounded-sm bg-amber-300 dark:bg-amber-400"
+                  {...hintHandlers(box)}
+                  className={`absolute rounded-sm bg-amber-300 dark:bg-amber-400 ${
+                    hintable(box) ? "cursor-help" : ""
+                  }`}
                 />
               );
             }
@@ -230,11 +286,12 @@ export function OcclusionPicture({
               <span
                 key={box.id}
                 style={boxStyle(box)}
+                {...hintHandlers(box)}
                 className={`absolute flex items-center justify-center rounded-sm text-xs font-bold ${
                   mine
                     ? "bg-violet-600 text-white shadow-[0_0_0_3px_rgb(124_58_237/0.35)]"
                     : "bg-amber-300 text-amber-950 dark:bg-amber-400"
-                }`}
+                } ${hintable(box) ? "cursor-help" : ""}`}
               >
                 {/* Numbered as on the editor and the deck's tile, so "box 7"
                     means the same box wherever it is mentioned. */}
@@ -242,8 +299,34 @@ export function OcclusionPicture({
               </span>
             );
           })}
+        {url && hintBox && <HintBubble box={hintBox} />}
       </div>
     </div>
+  );
+}
+
+/**
+ * A covered box's hint, floated over the picture by the box: above it, or
+ * below for a box near the top where above would be cut off. Kept in from the
+ * sides for the same reason.
+ */
+function HintBubble({ box }: { box: OcclusionBox }) {
+  const below = box.y < 0.15;
+  const centre = Math.min(Math.max(box.x + box.w / 2, 0.15), 0.85);
+  return (
+    <span
+      role="tooltip"
+      style={{
+        left: `${centre * 100}%`,
+        top: `${(below ? box.y + box.h : box.y) * 100}%`,
+      }}
+      className={`pointer-events-none absolute z-20 w-max max-w-64 -translate-x-1/2 animate-in fade-in rounded-md bg-foreground px-2.5 py-1 text-center text-sm font-medium text-background shadow-lg duration-150 ${
+        below ? "mt-2" : "-mt-2 -translate-y-full"
+      }`}
+    >
+      <span className="opacity-70">Hint: </span>
+      {boxHint(box)}
+    </span>
   );
 }
 

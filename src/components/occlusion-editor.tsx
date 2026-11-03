@@ -9,6 +9,7 @@ import { boxStyle, usePictureUrl } from "@/components/occlusion-picture";
 import { transcribeImageAction } from "@/app/deck/actions";
 import {
   MIN_BOX,
+  boxHint,
   clampBox,
   newOcclusionId,
   type OcclusionBox,
@@ -164,6 +165,10 @@ export function OcclusionEditor({
     onChange(boxes.map((b) => (b.id === id ? { ...b, note } : b)));
   }
 
+  function setHint(id: string, clue: string) {
+    onChange(boxes.map((b) => (b.id === id ? { ...b, clue } : b)));
+  }
+
   /**
    * Read each unlabelled box's word off the picture.
    *
@@ -302,6 +307,20 @@ export function OcclusionEditor({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") e.preventDefault();
                   }}
+                />
+                {/* Beside the label: a hint is a word or two, and reads as part
+                    of what the box is. */}
+                <Input
+                  value={box.clue ?? ""}
+                  disabled={disabled}
+                  placeholder={`Hint — else ${boxHint(box).slice(0, 12) || "first letter"}`}
+                  aria-label={`Hint for box ${index + 1}`}
+                  onFocus={() => setSelected(box.id)}
+                  onChange={(e) => setHint(box.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.preventDefault();
+                  }}
+                  className="w-44 shrink-0 text-xs md:text-xs"
                 />
                 <Button
                   type="button"
