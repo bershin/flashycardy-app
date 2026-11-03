@@ -286,11 +286,11 @@ export function DeckCard({ deck }: DeckCardProps) {
               {deck.dueCount > 0 ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    deck.childCount > 0
-                      ? router.push(`/deck/?id=${deck.id}`)
-                      : router.push(`/deck/study/?id=${deck.id}`)
-                  }
+                  // Straight into the due cards, sub-decks' included, as new
+                  // and hard do. It used to open a parent deck's page instead,
+                  // from before a session could be handed cards from under it,
+                  // which left the pill saying "due" and doing "browse".
+                  onClick={() => study(dueCards)}
                   className={badgeClass(
                     "due",
                     // Reads as a control rather than a label: it lifts on hover,
@@ -300,11 +300,7 @@ export function DeckCard({ deck }: DeckCardProps) {
                     doneLook(allAnsweredToday(dueCards)) +
                       " group/due cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-amber-500/25 hover:shadow-md hover:shadow-amber-500/20 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:hover:bg-amber-400/25",
                   )}
-                  aria-label={
-                    deck.childCount > 0
-                      ? `Open ${deck.title}: ${deck.dueCount} cards due`
-                      : `Study ${deck.dueCount} cards due in ${deck.title}`
-                  }
+                  aria-label={`Study ${deck.dueCount} cards due in ${deck.title}`}
                 >
                   <BookOpen className="size-3.5" />
                   <span>
