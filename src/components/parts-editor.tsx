@@ -4,7 +4,8 @@ import { useLayoutEffect, useRef } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/rich-text-editor";
+import { noteBodyToHtml } from "@/lib/note-body";
 import { newPartId, partLetter, type Part } from "@/lib/parts";
 
 /** Signs with no key of their own, typed into whichever box was last used. */
@@ -64,6 +65,12 @@ export function PartsEditor({
     pending.current = { id: box.id, at: start + text.length };
   }
 
+  // Answers as short as 2489 keep a narrow box; worded ones widen every
+  // answer box to the longest, so the column stays straight, up to the 60%
+  // the questions can spare. The cap is in the width itself: as a max-width,
+  // a long answer still pushed the whole dialog wider than the screen.
+  const answerWidth = `min(${Math.max(0, ...items.map((p) => p.answer.length)) + 3}ch, 60%)`;
+
   const field = (part: Part, kind: "question" | "answer", index: number) => (
     <Input
       id={`part-${kind === "question" ? "q" : "a"}-${part.id}`}
@@ -93,7 +100,8 @@ export function PartsEditor({
         // move; a fresh array asks for one.
         onChange([...items]);
       }}
-      className={kind === "answer" ? "w-28 shrink-0" : "min-w-0 flex-1"}
+      className={kind === "answer" ? "min-w-28 shrink-0" : "min-w-0 flex-1"}
+      style={kind === "answer" ? { width: answerWidth } : undefined}
     />
   );
 
@@ -141,15 +149,18 @@ export function PartsEditor({
             </div>
             {/* Left out of the Enter chain: a worksheet goes in question,
                 answer, question, and the explanations are added after. */}
-            <Textarea
-              value={part.note ?? ""}
-              disabled={disabled}
-              rows={1}
-              placeholder="Explanation, shown with the answer (optional)"
-              aria-label={`Part ${partLetter(index)} explanation`}
-              onChange={(e) => set(part.id, { note: e.target.value })}
-              className="ml-8 min-h-8 w-auto py-1 text-xs md:text-xs"
-            />
+            <div className="ml-8">
+              <RichTextEditor
+                compact
+                // One written before explanations took formatting is plain
+                // text; it opens with its lines kept.
+                content={noteBodyToHtml(part.note ?? "")}
+                disabled={disabled}
+                placeholder="Explanation, shown with the answer (optional)"
+                label={`Part ${partLetter(index)} explanation`}
+                onChange={(html) => set(part.id, { note: html })}
+              />
+            </div>
           </li>
         ))}
       </ol>

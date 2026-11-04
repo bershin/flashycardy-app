@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { CardHistory } from "@/components/card-history";
 import { CardHtml } from "@/components/card-html";
+import { noteBodyToHtml } from "@/lib/note-body";
 import { EditCardDialog } from "@/components/edit-card-dialog";
 import {
   AlertDialog,
@@ -1182,9 +1183,10 @@ export function StudySession({
                         ? (ownPart(current.parts)?.note?.trim() ?? "")
                         : "";
                   return note ? (
-                    <p className="mx-auto mt-2 mb-4 max-w-prose whitespace-pre-line text-center text-lg leading-relaxed md:text-xl">
-                      {note}
-                    </p>
+                    <CardHtml
+                      className="rich-content mx-auto mt-2 mb-4 max-w-prose text-center text-lg leading-relaxed md:text-xl"
+                      html={noteBodyToHtml(note)}
+                    />
                   ) : null;
                 })()}
                 <CardHtml

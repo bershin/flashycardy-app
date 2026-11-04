@@ -41,3 +41,11 @@ test("an ampersand is decoded once, not twice", () => {
   // &amp;lt; is a literal "&lt;" the writer typed, not a less-than sign.
   assert.equal(noteBodyToText("<p>&amp;lt;</p>").trim(), "&lt;");
 });
+
+test("an explanation typed as plain text keeps its arrows and lines", () => {
+  // Explanations use these too; "->" is not a tag.
+  assert.equal(
+    noteBodyToHtml("imaginary number -> i = √-1\ncomplex numbers = 3 + i"),
+    "<p>imaginary number -&gt; i = √-1<br>complex numbers = 3 + i</p>",
+  );
+});

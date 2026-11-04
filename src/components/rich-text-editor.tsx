@@ -41,6 +41,14 @@ interface RichTextEditorProps {
   placeholder?: string;
   disabled?: boolean;
   id?: string;
+  /**
+   * A line or two inside a bigger form — a part's explanation — rather than a
+   * card face: words, lists and maths only, no headings, code or pictures, so
+   * a dozen of them stacked down a form stay small.
+   */
+  compact?: boolean;
+  /** Names the box for a screen reader when no label points at it. */
+  label?: string;
 }
 
 function ToolbarButton({
@@ -312,9 +320,11 @@ const MATH_SYMBOLS = [
 function Toolbar({
   editor,
   onFraction,
+  compact,
 }: {
   editor: Editor;
   onFraction: () => void;
+  compact?: boolean;
 }) {
   const handleImageUpload = useCallback(() => {
     const input = document.createElement("input");
@@ -328,7 +338,13 @@ function Toolbar({
   }, [editor]);
 
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-2 py-1">
+    <div
+      className={`flex-wrap items-center gap-0.5 border-b border-border px-2 py-1 ${
+        // Only in the box being typed in: a form of a dozen explanations
+        // would otherwise be half toolbars.
+        compact ? "hidden group-focus-within/editor:flex" : "flex"
+      }`}
+    >
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBold().run()}
         active={editor.isActive("bold")}
@@ -353,13 +369,15 @@ function Toolbar({
 
       <div className="mx-1 h-4 w-px bg-border" />
 
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        active={editor.isActive("heading", { level: 2 })}
-        title="Heading"
-      >
-        <Heading2 className="size-3.5" />
-      </ToolbarButton>
+      {!compact && (
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          active={editor.isActive("heading", { level: 2 })}
+          title="Heading"
+        >
+          <Heading2 className="size-3.5" />
+        </ToolbarButton>
+      )}
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         active={editor.isActive("bulletList")}
@@ -374,23 +392,27 @@ function Toolbar({
       >
         <ListOrdered className="size-3.5" />
       </ToolbarButton>
-      {/* Inline code sits next to the block form because the two are easy to
-          confuse: this one highlights a word mid-sentence, the other takes a
-          whole paragraph. */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleCode().run()}
-        active={editor.isActive("code")}
-        title="Inline code (⌘E)"
-      >
-        <Code className="size-3.5" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        active={editor.isActive("codeBlock")}
-        title="Code block"
-      >
-        <SquareCode className="size-3.5" />
-      </ToolbarButton>
+      {!compact && (
+        <>
+          {/* Inline code sits next to the block form because the two are easy to
+              confuse: this one highlights a word mid-sentence, the other takes a
+              whole paragraph. */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleCode().run()}
+            active={editor.isActive("code")}
+            title="Inline code (⌘E)"
+          >
+            <Code className="size-3.5" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            active={editor.isActive("codeBlock")}
+            title="Code block"
+          >
+            <SquareCode className="size-3.5" />
+          </ToolbarButton>
+        </>
+      )}
 
       <div className="mx-1 h-4 w-px bg-border" />
 
@@ -421,33 +443,38 @@ function Toolbar({
         </ToolbarButton>
       ))}
 
-      <div className="mx-1 h-4 w-px bg-border" />
+      {/* Undo is the keyboard's in a compact box: the row stays short. */}
+      {!compact && (
+        <>
+          <div className="mx-1 h-4 w-px bg-border" />
 
-      <ToolbarButton
-        onClick={handleImageUpload}
-        title="Insert image"
-      >
-        <ImagePlus className="size-3.5" />
-      </ToolbarButton>
+          <ToolbarButton
+            onClick={handleImageUpload}
+            title="Insert image"
+          >
+            <ImagePlus className="size-3.5" />
+          </ToolbarButton>
 
-      <ConvertImageButton editor={editor} />
+          <ConvertImageButton editor={editor} />
 
-      <div className="mx-1 h-4 w-px bg-border" />
+          <div className="mx-1 h-4 w-px bg-border" />
 
-      <ToolbarButton
-        onClick={() => editor.chain().focus().undo().run()}
-        disabled={!editor.can().undo()}
-        title="Undo"
-      >
-        <Undo className="size-3.5" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().redo().run()}
-        disabled={!editor.can().redo()}
-        title="Redo"
-      >
-        <Redo className="size-3.5" />
-      </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor.can().undo()}
+            title="Undo"
+          >
+            <Undo className="size-3.5" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().redo().run()}
+            disabled={!editor.can().redo()}
+            title="Redo"
+          >
+            <Redo className="size-3.5" />
+          </ToolbarButton>
+        </>
+      )}
     </div>
   );
 }
@@ -498,6 +525,8 @@ export function RichTextEditor({
   placeholder,
   disabled,
   id,
+  compact,
+  label,
 }: RichTextEditorProps) {
   /**
    * The fraction being typed, or null when the panel is shut. The editor reads
@@ -524,7 +553,7 @@ export function RichTextEditor({
       }),
       Placeholder.configure({ placeholder: placeholder ?? "Write something…" }),
       StoredImage.configure({ inline: false, allowBase64: true }),
-      imagePastePlugin,
+      ...(compact ? [] : [imagePastePlugin]),
     ],
     content,
     editable: !disabled,
@@ -534,7 +563,10 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         id: id ?? "",
-        class: "prose prose-sm dark:prose-invert max-w-none px-3 py-2 min-h-[80px] focus:outline-none",
+        ...(label ? { "aria-label": label } : {}),
+        class: compact
+          ? "prose prose-sm dark:prose-invert max-w-none px-3 py-1.5 min-h-8 focus:outline-none"
+          : "prose prose-sm dark:prose-invert max-w-none px-3 py-2 min-h-[80px] focus:outline-none",
       },
     },
   });
@@ -566,9 +598,10 @@ export function RichTextEditor({
   if (!editor) return null;
 
   return (
-    <div className="overflow-hidden rounded-md border border-input bg-background ring-ring/10 focus-within:ring-2 focus-within:ring-ring">
+    <div className="group/editor overflow-hidden rounded-md border border-input bg-background ring-ring/10 focus-within:ring-2 focus-within:ring-ring">
       <Toolbar
         editor={editor}
+        compact={compact}
         onFraction={() =>
           setFraction({ top: "", bottom: "", brackets: false })
         }

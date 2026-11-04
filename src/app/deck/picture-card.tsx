@@ -11,6 +11,8 @@ import {
   usePictureUrl,
 } from "@/components/occlusion-picture";
 import { firstImageSrc, withoutFirstImage, wordHint } from "@/lib/occlusion";
+import { CardHtml } from "@/components/card-html";
+import { noteBodyToHtml } from "@/lib/note-body";
 import type { CardRow } from "@/lib/store/types";
 import { CardSetTile } from "./card-set-tile";
 
@@ -59,9 +61,10 @@ export function Peek({
         {answer}
       </p>
       {note?.trim() && (
-        <p className="whitespace-pre-line text-sm text-muted-foreground">
-          {note.trim()}
-        </p>
+        <CardHtml
+          className="rich-content text-sm text-muted-foreground"
+          html={noteBodyToHtml(note)}
+        />
       )}
       {card && (
         <CardHistory

@@ -4,7 +4,8 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Loader2, ScanText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/rich-text-editor";
+import { noteBodyToHtml } from "@/lib/note-body";
 import { boxStyle, usePictureUrl } from "@/components/occlusion-picture";
 import { transcribeImageAction } from "@/app/deck/actions";
 import {
@@ -335,16 +336,16 @@ export function OcclusionEditor({
               </div>
               {/* Under the label rather than beside it: an explanation runs to
                   a sentence or two, and the label is what is being learned. */}
-              <Textarea
-                value={box.note ?? ""}
-                disabled={disabled}
-                rows={1}
-                placeholder="Explanation, shown with the answer (optional)"
-                aria-label={`Explanation for box ${index + 1}`}
-                onFocus={() => setSelected(box.id)}
-                onChange={(e) => setExplanation(box.id, e.target.value)}
-                className="ml-8 min-h-8 w-auto py-1 text-xs md:text-xs"
-              />
+              <div className="ml-8" onFocus={() => setSelected(box.id)}>
+                <RichTextEditor
+                  compact
+                  content={noteBodyToHtml(box.note ?? "")}
+                  disabled={disabled}
+                  placeholder="Explanation, shown with the answer (optional)"
+                  label={`Explanation for box ${index + 1}`}
+                  onChange={(html) => setExplanation(box.id, html)}
+                />
+              </div>
             </li>
           ))}
         </ol>

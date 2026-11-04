@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CardHistory } from "@/components/card-history";
 import { CardHtml } from "@/components/card-html";
 import { isBlank } from "@/components/card-fields";
+import { noteBodyToHtml } from "@/lib/note-body";
 import { labelStatus } from "@/components/occlusion-picture";
 import { partLetter } from "@/lib/parts";
 import type { CardRow } from "@/lib/store/types";
@@ -91,9 +92,10 @@ export function PartsCard({
                   />
                 )}
                 {open && part.note?.trim() && (
-                  <p className="basis-full whitespace-pre-line pl-5 text-sm text-muted-foreground">
-                    {part.note.trim()}
-                  </p>
+                  <CardHtml
+                    className="rich-content basis-full pl-5 text-sm text-muted-foreground"
+                    html={noteBodyToHtml(part.note)}
+                  />
                 )}
               </li>
             );

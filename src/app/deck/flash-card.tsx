@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CardHtml } from "@/components/card-html";
+import { noteBodyToHtml } from "@/lib/note-body";
 import { CardHistory } from "@/components/card-history";
 import {
   Card,
@@ -78,7 +79,10 @@ function CardBack({ card }: { card: CardRow }) {
         </p>
       )}
       {card.type === "occlusion" && occlusionNote(card) && (
-        <p className="whitespace-pre-line text-sm">{occlusionNote(card)}</p>
+        <CardHtml
+          className="rich-content text-sm"
+          html={noteBodyToHtml(occlusionNote(card))}
+        />
       )}
       <CardHtml
         className="rich-content min-w-0 overflow-hidden text-muted-foreground"

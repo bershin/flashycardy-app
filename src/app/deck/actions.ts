@@ -231,6 +231,24 @@ function blankAsEmpty(html: string): string {
   return html.replace(/<[^>]*>/g, "").trim() ? html : "";
 }
 
+/**
+ * A label's or part's explanation: HTML from the small editor, or plain text
+ * from before it had one. A box left empty, which the editor still writes as
+ * an empty paragraph, is stored as no explanation. Longer than the 2,000 of
+ * plain text it was, to leave room for the markup.
+ */
+const noteSchema = z
+  .string()
+  .trim()
+  .max(8000)
+  .optional()
+  .transform((s) =>
+    s && s.replace(/<[^>]*>/g, "").trim()
+      ? // The editor leaves an empty paragraph after a list, to type on from.
+        s.replace(/(?:<p><\/p>)+$/, "")
+      : undefined,
+  );
+
 const occlusionSchema = z.object({
   /** The deck new cards go in; ignored when editing, which keeps their deck. */
   deckId: z.number(),
@@ -248,7 +266,7 @@ const occlusionSchema = z.object({
         w: z.number().positive().max(1),
         h: z.number().positive().max(1),
         label: z.string().trim().min(1, "Every box needs a label.").max(200),
-        note: z.string().trim().max(2000).optional().transform((s) => s || undefined),
+        note: noteSchema,
         clue: z.string().trim().max(500).optional().transform((s) => s || undefined),
       }),
     )
@@ -310,7 +328,7 @@ const partsSchema = z.object({
         id: z.string().min(1).max(40),
         question: z.string().trim().min(1, "Every part needs a question.").max(500),
         answer: z.string().trim().min(1, "Every part needs an answer.").max(500),
-        note: z.string().trim().max(2000).optional().transform((s) => s || undefined),
+        note: noteSchema,
       }),
     )
     .min(1, "Add at least one part.")
