@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   BookOpen,
   Check,
+  Copy,
   Ellipsis,
   FolderInput,
   Pencil,
@@ -30,9 +31,15 @@ import {
 import { EditCardDialog } from "@/components/edit-card-dialog";
 import { MoveCardDialog } from "@/components/move-card-dialog";
 import { labelStatus } from "@/components/occlusion-picture";
+import { newOcclusionId } from "@/lib/occlusion";
+import { newPartId } from "@/lib/parts";
 import { setStudyPicks } from "@/lib/study-picks";
 import type { CardRow } from "@/lib/store/types";
-import { deleteCardsAction } from "./actions";
+import {
+  deleteCardsAction,
+  saveOcclusionCardsAction,
+  saveQuestionPartsAction,
+} from "./actions";
 
 /**
  * The frame shared by every tile that stands for several cards — a picture's
@@ -65,6 +72,8 @@ export function CardSetTile({
   const [editOpen, setEditOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  /** The first card of a copy just made, open for adjusting. */
+  const [clone, setClone] = useState<CardRow | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const missed = cards.filter((c) => labelStatus(c) === "missed").length;
@@ -74,6 +83,34 @@ export function CardSetTile({
   function study() {
     setStudyPicks(first.deckId, ids);
     router.push(`/deck/study/?id=${first.deckId}`);
+  }
+
+  /**
+   * A copy of the whole set, every part or label, with no progress: the
+   * plurals with different words, the same picture asked another way. Saved
+   * straight away, as a single card's clone is, then opened to be changed.
+   */
+  function handleClone() {
+    startTransition(async () => {
+      // Fresh ids, so nothing of the copy is mistaken for the original's.
+      const saved = first.parts
+        ? await saveQuestionPartsAction({
+            deckId: first.deckId,
+            front: first.front,
+            back: first.back,
+            items: first.parts.items.map((p) => ({ ...p, id: newPartId() })),
+          })
+        : first.occlusion
+          ? await saveOcclusionCardsAction({
+              deckId: first.deckId,
+              front: first.front,
+              back: first.back,
+              boxes: first.occlusion.boxes.map((b) => ({ ...b, id: newOcclusionId() })),
+              typed: first.occlusion.typed,
+            })
+          : [];
+      if (saved[0]) setClone(saved[0]);
+    });
   }
 
   function handleDelete() {
@@ -152,6 +189,10 @@ export function CardSetTile({
                   <Pencil />
                   Edit
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleClone} disabled={isPending}>
+                  <Copy />
+                  Clone
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setMoveOpen(true)}>
                   <FolderInput />
                   Move to deck…
@@ -171,6 +212,15 @@ export function CardSetTile({
       </Card>
 
       <EditCardDialog card={first} open={editOpen} onOpenChange={setEditOpen} />
+
+      {clone && (
+        <EditCardDialog
+          card={clone}
+          mode="clone"
+          open
+          onOpenChange={(open) => !open && setClone(null)}
+        />
+      )}
 
       <MoveCardDialog
         cardIds={ids}
