@@ -213,19 +213,28 @@ export function draftToInput(draft: CardDraft) {
 /**
  * The choices the picker offers, which are not quite the card types.
  *
- * A picture's labels and a question's parts are one choice — both make a card
- * per item, each self-rated — with a switch underneath for which; a typed
- * set is its own choice though it is a picture card underneath.
+ * Basic and quiz are one choice — a single card, one question — with a switch
+ * underneath for which. Parts and labels are each their own, parts first as
+ * the one most used; a typed set is its own choice though it is a picture
+ * card underneath.
  */
-type Choice = "basic" | "quiz" | "set" | "typed";
+type Choice = "parts" | "single" | "labels" | "typed";
 
 const TYPES: Array<{ choice: Choice; label: string; hint: string }> = [
-  { choice: "basic", label: "Basic", hint: "Question and answer, self-rated" },
-  { choice: "quiz", label: "Quiz", hint: "Multiple choice, graded instantly" },
   {
-    choice: "set",
-    label: "Labels or parts",
-    hint: "One card each — labels on a picture, or a) b) c) parts",
+    choice: "parts",
+    label: "Parts a) b) c)",
+    hint: "A question in parts — one card each",
+  },
+  {
+    choice: "single",
+    label: "Basic or quiz",
+    hint: "One question — self-rated, or multiple choice",
+  },
+  {
+    choice: "labels",
+    label: "Labels on a picture",
+    hint: "Hide labels on a picture — one card each",
   },
   {
     choice: "typed",
@@ -236,28 +245,29 @@ const TYPES: Array<{ choice: Choice; label: string; hint: string }> = [
 
 /** Which picker choice a draft is. A generated card is none of them. */
 function choiceOf(draft: CardDraft): Choice | null {
-  if (draft.type === "basic" || draft.type === "quiz") return draft.type;
-  if (draft.type === "parts") return "set";
-  if (draft.type === "occlusion") return draft.typed ? "typed" : "set";
+  if (draft.type === "basic" || draft.type === "quiz") return "single";
+  if (draft.type === "parts") return "parts";
+  if (draft.type === "occlusion") return draft.typed ? "typed" : "labels";
   return null;
 }
 
-/** The draft as a choice makes it. Labels-or-parts keeps whichever it was. */
+/** The draft as a choice makes it. Basic-or-quiz keeps whichever it was. */
 function choose(draft: CardDraft, choice: Choice): Partial<CardDraft> {
   switch (choice) {
-    case "basic":
-    case "quiz":
-      return { type: choice, typed: false };
-    case "set":
-      return { type: draft.type === "parts" ? "parts" : "occlusion", typed: false };
+    case "parts":
+      return { type: "parts", typed: false };
+    case "single":
+      return { type: draft.type === "quiz" ? "quiz" : "basic", typed: false };
+    case "labels":
+      return { type: "occlusion", typed: false };
     case "typed":
       return { type: "occlusion", typed: true };
   }
 }
 
-const SET_MODES: Array<{ type: "occlusion" | "parts"; label: string }> = [
-  { type: "occlusion", label: "Labels on a picture" },
-  { type: "parts", label: "Parts a) b) c)" },
+const SINGLE_MODES: Array<{ type: "basic" | "quiz"; label: string }> = [
+  { type: "basic", label: "Basic — self-rated" },
+  { type: "quiz", label: "Quiz — multiple choice" },
 ];
 
 interface CardFieldsProps {
@@ -318,7 +328,7 @@ export function CardFields({
           {draft.type === "generated" && (
             <p className="col-span-full text-xs text-muted-foreground">
               This card varies: its numbers are rolled from a template. Choosing
-              Basic or Quiz below drops the template and returns the card to the
+              Basic or quiz below drops the template and returns the card to the
               question it was written with.
             </p>
           )}
@@ -340,16 +350,13 @@ export function CardFields({
               </span>
             </button>
           ))}
-          {/* Chosen rather than guessed from whether there is a picture, as
-              Type the words does: a question in parts may well have a diagram
-              in its instructions, and that should not turn it into labels. */}
-          {choiceOf(draft) === "set" && (
+          {choiceOf(draft) === "single" && (
             <div
               role="radiogroup"
-              aria-label="Labels or parts"
+              aria-label="Basic or quiz"
               className="col-span-full inline-flex w-fit gap-1 rounded-lg bg-muted p-1"
             >
-              {SET_MODES.map((mode) => (
+              {SINGLE_MODES.map((mode) => (
                 <button
                   key={mode.type}
                   type="button"
