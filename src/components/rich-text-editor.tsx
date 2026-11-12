@@ -47,6 +47,12 @@ interface RichTextEditorProps {
    * a dozen of them stacked down a form stay small.
    */
   compact?: boolean;
+  /**
+   * A compact box with every tool, pictures included — a part's answer, which
+   * carries the working as well as the result. Still short, with its toolbar
+   * only while it is being typed in.
+   */
+  allTools?: boolean;
   /** Names the box for a screen reader when no label points at it. */
   label?: string;
 }
@@ -321,11 +327,15 @@ function Toolbar({
   editor,
   onFraction,
   compact,
+  allTools,
 }: {
   editor: Editor;
   onFraction: () => void;
   compact?: boolean;
+  allTools?: boolean;
 }) {
+  /** Fewer buttons: the short boxes that only take words, lists and maths. */
+  const few = compact && !allTools;
   const handleImageUpload = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -369,7 +379,7 @@ function Toolbar({
 
       <div className="mx-1 h-4 w-px bg-border" />
 
-      {!compact && (
+      {!few && (
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
           active={editor.isActive("heading", { level: 2 })}
@@ -439,8 +449,7 @@ function Toolbar({
         </ToolbarButton>
       ))}
 
-      {/* Undo is the keyboard's in a compact box: the row stays short. */}
-      {!compact && (
+      {!few && (
         <>
           <div className="mx-1 h-4 w-px bg-border" />
 
@@ -452,7 +461,11 @@ function Toolbar({
           </ToolbarButton>
 
           <ConvertImageButton editor={editor} />
-
+        </>
+      )}
+      {/* Undo is the keyboard's in a compact box: the row stays short. */}
+      {!compact && (
+        <>
           <div className="mx-1 h-4 w-px bg-border" />
 
           <ToolbarButton
@@ -522,6 +535,7 @@ export function RichTextEditor({
   disabled,
   id,
   compact,
+  allTools,
   label,
 }: RichTextEditorProps) {
   /**
@@ -549,7 +563,7 @@ export function RichTextEditor({
       }),
       Placeholder.configure({ placeholder: placeholder ?? "Write something…" }),
       StoredImage.configure({ inline: false, allowBase64: true }),
-      ...(compact ? [] : [imagePastePlugin]),
+      ...(compact && !allTools ? [] : [imagePastePlugin]),
     ],
     content,
     editable: !disabled,
@@ -598,6 +612,7 @@ export function RichTextEditor({
       <Toolbar
         editor={editor}
         compact={compact}
+        allTools={allTools}
         onFraction={() =>
           setFraction({ top: "", bottom: "", brackets: false })
         }

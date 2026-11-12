@@ -5,18 +5,18 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/rich-text-editor";
-import { noteBodyToHtml } from "@/lib/note-body";
 import { newPartId, partLetter, type Part } from "@/lib/parts";
 
-/** Signs with no key of their own, typed into whichever box was last used. */
+/** Signs with no key of their own, typed into whichever question was last used. */
 const SIGNS = ["×", "÷", "²", "³", "√", "½"];
 
 /**
  * A lettered question's parts: each a question and its answer.
  *
- * Made for typing a worksheet in quickly — Enter in a question moves to its
- * answer, Enter in an answer starts the next part — so a whole sheet goes in
- * without reaching for the mouse.
+ * The question is a line, typed with the sign buttons; Enter in it moves to
+ * the answer. The answer is a formatted box with every tool, since it often
+ * carries the working — a list of steps, a fraction, a picture — as well as
+ * the result.
  */
 export function PartsEditor({
   items,
@@ -27,9 +27,12 @@ export function PartsEditor({
   onChange: (items: Part[]) => void;
   disabled?: boolean;
 }) {
-  /** The box a sign button types into: the last one that had focus. */
+  /** The question a sign button types into: the last one that had focus. */
   const last = useRef<HTMLInputElement | null>(null);
-  /** A box to move to once React has drawn it, and where its caret goes. */
+  /**
+   * A box to move to once React has drawn it — a question, or an answer's
+   * editor — and where a question's caret goes.
+   */
   const pending = useRef<{ id: string; at?: number } | null>(null);
 
   useLayoutEffect(() => {
@@ -58,38 +61,29 @@ export function PartsEditor({
   function sign(text: string) {
     const box = last.current;
     if (!box) return;
-    const [kind, id] = [box.id.startsWith("part-q-") ? "question" : "answer", box.id.slice(7)];
+    const id = box.id.slice("part-q-".length);
     const start = box.selectionStart ?? box.value.length;
     const end = box.selectionEnd ?? start;
-    set(id, { [kind]: box.value.slice(0, start) + text + box.value.slice(end) });
+    set(id, { question: box.value.slice(0, start) + text + box.value.slice(end) });
     pending.current = { id: box.id, at: start + text.length };
   }
 
-  const field = (part: Part, kind: "question" | "answer", index: number) => (
+  const question = (part: Part, index: number) => (
     <Input
-      id={`part-${kind === "question" ? "q" : "a"}-${part.id}`}
-      value={part[kind]}
+      id={`part-q-${part.id}`}
+      value={part.question}
       disabled={disabled}
-      placeholder={kind === "question" ? "Question — 131 × 19" : "Answer — 2489"}
-      aria-label={`Part ${partLetter(index)} ${kind}`}
+      placeholder="Question — 131 × 19"
+      aria-label={`Part ${partLetter(index)} question`}
       onFocus={(e) => (last.current = e.currentTarget)}
       // A star is how a keyboard writes times; it reads as ×, as it does in
       // a fraction.
-      onChange={(e) => set(part.id, { [kind]: e.target.value.replace(/\*/g, "×") })}
+      onChange={(e) => set(part.id, { question: e.target.value.replace(/\*/g, "×") })}
       onKeyDown={(e) => {
         if (e.key !== "Enter") return;
-        // Never submits the card: the next box is where the typing goes.
+        // Never submits the card: the answer is where the typing goes.
         e.preventDefault();
-        if (kind === "answer" && index === items.length - 1) {
-          add();
-          return;
-        }
-        pending.current = {
-          id:
-            kind === "question"
-              ? `part-a-${part.id}`
-              : `part-q-${items[index + 1].id}`,
-        };
+        pending.current = { id: `part-a-${part.id}` };
         // Moving focus changes no part, so nothing would re-render to run the
         // move; a fresh array asks for one.
         onChange([...items]);
@@ -114,13 +108,12 @@ export function PartsEditor({
           </button>
         ))}
         <span className="ml-1 text-xs text-muted-foreground">
-          Enter moves to the next box.
+          Enter moves to the answer.
         </span>
       </div>
 
-      {/* Question, answer and explanation one under another, each the full
-          width: answers are often worded, and side by side the question,
-          the answer or both ended up too narrow to read. */}
+      {/* Question over answer, each the full width: answers are often
+          worded, and side by side one or both ended up too narrow to read. */}
       <ol className="grid gap-4">
         {items.map((part, index) => (
           <li key={part.id} className="flex items-start gap-2">
@@ -128,19 +121,16 @@ export function PartsEditor({
               {partLetter(index)})
             </span>
             <div className="grid min-w-0 flex-1 gap-1">
-              {field(part, "question", index)}
-              {field(part, "answer", index)}
-              {/* Left out of the Enter chain: a worksheet goes in question,
-                  answer, question, and the explanations are added after. */}
+              {question(part, index)}
               <RichTextEditor
                 compact
-                // One written before explanations took formatting is plain
-                // text; it opens with its lines kept.
-                content={noteBodyToHtml(part.note ?? "")}
+                allTools
+                id={`part-a-${part.id}`}
+                content={part.answer}
                 disabled={disabled}
-                placeholder="Explanation, shown with the answer (optional)"
-                label={`Part ${partLetter(index)} explanation`}
-                onChange={(html) => set(part.id, { note: html })}
+                placeholder="Answer — 2489, and the working if you like"
+                label={`Part ${partLetter(index)} answer`}
+                onChange={(html) => set(part.id, { answer: html })}
               />
             </div>
             <Button

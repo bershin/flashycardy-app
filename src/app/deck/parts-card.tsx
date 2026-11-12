@@ -6,7 +6,8 @@ import { CardHtml } from "@/components/card-html";
 import { isBlank } from "@/components/card-fields";
 import { noteBodyToHtml } from "@/lib/note-body";
 import { labelStatus } from "@/components/occlusion-picture";
-import { partLetter } from "@/lib/parts";
+import { answerHtml, answerText, partLetter } from "@/lib/parts";
+import { InlinePartAnswer, answerGoesBelow } from "@/components/part-answer";
 import type { CardRow } from "@/lib/store/types";
 import { CardSetTile } from "./card-set-tile";
 import { StatusKey } from "./picture-card";
@@ -64,6 +65,8 @@ export function PartsCard({
           {items.map((part, index) => {
             const card = byPart.get(part.id);
             const open = shown.has(part.id);
+            const below = answerGoesBelow(part);
+            const words = answerText({ answer: part.answer });
             return (
               <li key={part.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="font-semibold">{partLetter(index)})</span>
@@ -80,15 +83,29 @@ export function PartsCard({
                       : `${ANSWER_TONE[labelStatus(card)]} text-transparent select-none`
                   }`}
                 >
-                  {/* The answer is always the content, hidden by colour when
-                      covered, so the patch is as wide as what it hides. */}
-                  {part.answer}
+                  {/* Covered, the patch holds the answer's words, hidden by
+                      colour, so it is as wide as what it hides — up to a
+                      line's worth for an answer with working. Open, a short
+                      answer sits here and a longer one goes underneath. */}
+                  {!open
+                    ? words.length > 24
+                      ? `${words.slice(0, 24)}…`
+                      : words
+                    : below
+                      ? "see below"
+                      : <InlinePartAnswer part={part} />}
                 </button>
                 {open && card && (
                   <CardHistory
                     compact
                     timesMissed={card.timesMissed}
                     streak={card.consecutiveCorrect}
+                  />
+                )}
+                {open && below && (
+                  <CardHtml
+                    className="rich-content basis-full pl-5 text-sm"
+                    html={answerHtml(part)}
                   />
                 )}
                 {open && part.note?.trim() && (

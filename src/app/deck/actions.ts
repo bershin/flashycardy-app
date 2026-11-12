@@ -237,6 +237,11 @@ function blankAsEmpty(html: string): string {
  * an empty paragraph, is stored as no explanation. Longer than the 2,000 of
  * plain text it was, to leave room for the markup.
  */
+/** Words or a picture: an answer of empty paragraphs is no answer. */
+function hasContent(html: string): boolean {
+  return /<img\b/i.test(html) || html.replace(/<[^>]*>/g, "").trim() !== "";
+}
+
 const noteSchema = z
   .string()
   .trim()
@@ -327,7 +332,14 @@ const partsSchema = z.object({
       z.object({
         id: z.string().min(1).max(40),
         question: z.string().trim().min(1, "Every part needs a question.").max(500),
-        answer: z.string().trim().min(1, "Every part needs an answer.").max(500),
+        // Formatted, and may hold a picture of the working, so it gets a
+        // card side's room rather than a line's.
+        answer: z
+          .string()
+          .trim()
+          .max(MAX_FIELD, TOO_LARGE)
+          .refine(hasContent, "Every part needs an answer.")
+          .transform((s) => s.replace(/(?:<p><\/p>)+$/, "")),
         note: noteSchema,
       }),
     )

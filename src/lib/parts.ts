@@ -7,19 +7,25 @@
  * the deck still shows them together as one question, the way a picture's
  * labels are (see `occlusion.ts`, which this follows).
  *
- * The parts are plain text, typed with the sign buttons for × ÷ ² √. Every
- * card of the set carries the whole list and the id of its own part.
+ * A question is plain text, typed with the sign buttons for × ÷ ² √; an
+ * answer is formatted, since it is often the working as well as the result.
+ * Every card of the set carries the whole list and the id of its own part.
  */
+
+import { noteBodyToHtml, noteBodyToText } from "./note-body.ts";
 
 export type Part = {
   id: string;
   /** What is asked, e.g. `131 × 19`. */
   question: string;
-  /** What it comes to, e.g. `2489`. */
+  /**
+   * What it comes to, e.g. `2489`, and how — formatted HTML, or the plain
+   * text answers were before they took formatting.
+   */
   answer: string;
   /**
-   * How it was worked out, shown under the answer once it is up. Not part of
-   * the answer, so changing it leaves the card's progress alone.
+   * How it was worked out, from when that had a box of its own. Shown under
+   * the answer; folded into the answer the next time the part is edited.
    */
   note?: string;
 };
@@ -56,7 +62,55 @@ export function ownPart(
 /** The part a card asks, as one line of text, for search and summaries. */
 export function partLine(card: { parts?: PartsPayload }): string {
   const own = card.parts ? ownPart(card.parts) : undefined;
-  return own ? `${own.letter}) ${own.question} = ${own.answer}` : "";
+  return own ? `${own.letter}) ${own.question} = ${answerText(own)}` : "";
+}
+
+/** A part's answer as HTML, whichever shape it was stored in. */
+export function answerHtml(part: Pick<Part, "answer">): string {
+  return noteBodyToHtml(part.answer);
+}
+
+/**
+ * The answer and any old explanation as one box's HTML: what the editor opens
+ * with now that the two are written together.
+ */
+export function mergedAnswerHtml(part: Pick<Part, "answer" | "note">): string {
+  return answerHtml(part) + noteBodyToHtml(part.note ?? "");
+}
+
+/**
+ * The words of the answer and any old explanation, on one line: for search,
+ * and for telling a reworded answer from a reformatted one.
+ */
+export function answerText(part: Pick<Part, "answer" | "note">): string {
+  return noteBodyToText(mergedAnswerHtml(part)).replace(/\s+/g, " ").trim();
+}
+
+/**
+ * The answer's first line, as words: the result, with any working under it.
+ *
+ * What decides whether a part was changed. Writing out the working, folding
+ * an old explanation in, or making the result bold is not a new question to
+ * answer; a different result is.
+ */
+export function answerResult(part: Pick<Part, "answer">): string {
+  const first = noteBodyToText(answerHtml(part))
+    .split("\n")
+    .find((line) => line.trim());
+  return (first ?? "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * An answer that reads as a run of words — one paragraph, no list, picture or
+ * code block — and so can sit after the `=` on the question's line. Anything
+ * longer goes underneath.
+ */
+export function isInlineAnswer(html: string): boolean {
+  const m = /^<p>([\s\S]*)<\/p>$/.exec(html.trim());
+  return (
+    m !== null &&
+    !/<\/?(p|ul|ol|li|pre|img|h\d|blockquote|div)\b|<br\b/i.test(m[1])
+  );
 }
 
 /**
@@ -98,7 +152,8 @@ export function planPartsSave<C extends { id: number; parts?: PartsPayload }>(
       part,
       changed:
         before?.question.trim() !== part.question.trim() ||
-        before?.answer.trim() !== part.answer.trim(),
+        !before ||
+        answerResult(before) !== answerResult(part),
     });
   }
   remove.push(...byPart.values());

@@ -3,6 +3,7 @@
 import { CardHtml } from "@/components/card-html";
 import { isBlank } from "@/components/card-fields";
 import { ownPart, partLetter, type PartsPayload } from "@/lib/parts";
+import { InlinePartAnswer, answerGoesBelow } from "@/components/part-answer";
 
 /**
  * A lettered question as it is studied: every part listed, this card's part
@@ -42,9 +43,18 @@ export function PartsQuestion({
               <span>=</span>
               {mine ? (
                 state === "answer" ? (
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                    {part.answer}
-                  </span>
+                  answerGoesBelow(part) ? (
+                    // Working and all, it reads better in the answer's own
+                    // space than squeezed onto this line.
+                    <span className="text-base font-semibold text-emerald-600 dark:text-emerald-400">
+                      in the answer
+                    </span>
+                  ) : (
+                    <InlinePartAnswer
+                      part={part}
+                      className="font-bold text-emerald-600 dark:text-emerald-400"
+                    />
+                  )
                 ) : (
                   <span className="rounded bg-violet-600 px-2 text-sm font-bold text-white">
                     ?

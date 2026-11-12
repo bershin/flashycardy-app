@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  answerHtml,
+  answerResult,
+  answerText,
+  isInlineAnswer,
+  mergedAnswerHtml,
   parseParts,
   partLetter,
   partLine,
@@ -57,14 +62,31 @@ test("editing keeps each part's card, and flags only the changed one", () => {
   const plan = planPartsSave(
     [card(1, "a"), card(2, "b")],
     [
-      { id: "a", question: "1 + 1", answer: "2", note: "One and one more" },
-      { id: "b", question: "2 + 2", answer: "5" },
+      // The working written under the result, bold result and all.
+      { id: "a", question: "1 + 1", answer: "<p><strong>2</strong></p><ul><li><p>One and one more</p></li></ul>" },
+      { id: "b", question: "2 + 2", answer: "<p>5</p>" },
       { id: "c", question: "3 + 3", answer: "6" },
     ],
   );
   assert.deepEqual(plan.keep.map((k) => [k.card.id, k.changed]), [[1, false], [2, true]]);
   assert.deepEqual(plan.add.map((p) => p.id), ["c"]);
   assert.equal(plan.remove.length, 0);
+});
+
+test("an answer with working goes underneath; a short one stays on the line", () => {
+  assert.equal(isInlineAnswer(answerHtml({ answer: "2489" })), true);
+  assert.equal(isInlineAnswer("<p>x<sup>2</sup> + 1</p>"), true);
+  assert.equal(isInlineAnswer("<p>2489</p><p>131 × 19</p>"), false);
+  assert.equal(isInlineAnswer("<p>48</p><ul><li><p>step</p></li></ul>"), false);
+  assert.equal(isInlineAnswer(answerHtml({ answer: "a\nb" })), false);
+});
+
+test("an old explanation opens in the answer, and the result still matches", () => {
+  const old = { answer: "2489", note: "131 × 20 − 131" };
+  const merged = mergedAnswerHtml(old);
+  assert.equal(merged, "<p>2489</p><p>131 × 20 − 131</p>");
+  assert.equal(answerResult({ answer: merged }), answerResult(old));
+  assert.equal(answerText(old), "2489 131 × 20 − 131");
 });
 
 test("parts are lettered, and a card reads as its own line", () => {

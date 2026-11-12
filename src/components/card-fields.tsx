@@ -13,7 +13,7 @@ import {
 } from "@/lib/occlusion";
 import { WordListEditor } from "@/components/word-list-editor";
 import { PartsEditor } from "@/components/parts-editor";
-import { newPartId, type Part } from "@/lib/parts";
+import { mergedAnswerHtml, newPartId, type Part } from "@/lib/parts";
 import {
   NEW_CARD_SCHEDULE,
   type CardRow,
@@ -77,7 +77,13 @@ export function draftFromCard(card: CardRow): CardDraft {
     correctIndex: card.quiz?.correctIndex ?? 0,
     boxes: card.occlusion?.boxes ?? [],
     typed: card.occlusion?.typed ?? false,
-    items: card.parts?.items ?? blankParts(),
+    // An explanation from when it had a box of its own opens in the answer,
+    // which is now where the working is written.
+    items:
+      card.parts?.items.map(({ note, ...p }) => ({
+        ...p,
+        answer: mergedAnswerHtml({ answer: p.answer, note }),
+      })) ?? blankParts(),
     schedule: card.schedule,
   };
 }
@@ -97,7 +103,7 @@ export function filledParts(draft: CardDraft): Part[] {
       ...p,
       // Pasted text can still carry a keyboard's star for times.
       question: p.question.replace(/\*/g, "×").trim(),
-      answer: p.answer.replace(/\*/g, "×").trim(),
+      answer: isBlank(p.answer) ? "" : p.answer,
     }))
     .filter((p) => p.question || p.answer);
 }

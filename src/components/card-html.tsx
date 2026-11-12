@@ -26,9 +26,12 @@ import { IMAGE_PREFIX } from "@/lib/images";
 export function CardHtml({
   html,
   className,
+  inline,
 }: {
   html: string;
   className?: string;
+  /** A span rather than a div, for an answer that sits within a line. */
+  inline?: boolean;
 }) {
   /**
    * Bumped when pictures finish loading, which is the only reason to re-render.
@@ -71,8 +74,9 @@ export function CardHtml({
     [html, loaded, failed],
   );
 
+  const Tag = inline ? "span" : "div";
   return (
-    <div className={className} dangerouslySetInnerHTML={{ __html: resolved }} />
+    <Tag className={className} dangerouslySetInnerHTML={{ __html: resolved }} />
   );
 }
 

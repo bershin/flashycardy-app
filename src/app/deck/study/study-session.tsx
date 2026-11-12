@@ -79,7 +79,8 @@ import {
   boxSlots,
 } from "@/components/occlusion-picture";
 import { PartsQuestion } from "@/components/parts-question";
-import { ownPart, partLetter, partLine } from "@/lib/parts";
+import { answerHtml, ownPart, partLetter, partLine } from "@/lib/parts";
+import { InlinePartAnswer, answerGoesBelow } from "@/components/part-answer";
 
 const NO_CARDS: CardRow[] = [];
 
@@ -133,14 +134,30 @@ function plainText(html: string): string {
 function PartAnswer({ parts }: { parts: NonNullable<CardRow["parts"]> }) {
   const own = ownPart(parts);
   if (!own) return null;
+  if (answerGoesBelow(own)) {
+    // The working as written — steps, a fraction, a picture — under the
+    // question, left-aligned so a list reads as one.
+    return (
+      <>
+        <p className="text-center text-2xl text-muted-foreground">
+          {own.letter}) {own.question} =
+        </p>
+        <CardHtml
+          className="rich-content mx-auto mt-2 max-w-prose text-left text-lg leading-relaxed md:text-xl"
+          html={answerHtml(own)}
+        />
+      </>
+    );
+  }
   return (
     <p className="text-center text-2xl">
       <span className="text-muted-foreground">
         {own.letter}) {own.question} ={" "}
       </span>
-      <span className="font-bold text-emerald-600 dark:text-emerald-400">
-        {own.answer}
-      </span>
+      <InlinePartAnswer
+        part={own}
+        className="font-bold text-emerald-600 dark:text-emerald-400"
+      />
     </p>
   );
 }
