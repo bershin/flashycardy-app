@@ -65,18 +65,12 @@ export function PartsEditor({
     pending.current = { id: box.id, at: start + text.length };
   }
 
-  // Answers as short as 2489 keep a narrow box; worded ones widen every
-  // answer box to the longest, so the column stays straight, up to the 60%
-  // the questions can spare. The cap is in the width itself: as a max-width,
-  // a long answer still pushed the whole dialog wider than the screen.
-  const answerWidth = `min(${Math.max(0, ...items.map((p) => p.answer.length)) + 3}ch, 60%)`;
-
   const field = (part: Part, kind: "question" | "answer", index: number) => (
     <Input
       id={`part-${kind === "question" ? "q" : "a"}-${part.id}`}
       value={part[kind]}
       disabled={disabled}
-      placeholder={kind === "question" ? "131 × 19" : "2489"}
+      placeholder={kind === "question" ? "Question — 131 × 19" : "Answer — 2489"}
       aria-label={`Part ${partLetter(index)} ${kind}`}
       onFocus={(e) => (last.current = e.currentTarget)}
       // A star is how a keyboard writes times; it reads as ×, as it does in
@@ -100,8 +94,6 @@ export function PartsEditor({
         // move; a fresh array asks for one.
         onChange([...items]);
       }}
-      className={kind === "answer" ? "min-w-28 shrink-0" : "min-w-0 flex-1"}
-      style={kind === "answer" ? { width: answerWidth } : undefined}
     />
   );
 
@@ -126,30 +118,20 @@ export function PartsEditor({
         </span>
       </div>
 
-      <ol className="grid gap-1.5">
+      {/* Question, answer and explanation one under another, each the full
+          width: answers are often worded, and side by side the question,
+          the answer or both ended up too narrow to read. */}
+      <ol className="grid gap-4">
         {items.map((part, index) => (
-          <li key={part.id} className="grid gap-1">
-            <div className="flex items-center gap-2">
-              <span className="w-6 shrink-0 text-right text-sm font-semibold text-muted-foreground">
-                {partLetter(index)})
-              </span>
+          <li key={part.id} className="flex items-start gap-2">
+            <span className="w-6 shrink-0 pt-1.5 text-right text-sm font-semibold text-muted-foreground">
+              {partLetter(index)})
+            </span>
+            <div className="grid min-w-0 flex-1 gap-1">
               {field(part, "question", index)}
-              <span className="text-muted-foreground">=</span>
               {field(part, "answer", index)}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={disabled || items.length === 1}
-                onClick={() => onChange(items.filter((p) => p.id !== part.id))}
-              >
-                <X className="size-4" />
-                <span className="sr-only">Remove part {partLetter(index)}</span>
-              </Button>
-            </div>
-            {/* Left out of the Enter chain: a worksheet goes in question,
-                answer, question, and the explanations are added after. */}
-            <div className="ml-8">
+              {/* Left out of the Enter chain: a worksheet goes in question,
+                  answer, question, and the explanations are added after. */}
               <RichTextEditor
                 compact
                 // One written before explanations took formatting is plain
@@ -161,6 +143,16 @@ export function PartsEditor({
                 onChange={(html) => set(part.id, { note: html })}
               />
             </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={disabled || items.length === 1}
+              onClick={() => onChange(items.filter((p) => p.id !== part.id))}
+            >
+              <X className="size-4" />
+              <span className="sr-only">Remove part {partLetter(index)}</span>
+            </Button>
           </li>
         ))}
       </ol>
