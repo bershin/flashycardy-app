@@ -55,7 +55,8 @@ export type CardDraft = {
 
 export function emptyDraft(): CardDraft {
   return {
-    type: "basic",
+    // Parts is the card made most, so a new card starts as one.
+    type: "parts",
     front: "",
     back: "",
     options: ["", "", "", ""],

@@ -43,7 +43,7 @@ interface RichTextEditorProps {
   id?: string;
   /**
    * A line or two inside a bigger form — a part's explanation — rather than a
-   * card face: words, lists and maths only, no headings, code or pictures, so
+   * card face: words, lists, code and maths only, no headings or pictures, so
    * a dozen of them stacked down a form stay small.
    */
   compact?: boolean;
@@ -392,27 +392,23 @@ function Toolbar({
       >
         <ListOrdered className="size-3.5" />
       </ToolbarButton>
-      {!compact && (
-        <>
-          {/* Inline code sits next to the block form because the two are easy to
-              confuse: this one highlights a word mid-sentence, the other takes a
-              whole paragraph. */}
-          <ToolbarButton
-            onClick={() => editor.chain().focus().toggleCode().run()}
-            active={editor.isActive("code")}
-            title="Inline code (⌘E)"
-          >
-            <Code className="size-3.5" />
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-            active={editor.isActive("codeBlock")}
-            title="Code block"
-          >
-            <SquareCode className="size-3.5" />
-          </ToolbarButton>
-        </>
-      )}
+      {/* Inline code sits next to the block form because the two are easy to
+          confuse: this one highlights a word mid-sentence, the other takes a
+          whole paragraph. */}
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleCode().run()}
+        active={editor.isActive("code")}
+        title="Inline code (⌘E)"
+      >
+        <Code className="size-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+        active={editor.isActive("codeBlock")}
+        title="Code block"
+      >
+        <SquareCode className="size-3.5" />
+      </ToolbarButton>
 
       <div className="mx-1 h-4 w-px bg-border" />
 
