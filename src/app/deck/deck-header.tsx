@@ -36,7 +36,7 @@ import {
   selectNewCards,
 } from "@/db/queries/cards";
 import { selectCardsByDeckForUser } from "@/lib/store/selectors";
-import { setStudyPicks } from "@/lib/study-picks";
+import { setStudyPicks, shuffled } from "@/lib/study-picks";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -160,16 +160,6 @@ export function DeckHeader({
       cards.map((c) => c.id),
     );
     router.push(`/deck/study/?id=${deck.id}`);
-  }
-
-  /** A copy in a random order — the store's array is never reordered. */
-  function shuffle<T>(items: readonly T[]): T[] {
-    const out = [...items];
-    for (let i = out.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [out[i], out[j]] = [out[j], out[i]];
-    }
-    return out;
   }
 
   /**
@@ -370,7 +360,7 @@ export function DeckHeader({
                       <DropdownMenuLabel>Study</DropdownMenuLabel>
                       <DropdownMenuItem
                         disabled={dueCards.length === 0}
-                        onClick={() => studyThese(shuffle(dueCards))}
+                        onClick={() => studyThese(shuffled(dueCards))}
                       >
                         <Shuffle className="size-3.5" />
                         Shuffle and study
@@ -390,7 +380,7 @@ export function DeckHeader({
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         disabled={newCards.length === 0}
-                        onClick={() => studyThese(newCards)}
+                        onClick={() => studyThese(shuffled(newCards))}
                       >
                         <Sprout className="size-3.5 text-emerald-500" />
                         New cards first
@@ -407,7 +397,7 @@ export function DeckHeader({
                           the five minutes you actually have. */}
                       <DropdownMenuItem
                         disabled={allCards.length === 0}
-                        onClick={() => studyThese(allCards)}
+                        onClick={() => studyThese(shuffled(allCards))}
                       >
                         <Layers className="size-3.5" />
                         Everything in this deck
@@ -417,7 +407,7 @@ export function DeckHeader({
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         disabled={quickTen.length === 0}
-                        onClick={() => studyThese(quickTen)}
+                        onClick={() => studyThese(shuffled(quickTen))}
                       >
                         <Timer className="size-3.5" />
                         Quick session

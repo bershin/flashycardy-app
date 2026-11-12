@@ -47,7 +47,7 @@ import {
   selectNewCards,
   selectUnstudiedToday,
 } from "@/db/queries/cards";
-import { setStudyPicks } from "@/lib/study-picks";
+import { setStudyPicks, shuffled } from "@/lib/study-picks";
 import type { DbDoc } from "@/lib/store/types";
 import { deleteDeckAction } from "./actions";
 
@@ -236,7 +236,7 @@ export function DeckCard({ deck }: DeckCardProps) {
               {newCards.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => study(newCards)}
+                  onClick={() => study(shuffled(newCards))}
                   className={badgeClass(
                     "new",
                     doneLook(allAnsweredToday(newCards)) +
@@ -290,7 +290,7 @@ export function DeckCard({ deck }: DeckCardProps) {
                   // and hard do. It used to open a parent deck's page instead,
                   // from before a session could be handed cards from under it,
                   // which left the pill saying "due" and doing "browse".
-                  onClick={() => study(dueCards)}
+                  onClick={() => study(shuffled(dueCards))}
                   className={badgeClass(
                     "due",
                     // Reads as a control rather than a label: it lifts on hover,

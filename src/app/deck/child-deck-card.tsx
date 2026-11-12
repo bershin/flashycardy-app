@@ -13,7 +13,7 @@ import {
   selectNewCards,
   selectUnstudiedToday,
 } from "@/db/queries/cards";
-import { setStudyPicks } from "@/lib/study-picks";
+import { setStudyPicks, shuffled } from "@/lib/study-picks";
 import type { DbDoc } from "@/lib/store/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -158,7 +158,7 @@ export function ChildDeckCard({ deck }: ChildDeckCardProps) {
                   onClick={() => {
                     setStudyPicks(
                       deck.id,
-                      newCards.map((c) => c.id),
+                      shuffled(newCards).map((c) => c.id),
                     );
                     router.push(`/deck/study/?id=${deck.id}`);
                   }}

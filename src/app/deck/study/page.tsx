@@ -21,7 +21,7 @@ import {
 import { selectCardsUnderDeck } from "@/db/queries/cards";
 import type { CardRow, DbDoc } from "@/lib/store/types";
 import { StudySession } from "./study-session";
-import { takeStudyPicks } from "@/lib/study-picks";
+import { shuffled, takeStudyPicks } from "@/lib/study-picks";
 
 type Rating = "got_it" | "missed";
 
@@ -52,10 +52,13 @@ function freshSession(deckId: number, picked: number[] | null): Decision {
     kind: "study",
     deckId,
     // A hand-picked set is studied as chosen, due or not. Otherwise it is the
-    // deck's due cards, as it has always been.
+    // deck's due cards, mixed: taken as stored they come in the order they
+    // were added, the same every time.
     cards: picked
       ? selectCardsByIdsForUser(getSnapshot(), picked, LOCAL_USER_ID)
-      : selectDueCardsByDeckForUser(getSnapshot(), deckId, LOCAL_USER_ID),
+      : shuffled(
+          selectDueCardsByDeckForUser(getSnapshot(), deckId, LOCAL_USER_ID),
+        ),
     picked: picked !== null,
     index: 0,
     ratings: [],

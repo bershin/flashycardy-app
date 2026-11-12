@@ -46,3 +46,17 @@ export function takeStudyPicks(deckId: number): number[] | null {
     return null;
   }
 }
+
+/**
+ * A copy in a random order. Cards are stored in the order they were added, so
+ * a run of new cards taken as stored comes up first to last every time — the
+ * worksheet learned as a list, word 3 recalled as "the one after 2".
+ */
+export function shuffled<T>(items: readonly T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
