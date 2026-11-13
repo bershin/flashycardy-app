@@ -31,6 +31,8 @@ import {
   BetweenHorizontalEnd,
   BetweenVerticalEnd,
   Grid2x2X,
+  TableCellsMerge,
+  TableCellsSplit,
 } from "lucide-react";
 import { useEffect, useCallback, useState } from "react";
 import {
@@ -346,10 +348,17 @@ function Toolbar({
    * and columns. Read through the editor's state so the row redraws as the
    * caret moves in and out.
    */
-  const inTable = useEditorState({
+  const table = useEditorState({
     editor,
-    selector: ({ editor: e }) => e.isActive("table"),
+    selector: ({ editor: e }) => ({
+      inTable: e.isActive("table"),
+      // Merging needs cells picked out by dragging across them; splitting
+      // needs the caret in a cell that was merged.
+      canMerge: e.can().mergeCells(),
+      canSplit: e.can().splitCell(),
+    }),
   });
+  const inTable = table.inTable;
   const handleImageUpload = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -515,6 +524,20 @@ function Toolbar({
                 title="Delete this column"
               >
                 <span className="text-[10px] font-semibold leading-none">−col</span>
+              </ToolbarButton>
+              <ToolbarButton
+                onClick={() => editor.chain().focus().mergeCells().run()}
+                disabled={!table.canMerge}
+                title="Merge cells (drag across them first)"
+              >
+                <TableCellsMerge className="size-3.5" />
+              </ToolbarButton>
+              <ToolbarButton
+                onClick={() => editor.chain().focus().splitCell().run()}
+                disabled={!table.canSplit}
+                title="Split the merged cell"
+              >
+                <TableCellsSplit className="size-3.5" />
               </ToolbarButton>
               <ToolbarButton
                 onClick={() => editor.chain().focus().deleteTable().run()}
