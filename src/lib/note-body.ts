@@ -50,6 +50,8 @@ export function noteBodyToHtml(body: string): string {
 export function noteBodyToText(body: string): string {
   return body
     .replace(/<br\s*\/?>/gi, "\n")
+    // A table's cells would otherwise run together into one word.
+    .replace(/<\/t[dh]>/gi, " ")
     .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|tr)>/gi, "\n")
     .replace(/<[^>]*>/g, "")
     .replace(/&nbsp;/gi, " ")

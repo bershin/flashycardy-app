@@ -324,6 +324,42 @@
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
+/* Tables: ruled cells, a shaded header row. A wide one scrolls sideways in
+   its own box rather than pushing the card wider than the screen. */
+.tiptap table,
+.rich-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+}
+.tiptap th,
+.tiptap td,
+.rich-content th,
+.rich-content td {
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  min-width: 3rem;
+  vertical-align: top;
+  text-align: left;
+}
+.tiptap th,
+.rich-content th {
+  background: color-mix(in oklab, var(--muted) 70%, var(--card));
+  font-weight: 600;
+}
+.tiptap th p,
+.tiptap td p,
+.rich-content th p,
+.rich-content td p {
+  margin: 0;
+}
+/* Cells picked out by dragging across them, for deleting rows or columns. */
+.tiptap .selectedCell {
+  background: color-mix(in oklab, var(--ring) 20%, transparent);
+}
+
 .rich-content img,
 .tiptap img {
   max-width: 100%;

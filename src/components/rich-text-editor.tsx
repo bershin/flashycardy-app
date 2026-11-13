@@ -10,6 +10,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Superscript from "@tiptap/extension-superscript";
 import Placeholder from "@tiptap/extension-placeholder";
+import { TableKit } from "@tiptap/extension-table";
 import { StoredImage } from "@/components/stored-image";
 import { Plugin } from "@tiptap/pm/state";
 import {
@@ -26,6 +27,10 @@ import {
   ScanText,
   Undo,
   Redo,
+  Table as TableIcon,
+  BetweenHorizontalEnd,
+  BetweenVerticalEnd,
+  Grid2x2X,
 } from "lucide-react";
 import { useEffect, useCallback, useState } from "react";
 import {
@@ -336,6 +341,15 @@ function Toolbar({
 }) {
   /** Fewer buttons: the short boxes that only take words, lists and maths. */
   const few = compact && !allTools;
+  /**
+   * Whether the caret is in a table, which brings up the buttons for its rows
+   * and columns. Read through the editor's state so the row redraws as the
+   * caret moves in and out.
+   */
+  const inTable = useEditorState({
+    editor,
+    selector: ({ editor: e }) => e.isActive("table"),
+  });
   const handleImageUpload = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -461,6 +475,55 @@ function Toolbar({
           </ToolbarButton>
 
           <ConvertImageButton editor={editor} />
+
+          <ToolbarButton
+            onClick={() =>
+              editor
+                .chain()
+                .focus()
+                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                .run()
+            }
+            title="Insert table"
+          >
+            <TableIcon className="size-3.5" />
+          </ToolbarButton>
+          {/* Only while in a table: a dozen buttons for something most cards
+              never hold would crowd out the ones they use. */}
+          {inTable && (
+            <>
+              <ToolbarButton
+                onClick={() => editor.chain().focus().addRowAfter().run()}
+                title="Add a row below"
+              >
+                <BetweenHorizontalEnd className="size-3.5" />
+              </ToolbarButton>
+              <ToolbarButton
+                onClick={() => editor.chain().focus().addColumnAfter().run()}
+                title="Add a column to the right"
+              >
+                <BetweenVerticalEnd className="size-3.5" />
+              </ToolbarButton>
+              <ToolbarButton
+                onClick={() => editor.chain().focus().deleteRow().run()}
+                title="Delete this row"
+              >
+                <span className="text-[10px] font-semibold leading-none">−row</span>
+              </ToolbarButton>
+              <ToolbarButton
+                onClick={() => editor.chain().focus().deleteColumn().run()}
+                title="Delete this column"
+              >
+                <span className="text-[10px] font-semibold leading-none">−col</span>
+              </ToolbarButton>
+              <ToolbarButton
+                onClick={() => editor.chain().focus().deleteTable().run()}
+                title="Delete the table"
+              >
+                <Grid2x2X className="size-3.5" />
+              </ToolbarButton>
+            </>
+          )}
         </>
       )}
       {/* Undo is the keyboard's in a compact box: the row stays short. */}
@@ -563,6 +626,9 @@ export function RichTextEditor({
       }),
       Placeholder.configure({ placeholder: placeholder ?? "Write something…" }),
       StoredImage.configure({ inline: false, allowBase64: true }),
+      // Fixed columns: dragging widths is fiddly on a phone, and a card is
+      // read at whatever width the screen has anyway.
+      TableKit.configure({ table: { resizable: false } }),
       ...(compact && !allTools ? [] : [imagePastePlugin]),
     ],
     content,
