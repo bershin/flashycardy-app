@@ -138,20 +138,19 @@ export function clampBox(box: OcclusionBox): OcclusionBox {
  * Shuffle each picture's cards among the places they already hold.
  *
  * Drawn top to bottom every time, a diagram is learned as a sequence — "after
- * Clavicle comes Backbone" — rather than as bones, and a question's parts as
- * "the one after the 48". Every other card stays
- * exactly where it was, so this changes nothing for a deck with no pictures.
+ * Clavicle comes Backbone" — rather than as bones. A question's parts are left
+ * in order, a then b then c, since they are written to be worked through that
+ * way. Every other card stays exactly where it was, so this changes nothing
+ * for a deck with no pictures.
  */
-export function mixSiblings<
-  T extends { occlusion?: OcclusionPayload; parts?: PartsPayload },
->(
+export function mixSiblings<T extends { occlusion?: OcclusionPayload }>(
   cards: readonly T[],
   random: () => number = Math.random,
 ): T[] {
   const out = [...cards];
   const slots = new Map<string, number[]>();
   out.forEach((card, index) => {
-    const group = setGroup(card);
+    const group = card.occlusion?.group;
     if (!group) return;
     slots.set(group, [...(slots.get(group) ?? []), index]);
   });

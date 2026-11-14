@@ -76,6 +76,16 @@ test("only a picture's own cards are mixed, among their own places", () => {
   assert.deepEqual(mixSiblings(plain).map((c) => c.id), [1, 2]);
 });
 
+test("a question's parts stay in order, a then b then c", () => {
+  const parts = (id: number, partId: string) => ({
+    id,
+    occlusion: undefined,
+    parts: { group: "q", partId, items: [] },
+  });
+  const cards = [parts(1, "a"), parts(2, "b"), parts(3, "c")];
+  assert.deepEqual(mixSiblings(cards, () => 0).map((c) => c.id), [1, 2, 3]);
+});
+
 test("a box is kept inside the picture", () => {
   const b = clampBox({ id: "a", x: 0.9, y: -0.2, w: 0.5, h: 0.001, label: "" });
   assert.deepEqual([b.x, b.y, b.h], [0.9, 0, 0.01]);
