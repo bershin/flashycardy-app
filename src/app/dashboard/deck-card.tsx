@@ -47,7 +47,7 @@ import {
   selectNewCards,
   selectUnstudiedToday,
 } from "@/db/queries/cards";
-import { setStudyPicks, shuffled } from "@/lib/study-picks";
+import { inAddedOrder, setStudyPicks, shuffled } from "@/lib/study-picks";
 import type { DbDoc } from "@/lib/store/types";
 import { deleteDeckAction } from "./actions";
 
@@ -236,7 +236,7 @@ export function DeckCard({ deck }: DeckCardProps) {
               {newCards.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => study(shuffled(newCards))}
+                  onClick={() => study(inAddedOrder(newCards))}
                   className={badgeClass(
                     "new",
                     doneLook(allAnsweredToday(newCards)) +

@@ -60,3 +60,12 @@ export function shuffled<T>(items: readonly T[]): T[] {
   }
   return out;
 }
+
+/**
+ * New cards oldest first. A topic is written start to end, so its new cards
+ * are learned in that order — the opposite of how they are listed, which puts
+ * the one written last on top.
+ */
+export function inAddedOrder<T extends { id: number }>(cards: readonly T[]): T[] {
+  return [...cards].sort((a, b) => a.id - b.id);
+}

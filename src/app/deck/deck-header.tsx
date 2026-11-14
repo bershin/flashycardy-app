@@ -36,7 +36,7 @@ import {
   selectNewCards,
 } from "@/db/queries/cards";
 import { selectCardsByDeckForUser } from "@/lib/store/selectors";
-import { setStudyPicks, shuffled } from "@/lib/study-picks";
+import { inAddedOrder, setStudyPicks, shuffled } from "@/lib/study-picks";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -380,7 +380,7 @@ export function DeckHeader({
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         disabled={newCards.length === 0}
-                        onClick={() => studyThese(shuffled(newCards))}
+                        onClick={() => studyThese(inAddedOrder(newCards))}
                       >
                         <Sprout className="size-3.5 text-emerald-500" />
                         New cards first
