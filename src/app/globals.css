@@ -284,6 +284,20 @@
   font-size: 1em;
 }
 
+/* A highlighter pen over the words, the same in the editor and on the card.
+   Marker yellow in both themes, with dark ink on it whatever the text around
+   it is: the answer is shown green, and green on yellow is hard to read. The
+   clone keeps the ends rounded when a highlight wraps onto a second line. */
+.tiptap mark,
+.rich-content mark {
+  background: oklch(0.91 0.16 98);
+  color: oklch(0.24 0.03 95);
+  border-radius: 0.2em;
+  padding: 0 0.12em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 /* Rich text content rendering */
 .rich-content h2 {
   font-size: 1.25rem;

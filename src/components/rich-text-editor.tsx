@@ -12,11 +12,13 @@ import Superscript from "@tiptap/extension-superscript";
 import Placeholder from "@tiptap/extension-placeholder";
 import { TableKit } from "@tiptap/extension-table";
 import { StoredImage } from "@/components/stored-image";
+import { HighlightMark } from "@/components/highlight-mark";
 import { Plugin } from "@tiptap/pm/state";
 import {
   Bold,
   Italic,
   Underline as UnderlineIcon,
+  Highlighter,
   List,
   ListOrdered,
   Code,
@@ -87,7 +89,7 @@ function ToolbarButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`inline-flex size-7 items-center justify-center rounded text-sm transition-colors disabled:opacity-50 ${
+      className={`inline-flex size-6.5 items-center justify-center rounded text-sm transition-colors disabled:opacity-50 ${
         active
           ? "bg-primary/10 text-primary"
           : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -299,7 +301,7 @@ function ConvertImageButton({ editor }: { editor: Editor }) {
 
   return (
     <>
-      <div className="mx-1 h-4 w-px bg-border" />
+      <div className="mx-0.5 h-4 w-px bg-border" />
       <button
         type="button"
         onClick={convert}
@@ -399,8 +401,15 @@ function Toolbar({
       >
         <UnderlineIcon className="size-3.5" />
       </ToolbarButton>
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleMark("highlight").run()}
+        active={editor.isActive("highlight")}
+        title="Highlight (⌘⇧H)"
+      >
+        <Highlighter className="size-3.5" />
+      </ToolbarButton>
 
-      <div className="mx-1 h-4 w-px bg-border" />
+      <div className="mx-0.5 h-4 w-px bg-border" />
 
       {!few && (
         <ToolbarButton
@@ -443,7 +452,7 @@ function Toolbar({
         <SquareCode className="size-3.5" />
       </ToolbarButton>
 
-      <div className="mx-1 h-4 w-px bg-border" />
+      <div className="mx-0.5 h-4 w-px bg-border" />
 
       {/* Maths. Raised text is the one way to write any power — squares and
           cubes included — so 4² is stored the same on every card. ÷ and √
@@ -474,7 +483,7 @@ function Toolbar({
 
       {!few && (
         <>
-          <div className="mx-1 h-4 w-px bg-border" />
+          <div className="mx-0.5 h-4 w-px bg-border" />
 
           <ToolbarButton
             onClick={handleImageUpload}
@@ -552,7 +561,7 @@ function Toolbar({
       {/* Undo is the keyboard's in a compact box: the row stays short. */}
       {!compact && (
         <>
-          <div className="mx-1 h-4 w-px bg-border" />
+          <div className="mx-0.5 h-4 w-px bg-border" />
 
           <ToolbarButton
             onClick={() => editor.chain().focus().undo().run()}
@@ -636,6 +645,7 @@ export function RichTextEditor({
     extensions: [
       StarterKit,
       Underline,
+      HighlightMark,
       Superscript,
       Fraction.configure({
         katexOptions: { throwOnError: false },
