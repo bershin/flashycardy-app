@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
+  BookOpen,
   Check,
   Copy,
   Ellipsis,
@@ -44,6 +46,7 @@ import { VaryCardDialog } from "@/components/vary-card-dialog";
 import type { CardRow } from "@/lib/store/types";
 import { OcclusionPicture } from "@/components/occlusion-picture";
 import { occlusionLabel, occlusionNote } from "@/lib/occlusion";
+import { setStudyPicks } from "@/lib/study-picks";
 
 /**
  * The question side as the deck shows it. A picture card shows its picture with
@@ -129,6 +132,7 @@ export function FlashCard({
   selected = false,
   onToggleSelected,
 }: FlashCardProps) {
+  const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   // Holds the card the dialog is editing. Normally this card, but cloning
   // retargets it at the fresh copy so you land straight in editing that.
@@ -287,6 +291,18 @@ export function FlashCard({
                 <span className="sr-only">Card actions</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {/* First, as "Study all" is on a set's menu: going over one
+                    card on its own used to mean picking it out with Select
+                    cards, a tick and a button for a single card. */}
+                <DropdownMenuItem
+                  onClick={() => {
+                    setStudyPicks(card.deckId, [card.id]);
+                    router.push(`/deck/study/?id=${card.deckId}`);
+                  }}
+                >
+                  <BookOpen />
+                  Study this card
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
                     setEditCard(card);
