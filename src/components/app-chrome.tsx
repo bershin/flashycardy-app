@@ -38,6 +38,7 @@ import { dismissNotice } from "@/lib/store/local-store";
 import { TodoReminders } from "@/components/todo-reminders";
 import { ProfileMenu } from "@/components/profile-menu";
 import { ProfileIdentity } from "@/components/profile-identity";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import {
   getLastCheckedAt,
   hasUnpushedChanges,
@@ -72,6 +73,7 @@ export function AppChrome() {
       <TabNotice />
       <TodoReminders />
       <ProfileIdentity />
+      <KeyboardShortcuts />
       <header className="flex items-center justify-end gap-2 p-4">
         {/* Alone on the left, away from the row of places to go: this is the
             way back rather than another destination, and the corner is where a

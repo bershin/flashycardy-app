@@ -38,6 +38,7 @@ import { noteBodyToText } from "@/lib/note-body";
 import { selectTodosMatching } from "@/db/queries/todos";
 import type { DbDoc } from "@/lib/store/types";
 import { DeckCard } from "./deck-card";
+import { useDeckGridKeys } from "./deck-grid-keys";
 import { moveDeckAction, reorderDecksAction } from "./actions";
 import { mathToText } from "@/lib/math";
 import { occlusionLabel, type OcclusionPayload } from "@/lib/occlusion";
@@ -121,10 +122,21 @@ function SortableDeckItem({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
   } = useSortable({ id: deck.id });
+
+  // The wrapper is also named as the drag handle. Without one, dnd-kit takes
+  // Enter or Space pressed anywhere inside as "pick this deck up", and cancels
+  // the press — so Enter on the deck's link or on a study pill did nothing.
+  // Named, it only starts a keyboard drag when the wrapper itself has focus,
+  // and pointer dragging is unchanged.
+  const ref = (node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    setActivatorNodeRef(node);
+  };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -134,7 +146,7 @@ function SortableDeckItem({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={ref}
       style={style}
       className="relative h-full"
       {...attributes}
@@ -147,6 +159,7 @@ function SortableDeckItem({
 
 export function DashboardSearch({ decks, query }: DashboardSearchProps) {
   const dndId = useId();
+  useDeckGridKeys();
   const [orderedDecks, setOrderedDecks] = useState(decks);
   const [, startTransition] = useTransition();
 
