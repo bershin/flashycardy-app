@@ -3,7 +3,11 @@
 import { CardHtml } from "@/components/card-html";
 import { isBlank } from "@/components/card-fields";
 import { ownPart, partLetter, type PartsPayload } from "@/lib/parts";
-import { InlinePartAnswer, answerGoesBelow } from "@/components/part-answer";
+import {
+  InlinePartAnswer,
+  PartQuestionText,
+  answerGoesBelow,
+} from "@/components/part-answer";
 
 /**
  * A lettered question as it is studied: every part listed, this card's part
@@ -39,7 +43,7 @@ export function PartsQuestion({
               }`}
             >
               <span className="font-semibold">{partLetter(index)})</span>
-              <span>{part.question}</span>
+              <PartQuestionText part={part} />
               <span>=</span>
               {mine ? (
                 state === "answer" ? (
@@ -63,7 +67,7 @@ export function PartsQuestion({
               ) : (
                 <span
                   aria-label="Hidden"
-                  className="inline-block h-4 w-10 self-center rounded bg-muted-foreground/25"
+                  className="inline-block h-4 w-10 rounded bg-muted-foreground/25"
                 />
               )}
             </li>

@@ -7,8 +7,8 @@
  * the deck still shows them together as one question, the way a picture's
  * labels are (see `occlusion.ts`, which this follows).
  *
- * A question is plain text, typed with the sign buttons for × ÷ ² √; an
- * answer is formatted, since it is often the working as well as the result.
+ * A question and its answer are both formatted: a question can be a fraction
+ * or a table, and an answer is often the working as well as the result.
  * Every card of the set carries the whole list and the id of its own part.
  */
 
@@ -16,7 +16,10 @@ import { noteBodyToHtml, noteBodyToText } from "./note-body.ts";
 
 export type Part = {
   id: string;
-  /** What is asked, e.g. `131 × 19`. */
+  /**
+   * What is asked, e.g. `131 × 19` — formatted HTML, or the plain text
+   * questions were before they took formatting.
+   */
   question: string;
   /**
    * What it comes to, e.g. `2489`, and how — formatted HTML, or the plain
@@ -62,7 +65,17 @@ export function ownPart(
 /** The part a card asks, as one line of text, for search and summaries. */
 export function partLine(card: { parts?: PartsPayload }): string {
   const own = card.parts ? ownPart(card.parts) : undefined;
-  return own ? `${own.letter}) ${own.question} = ${answerText(own)}` : "";
+  return own ? `${own.letter}) ${questionText(own)} = ${answerText(own)}` : "";
+}
+
+/** A part's question as HTML, whichever shape it was stored in. */
+export function questionHtml(part: Pick<Part, "question">): string {
+  return noteBodyToHtml(part.question);
+}
+
+/** A part's question as words on one line. */
+export function questionText(part: Pick<Part, "question">): string {
+  return noteBodyToText(questionHtml(part)).replace(/\s+/g, " ").trim();
 }
 
 /** A part's answer as HTML, whichever shape it was stored in. */
@@ -151,7 +164,7 @@ export function planPartsSave<C extends { id: number; parts?: PartsPayload }>(
       card,
       part,
       changed:
-        before?.question.trim() !== part.question.trim() ||
+        questionText(before ?? { question: "" }) !== questionText(part) ||
         !before ||
         answerResult(before) !== answerResult(part),
     });

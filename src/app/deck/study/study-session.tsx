@@ -80,7 +80,11 @@ import {
 } from "@/components/occlusion-picture";
 import { PartsQuestion } from "@/components/parts-question";
 import { answerHtml, ownPart, partLetter, partLine } from "@/lib/parts";
-import { InlinePartAnswer, answerGoesBelow } from "@/components/part-answer";
+import {
+  InlinePartAnswer,
+  PartQuestionText,
+  answerGoesBelow,
+} from "@/components/part-answer";
 
 const NO_CARDS: CardRow[] = [];
 
@@ -139,9 +143,11 @@ function PartAnswer({ parts }: { parts: NonNullable<CardRow["parts"]> }) {
     // question, left-aligned so a list reads as one.
     return (
       <>
-        <p className="text-center text-2xl text-muted-foreground">
-          {own.letter}) {own.question} =
-        </p>
+        <div className="flex flex-wrap items-baseline justify-center gap-x-2 text-2xl text-muted-foreground">
+          <span>{own.letter})</span>
+          <PartQuestionText part={own} />
+          <span>=</span>
+        </div>
         <CardHtml
           className="rich-content mx-auto mt-2 max-w-prose text-left text-lg leading-relaxed md:text-xl"
           html={answerHtml(own)}
@@ -150,15 +156,15 @@ function PartAnswer({ parts }: { parts: NonNullable<CardRow["parts"]> }) {
     );
   }
   return (
-    <p className="text-center text-2xl">
-      <span className="text-muted-foreground">
-        {own.letter}) {own.question} ={" "}
-      </span>
+    <div className="flex flex-wrap items-baseline justify-center gap-x-2 text-2xl">
+      <span className="text-muted-foreground">{own.letter})</span>
+      <PartQuestionText part={own} className="text-muted-foreground" />
+      <span className="text-muted-foreground">=</span>
       <InlinePartAnswer
         part={own}
         className="font-bold text-emerald-600 dark:text-emerald-400"
       />
-    </p>
+    </div>
   );
 }
 

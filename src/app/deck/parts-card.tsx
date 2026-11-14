@@ -7,7 +7,11 @@ import { isBlank } from "@/components/card-fields";
 import { noteBodyToHtml } from "@/lib/note-body";
 import { labelStatus } from "@/components/occlusion-picture";
 import { answerHtml, answerText, partLetter } from "@/lib/parts";
-import { InlinePartAnswer, answerGoesBelow } from "@/components/part-answer";
+import {
+  InlinePartAnswer,
+  PartQuestionText,
+  answerGoesBelow,
+} from "@/components/part-answer";
 import type { CardRow } from "@/lib/store/types";
 import { CardSetTile } from "./card-set-tile";
 import { StatusKey } from "./picture-card";
@@ -68,9 +72,9 @@ export function PartsCard({
             const below = answerGoesBelow(part);
             const words = answerText({ answer: part.answer });
             return (
-              <li key={part.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <li key={part.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="font-semibold">{partLetter(index)})</span>
-                <span>{part.question}</span>
+                <PartQuestionText part={part} />
                 <span className="text-muted-foreground">=</span>
                 <button
                   type="button"

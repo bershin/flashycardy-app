@@ -1,7 +1,34 @@
 "use client";
 
 import { CardHtml } from "@/components/card-html";
-import { answerHtml, isInlineAnswer, type Part } from "@/lib/parts";
+import {
+  answerHtml,
+  isInlineAnswer,
+  questionHtml,
+  type Part,
+} from "@/lib/parts";
+
+/**
+ * A part's question, formatting kept: in the line when it is a run of words,
+ * as a block of its own when it is more — a table, a list, a picture.
+ */
+export function PartQuestionText({
+  part,
+  className,
+}: {
+  part: Pick<Part, "question">;
+  className?: string;
+}) {
+  const html = questionHtml(part);
+  const inline = isInlineAnswer(html);
+  return (
+    <CardHtml
+      inline={inline}
+      className={`rich-content [&_p]:m-0 ${inline ? "[&_p]:inline" : ""} ${className ?? ""}`}
+      html={html}
+    />
+  );
+}
 
 /**
  * A part's answer where it fits on the question's line: a run of words after

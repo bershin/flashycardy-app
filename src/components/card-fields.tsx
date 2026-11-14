@@ -13,7 +13,12 @@ import {
 } from "@/lib/occlusion";
 import { WordListEditor } from "@/components/word-list-editor";
 import { PartsEditor } from "@/components/parts-editor";
-import { mergedAnswerHtml, newPartId, type Part } from "@/lib/parts";
+import {
+  mergedAnswerHtml,
+  newPartId,
+  questionHtml,
+  type Part,
+} from "@/lib/parts";
 import {
   NEW_CARD_SCHEDULE,
   type CardRow,
@@ -82,6 +87,7 @@ export function draftFromCard(card: CardRow): CardDraft {
     items:
       card.parts?.items.map(({ note, ...p }) => ({
         ...p,
+        question: questionHtml(p),
         answer: mergedAnswerHtml({ answer: p.answer, note }),
       })) ?? blankParts(),
     schedule: card.schedule,
@@ -101,8 +107,7 @@ export function filledParts(draft: CardDraft): Part[] {
   return draft.items
     .map((p) => ({
       ...p,
-      // Pasted text can still carry a keyboard's star for times.
-      question: p.question.replace(/\*/g, "×").trim(),
+      question: isBlank(p.question) ? "" : p.question,
       answer: isBlank(p.answer) ? "" : p.answer,
     }))
     .filter((p) => p.question || p.answer);

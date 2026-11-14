@@ -331,7 +331,13 @@ const partsSchema = z.object({
     .array(
       z.object({
         id: z.string().min(1).max(40),
-        question: z.string().trim().min(1, "Every part needs a question.").max(500),
+        // Formatted like the answer, and may be a picture or a table.
+        question: z
+          .string()
+          .trim()
+          .max(MAX_FIELD, TOO_LARGE)
+          .refine(hasContent, "Every part needs a question.")
+          .transform((s) => s.replace(/(?:<p><\/p>)+$/, "")),
         // Formatted, and may hold a picture of the working, so it gets a
         // card side's room rather than a line's.
         answer: z
