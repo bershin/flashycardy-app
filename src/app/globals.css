@@ -284,6 +284,21 @@
   font-size: 1em;
 }
 
+/* The answer style: big, bold and green, like a picture card's label when it
+   is turned over. Sized against the text around it, so it stays a step above
+   whatever the card's own size is. */
+.tiptap span[data-answer],
+.rich-content span[data-answer] {
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.25;
+  color: oklch(0.596 0.145 163.2);
+}
+.dark .tiptap span[data-answer],
+.dark .rich-content span[data-answer] {
+  color: oklch(0.765 0.177 163.2);
+}
+
 /* A highlighter pen over the words, the same in the editor and on the card.
    Marker yellow in both themes, with dark ink on it whatever the text around
    it is: the answer is shown green, and green on yellow is hard to read. The

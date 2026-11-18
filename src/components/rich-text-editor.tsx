@@ -13,12 +13,14 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { TableKit } from "@tiptap/extension-table";
 import { StoredImage } from "@/components/stored-image";
 import { HighlightMark } from "@/components/highlight-mark";
+import { AnswerMark } from "@/components/answer-mark";
 import { Plugin } from "@tiptap/pm/state";
 import {
   Bold,
   Italic,
   Underline as UnderlineIcon,
   Highlighter,
+  BadgeCheck,
   List,
   ListOrdered,
   Code,
@@ -374,7 +376,7 @@ function Toolbar({
 
   return (
     <div
-      className={`flex-wrap items-center gap-0.5 border-b border-border px-2 py-1 ${
+      className={`flex-wrap items-center gap-px border-b border-border px-2 py-1 ${
         // Only in the box being typed in: a form of a dozen explanations
         // would otherwise be half toolbars.
         compact ? "hidden group-focus-within/editor:flex" : "flex"
@@ -407,6 +409,13 @@ function Toolbar({
         title="Highlight (⌘⇧H)"
       >
         <Highlighter className="size-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleMark("answerText").run()}
+        active={editor.isActive("answerText")}
+        title="Answer style — big, bold and green"
+      >
+        <BadgeCheck className="size-3.5" />
       </ToolbarButton>
 
       <div className="mx-0.5 h-4 w-px bg-border" />
@@ -646,6 +655,7 @@ export function RichTextEditor({
       StarterKit,
       Underline,
       HighlightMark,
+      AnswerMark,
       Superscript,
       Fraction.configure({
         katexOptions: { throwOnError: false },
